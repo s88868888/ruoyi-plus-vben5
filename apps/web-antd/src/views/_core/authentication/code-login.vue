@@ -27,12 +27,21 @@ const tenantInfo = ref<TenantResp>({
 
 const codeLoginRef = useTemplateRef('codeLoginRef');
 async function loadTenant() {
-  const resp = await tenantList();
-  tenantInfo.value = resp;
-  // 选中第一个租户
-  if (resp.tenantEnabled && resp.voList.length > 0) {
-    const firstTenantId = resp.voList[0]!.tenantId;
-    codeLoginRef.value?.getFormApi().setFieldValue('tenantId', firstTenantId);
+  try {
+    const resp = await tenantList();
+    tenantInfo.value = resp;
+    // 选中第一个租户
+    if (resp.tenantEnabled && resp.voList.length > 0) {
+      const firstTenantId = resp.voList[0]!.tenantId;
+      codeLoginRef.value?.getFormApi().setFieldValue('tenantId', firstTenantId);
+    }
+  } catch (error) {
+    console.error('Failed to load tenant list:', error);
+    // 如果获取租户列表失败，默认关闭多租户功能
+    tenantInfo.value = {
+      tenantEnabled: false,
+      voList: [],
+    };
   }
 }
 

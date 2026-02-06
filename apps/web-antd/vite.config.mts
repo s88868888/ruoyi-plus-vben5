@@ -25,8 +25,9 @@ export default defineConfig(async () => {
         proxy: {
           '/api': {
             changeOrigin: true,
+            // 如果后端接口路径不包含 /api 前缀，取消下面这行注释
             rewrite: (path) => path.replace(/^\/api/, ''),
-            // mock代理目标地址
+            // 后端代理目标地址
             target: 'http://localhost:8080',
             ws: true,
           },
