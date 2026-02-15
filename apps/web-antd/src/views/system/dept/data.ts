@@ -75,6 +75,8 @@ export const drawerSchema: FormSchemaGetter = () => [
     component: 'TreeSelect',
     componentProps: {
       getPopupContainer,
+      allowClear: true,
+      placeholder: '不选择则为顶级部门',
     },
     dependencies: {
       show: (model) => model.parentId !== 0,
@@ -82,7 +84,6 @@ export const drawerSchema: FormSchemaGetter = () => [
     },
     fieldName: 'parentId',
     label: '上级部门',
-    rules: 'selectRequired',
   },
   {
     component: 'Input',

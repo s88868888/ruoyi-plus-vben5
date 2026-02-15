@@ -69,31 +69,6 @@ export async function handleAuthBinding(source: string) {
  */
 export const accountBindList: BindItem[] = [
   {
-    avatar: markRaw(GiteeIcon),
-    description: '绑定Gitee账号',
-    source: 'gitee',
-    title: 'Gitee',
-    style: { color: '#c71d23' },
-  },
-  {
-    avatar: markRaw(GithubOAuthIcon),
-    description: '绑定Github账号',
-    source: 'github',
-    title: 'Github',
-  },
-  {
-    avatar: markRaw(SvgMaxKeyIcon),
-    description: '绑定MaxKey账号',
-    source: 'maxkey',
-    title: 'MaxKey',
-  },
-  {
-    avatar: markRaw(SvgTopiamIcon),
-    description: '绑定topiam账号',
-    source: 'topiam',
-    title: 'Topiam',
-  },
-  {
     avatar: markRaw(SvgWechatIcon),
     description: '绑定wechat账号',
     source: 'wechat',

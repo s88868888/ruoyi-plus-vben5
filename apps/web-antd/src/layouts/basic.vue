@@ -56,24 +56,7 @@ const menus = computed(() => {
       icon: UserOutlined,
       text: $t('ui.widgets.profile'),
     },
-    {
-      handler: () => {
-        openWindow('https://gitee.com/dapppp/ruoyi-plus-vben5', {
-          target: '_blank',
-        });
-      },
-      icon: () => h(GiteeIcon, { class: 'text-red-800' }),
-      text: 'Gitee项目地址',
-    },
-    {
-      handler: () => {
-        openWindow(VBEN_GITHUB_URL, {
-          target: '_blank',
-        });
-      },
-      icon: GitHubOutlined,
-      text: 'Vben官方地址',
-    },
+
     {
       handler: () => {
         openWindow(`${VBEN_GITHUB_URL}/issues`, {
