@@ -5,7 +5,7 @@ import type { BizFinanceInfo } from '#/api/resource/finance';
 
 import { useVbenDrawer } from '@vben/common-ui';
 import { getVxePopupContainer } from '@vben/utils';
-import { Button, Popconfirm, Space, Tag, message } from 'ant-design-vue';
+import { Button, Popconfirm, Space, message } from 'ant-design-vue';
 import { PlusOutlined, DownloadOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -66,12 +66,6 @@ const gridOptions: VxeGridProps = {
     { field: 'financeName', title: '财务信息名称', minWidth: 180 },
     { field: 'infoType', title: '信息类型', minWidth: 120 },
     { field: 'financeDate', title: '时间', width: 120 },
-    {
-      field: 'dataPermissionType',
-      title: '数据权限',
-      width: 100,
-      slots: { default: 'dataPermission' },
-    },
     {
       field: 'attachmentName',
       title: '附件',
@@ -190,11 +184,6 @@ async function handleSuccess() {
             新增财务信息
           </Button>
         </Space>
-      </template>
-
-      <template #dataPermission="{ row }">
-        <Tag v-if="row.dataPermissionType === '0'" color="red">私密</Tag>
-        <Tag v-else-if="row.dataPermissionType === '1'" color="green">公开</Tag>
       </template>
 
       <template #attachment="{ row }">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { BizPatentMedal } from '#/api/resource/patent-medal';
 
-import { ref, computed } from 'vue';
+import { ref, computed, h } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import { message } from 'ant-design-vue';
 
@@ -11,6 +11,7 @@ import {
   patentMedalAdd,
   patentMedalUpdate,
 } from '#/api/resource/patent-medal';
+import SectionTitle from '../../companyInfo/modules/section-title.vue';
 
 const emit = defineEmits<{
   reload: [];
@@ -60,6 +61,18 @@ const [Form, formApi] = useVbenForm({
     labelWidth: 120,
   },
   schema: [
+    // ---- 基本信息 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_basic',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '基本信息' }),
+      }),
+      formItemClass: 'col-span-2',
+    },
     {
       fieldName: 'patentName',
       component: 'Input',
@@ -90,6 +103,7 @@ const [Form, formApi] = useVbenForm({
       label: '授权公告日',
       componentProps: {
         valueFormat: 'YYYY-MM-DD',
+        format: 'YYYY-MM-DD',
         class: 'w-full',
       },
     },
@@ -109,38 +123,6 @@ const [Form, formApi] = useVbenForm({
       label: '所属领域',
     },
     {
-      fieldName: 'patentAbstract',
-      component: 'Textarea',
-      label: '专利摘要',
-      componentProps: {
-        rows: 3,
-      },
-    },
-    {
-      fieldName: 'patentImage',
-      component: 'Input',
-      label: '专利图片',
-      componentProps: {
-        placeholder: '请输入图片URL',
-      },
-    },
-    {
-      fieldName: 'certificateImage',
-      component: 'Input',
-      label: '证书图片',
-      componentProps: {
-        placeholder: '请输入图片URL',
-      },
-    },
-    {
-      fieldName: 'remark',
-      component: 'Textarea',
-      label: '备注',
-      componentProps: {
-        rows: 3,
-      },
-    },
-    {
       fieldName: 'status',
       component: 'RadioGroup',
       label: '状态',
@@ -149,6 +131,70 @@ const [Form, formApi] = useVbenForm({
           { label: '有效', value: '0' },
           { label: '无效', value: '1' },
         ],
+      },
+    },
+    {
+      fieldName: 'patentAbstract',
+      component: 'Textarea',
+      label: '专利摘要',
+      formItemClass: 'col-span-2',
+      componentProps: {
+        rows: 3,
+      },
+    },
+    // ---- 图片资料 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_images',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '图片资料' }),
+      }),
+      formItemClass: 'col-span-2',
+    },
+    {
+      fieldName: 'patentImage',
+      component: 'ImageUpload',
+      label: '专利图片',
+      componentProps: {
+        maxCount: 1,
+        maxSize: 10,
+        accept: 'image/jpg,image/jpeg,image/png',
+        helpMessage: false,
+      },
+    },
+    {
+      fieldName: 'certificateImage',
+      component: 'ImageUpload',
+      label: '证书图片',
+      componentProps: {
+        maxCount: 1,
+        maxSize: 10,
+        accept: 'image/jpg,image/jpeg,image/png',
+        helpMessage: false,
+      },
+    },
+    // ---- 其他信息 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_other',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '其他信息' }),
+      }),
+      formItemClass: 'col-span-2',
+    },
+    {
+      fieldName: 'remark',
+      component: 'Textarea',
+      label: '备注',
+      formItemClass: 'col-span-2',
+      componentProps: {
+        rows: 3,
       },
     },
   ],
@@ -188,7 +234,18 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <BasicDrawer class="w-[800px]">
+  <BasicDrawer class="w-[900px]">
     <Form />
   </BasicDrawer>
 </template>
+
+<style scoped>
+:deep(.section-title-divider.ant-divider-horizontal.ant-divider-with-text)::before,
+:deep(.section-title-divider.ant-divider-horizontal.ant-divider-with-text)::after {
+  display: none;
+}
+
+:deep(.section-title-divider .ant-divider-inner-text) {
+  padding-left: 0;
+}
+</style>

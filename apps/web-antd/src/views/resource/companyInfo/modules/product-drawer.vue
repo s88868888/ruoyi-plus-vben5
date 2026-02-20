@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { BizProduct } from '#/api/resource/product';
 
-import { ref, computed } from 'vue';
+import { ref, computed, h } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import { message } from 'ant-design-vue';
 
 import { useVbenForm } from '#/adapter/form';
 import { productInfo, productAdd, productUpdate } from '#/api/resource/product';
+import SectionTitle from './section-title.vue';
 
 const emit = defineEmits<{
   reload: [];
@@ -32,6 +33,10 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         drawerApi.drawerLoading(true);
         try {
           const res = await productInfo(data.id);
+          // 后端返回逗号分隔字符串，ImageUpload maxCount>1 需要数组
+          if (res.relatedImages && typeof res.relatedImages === 'string') {
+            res.relatedImages = res.relatedImages.split(',').filter(Boolean);
+          }
           await formApi.setValues(res);
         } finally {
           drawerApi.drawerLoading(false);
@@ -56,6 +61,18 @@ const [Form, formApi] = useVbenForm({
     labelWidth: 120,
   },
   schema: [
+    // ---- 基本信息 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_basic',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '基本信息' }),
+      }),
+      formItemClass: 'col-span-2',
+    },
     {
       fieldName: 'productName',
       label: '产品名称',
@@ -112,33 +129,59 @@ const [Form, formApi] = useVbenForm({
         ],
       },
     },
+    // ---- 图片资料 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_images',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '图片资料' }),
+      }),
+      formItemClass: 'col-span-2',
+    },
     {
       fieldName: 'productImage',
       label: '实物图片',
-      component: 'Upload',
+      component: 'ImageUpload',
+      formItemClass: 'col-span-2',
       componentProps: {
-        api: '/system/oss/upload',
         maxCount: 1,
-        maxSize: 5,
-        accept: 'image/*',
+        maxSize: 10,
+        accept: 'image/jpg,image/jpeg,image/png',
+        helpMessage: false,
       },
     },
     {
       fieldName: 'relatedImages',
       label: '相关图片',
-      component: 'Upload',
+      component: 'ImageUpload',
+      formItemClass: 'col-span-2',
       componentProps: {
-        api: '/system/oss/upload',
         maxCount: 9,
-        maxSize: 5,
-        accept: 'image/*',
+        maxSize: 10,
+        accept: 'image/jpg,image/jpeg,image/png',
         multiple: true,
       },
+    },
+    // ---- 补充信息 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_extra',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '补充信息' }),
+      }),
+      formItemClass: 'col-span-2',
     },
     {
       fieldName: 'performanceDesc',
       label: '性能说明',
       component: 'Textarea',
+      formItemClass: 'col-span-2',
       componentProps: {
         rows: 4,
       },
@@ -147,6 +190,7 @@ const [Form, formApi] = useVbenForm({
       fieldName: 'remark',
       label: '备注',
       component: 'Textarea',
+      formItemClass: 'col-span-2',
       componentProps: {
         rows: 3,
       },
@@ -167,6 +211,10 @@ async function handleSubmit() {
       ...values,
       id: isEdit.value ? productId.value : undefined,
       deptId: deptId.value,
+      // ImageUpload maxCount>1 时返回数组，后端期望逗号分隔字符串
+      relatedImages: Array.isArray(values.relatedImages)
+        ? values.relatedImages.join(',')
+        : values.relatedImages,
     };
 
     if (isEdit.value) {
@@ -187,7 +235,18 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <BasicDrawer class="w-[800px]">
+  <BasicDrawer class="w-[900px]">
     <Form />
   </BasicDrawer>
 </template>
+
+<style scoped>
+:deep(.section-title-divider.ant-divider-horizontal.ant-divider-with-text)::before,
+:deep(.section-title-divider.ant-divider-horizontal.ant-divider-with-text)::after {
+  display: none;
+}
+
+:deep(.section-title-divider .ant-divider-inner-text) {
+  padding-left: 0;
+}
+</style>

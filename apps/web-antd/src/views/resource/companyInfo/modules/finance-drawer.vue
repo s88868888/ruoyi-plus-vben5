@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import type { BizFinanceInfo } from '#/api/resource/finance';
 
-import { ref, computed } from 'vue';
+import { ref, computed, h } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
-import { message } from 'ant-design-vue';
+import { message, Space, Button } from 'ant-design-vue';
+import { DownloadOutlined, DeleteOutlined } from '@ant-design/icons-vue';
 
 import { useVbenForm } from '#/adapter/form';
 import { financeInfo, financeAdd, financeUpdate } from '#/api/resource/finance';
+import { ossInfo } from '#/api/system/oss';
+import SectionTitle from './section-title.vue';
 
 const emit = defineEmits<{
   reload: [];
@@ -15,6 +18,17 @@ const emit = defineEmits<{
 const mode = ref<'add' | 'edit' | 'view'>('add');
 const financeId = ref<number>();
 const deptId = ref<number>();
+const originalAttachmentUrl = ref('');
+const originalAttachmentName = ref('');
+const existingAttachments = computed(() => {
+  if (!originalAttachmentUrl.value || !originalAttachmentName.value) return [];
+  const urls = originalAttachmentUrl.value.split(',');
+  const names = originalAttachmentName.value.split(',');
+  return urls.map((url, index) => ({
+    url: url.trim(),
+    name: names[index]?.trim() || '未命名',
+  }));
+});
 
 const isViewMode = computed(() => mode.value === 'view');
 
@@ -28,6 +42,8 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
   onOpenChange: async (visible) => {
     if (!visible) {
       await formApi.resetForm();
+      originalAttachmentUrl.value = '';
+      originalAttachmentName.value = '';
       return;
     }
     const data = drawerApi.getData<{ id?: number; deptId?: number; mode: 'add' | 'edit' | 'view' }>();
@@ -40,26 +56,22 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         drawerApi.drawerLoading(true);
         try {
           const res = await financeInfo(data.id);
-          // 处理附件回显
+          // FileUpload 使用 ossId 绑定，后端返回的是 URL，无法直接回显
+          // 将附件信息分开存储，提交时再处理
+          originalAttachmentUrl.value = res.attachmentUrl || '';
+          originalAttachmentName.value = res.attachmentName || '';
           const formData: any = { ...res };
-          if (res.attachmentUrl) {
-            formData.attachmentUrl = res.attachmentUrl;
-          }
+          // 不给 FileUpload 设置附件字段，避免将 URL 当成 ossId 传入
+          delete formData.attachmentUrl;
           await formApi.setValues(formData);
-
-          // 查看模式禁用所有字段
-          if (data.mode === 'view') {
-            formApi.setSchemaByPath('*', { componentProps: { disabled: true } });
-          } else {
-            formApi.setSchemaByPath('*', { componentProps: { disabled: false } });
-          }
         } finally {
           drawerApi.drawerLoading(false);
         }
       } else {
         financeId.value = undefined;
-        await formApi.setValues({ deptId: data.deptId, dataPermissionType: '0' });
-        formApi.setSchemaByPath('*', { componentProps: { disabled: false } });
+        originalAttachmentUrl.value = '';
+        originalAttachmentName.value = '';
+        await formApi.setValues({ deptId: data.deptId });
       }
     }
   },
@@ -93,7 +105,19 @@ const [Form, formApi] = useVbenForm({
     },
     labelWidth: 120,
   },
-  schema: [
+  schema: computed(() => [
+    // ---- 基本信息 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_basic',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '基本信息' }),
+      }),
+      formItemClass: 'col-span-2',
+    },
     {
       fieldName: 'financeName',
       label: '财务信息名称',
@@ -102,6 +126,7 @@ const [Form, formApi] = useVbenForm({
       componentProps: {
         maxlength: 60,
         showCount: true,
+        disabled: isViewMode.value,
       },
     },
     {
@@ -109,6 +134,9 @@ const [Form, formApi] = useVbenForm({
       label: '信息类型',
       component: 'Input',
       rules: 'required',
+      componentProps: {
+        disabled: isViewMode.value,
+      },
     },
     {
       fieldName: 'financeDate',
@@ -119,42 +147,62 @@ const [Form, formApi] = useVbenForm({
         class: 'w-full',
         format: 'YYYY-MM-DD',
         valueFormat: 'YYYY-MM-DD',
+        disabled: isViewMode.value,
       },
     },
+    // ---- 附件资料 ----
     {
-      fieldName: 'dataPermissionType',
-      label: '数据权限类型',
-      component: 'RadioGroup',
-      componentProps: {
-        options: [
-          { label: '私密', value: '0' },
-          { label: '公开', value: '1' },
-        ],
-      },
+      component: 'Divider',
+      fieldName: '_divider_attachment',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '附件资料' }),
+      }),
+      formItemClass: 'col-span-2',
     },
     {
       fieldName: 'attachmentUrl',
       label: '附件',
-      component: 'Upload',
+      component: 'FileUpload',
+      formItemClass: 'col-span-2',
       componentProps: {
-        api: '/system/oss/upload',
-        maxCount: 1,
+        maxCount: 5,
         maxSize: 50,
-        accept: 'application/pdf',
+        accept: 'application/pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,image/jpg,image/jpeg,image/png',
+        multiple: true,
+        disabled: isViewMode.value,
       },
-      help: '单个PDF文件，最大50M',
+      help: isViewMode.value && originalAttachmentUrl.value
+        ? `当前附件：${originalAttachmentName.value || '未命名'}`
+        : undefined,
+    },
+    // ---- 其他信息 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_other',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '其他信息' }),
+      }),
+      formItemClass: 'col-span-2',
     },
     {
       fieldName: 'remark',
       label: '备注',
       component: 'Textarea',
+      formItemClass: 'col-span-2',
       componentProps: {
         rows: 3,
+        disabled: isViewMode.value,
       },
     },
-  ],
+  ]),
   showDefaultActions: false,
-  wrapperClass: 'grid-cols-1',
+  wrapperClass: 'grid-cols-1 md:grid-cols-2',
 });
 
 async function handleSubmit() {
@@ -166,20 +214,21 @@ async function handleSubmit() {
     const values = await formApi.getValues();
 
     // 处理附件字段
-    let attachmentUrl = '';
-    let attachmentName = '';
-    if (values.attachmentUrl) {
-      if (typeof values.attachmentUrl === 'string') {
-        // 编辑时已有附件
-        attachmentUrl = values.attachmentUrl;
-        // 如果有原始的attachmentName，保留它
-        const currentValues = await formApi.getValues();
-        attachmentName = currentValues.attachmentName || '';
-      } else if (Array.isArray(values.attachmentUrl) && values.attachmentUrl.length > 0) {
-        // 新上传的附件
-        const file = values.attachmentUrl[0];
-        attachmentUrl = file.url || file.response?.data?.url || '';
-        attachmentName = file.name || '';
+    // FileUpload 返回 ossId，需要通过 ossInfo 接口解析为 URL 和文件名
+    let attachmentUrl = originalAttachmentUrl.value;
+    let attachmentName = originalAttachmentName.value;
+    const ossIds = values.attachmentUrl;
+
+    if (ossIds && (Array.isArray(ossIds) ? ossIds.length > 0 : ossIds !== '')) {
+      try {
+        const ossFiles = await ossInfo(ossIds);
+        if (ossFiles && ossFiles.length > 0) {
+          attachmentUrl = ossFiles.map((f) => f.url).join(',');
+          attachmentName = ossFiles.map((f) => f.originalName).join(',');
+        }
+      } catch (error) {
+        // ossId 解析失败时保留原有附件信息
+        console.error('附件解析失败:', error);
       }
     }
 
@@ -207,10 +256,67 @@ async function handleSubmit() {
     drawerApi.lock(false);
   }
 }
+
+function handleDownloadAttachment(url: string) {
+  window.open(url, '_blank');
+}
+
+function handleRemoveExistingAttachment(index: number) {
+  const urls = originalAttachmentUrl.value.split(',');
+  const names = originalAttachmentName.value.split(',');
+  urls.splice(index, 1);
+  names.splice(index, 1);
+  originalAttachmentUrl.value = urls.join(',');
+  originalAttachmentName.value = names.join(',');
+}
 </script>
 
 <template>
-  <BasicDrawer class="w-[800px]">
+  <BasicDrawer class="w-[900px]">
     <Form />
+
+    <!-- 已有附件列表 -->
+    <div v-if="existingAttachments.length > 0 && !isViewMode" class="px-6 pb-4">
+      <div class="text-sm font-medium mb-2">已有附件：</div>
+      <div class="space-y-2">
+        <div
+          v-for="(attachment, index) in existingAttachments"
+          :key="index"
+          class="flex items-center justify-between p-2 bg-gray-50 rounded"
+        >
+          <span class="text-sm truncate flex-1">{{ attachment.name }}</span>
+          <Space>
+            <Button
+              size="small"
+              type="link"
+              @click="handleDownloadAttachment(attachment.url)"
+            >
+              <DownloadOutlined />
+              下载
+            </Button>
+            <Button
+              size="small"
+              type="link"
+              danger
+              @click="handleRemoveExistingAttachment(index)"
+            >
+              <DeleteOutlined />
+              删除
+            </Button>
+          </Space>
+        </div>
+      </div>
+    </div>
   </BasicDrawer>
 </template>
+
+<style scoped>
+:deep(.section-title-divider.ant-divider-horizontal.ant-divider-with-text)::before,
+:deep(.section-title-divider.ant-divider-horizontal.ant-divider-with-text)::after {
+  display: none;
+}
+
+:deep(.section-title-divider .ant-divider-inner-text) {
+  padding-left: 0;
+}
+</style>

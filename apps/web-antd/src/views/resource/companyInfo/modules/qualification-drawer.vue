@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { BizQualification } from '#/api/resource/qualification';
 
-import { ref, computed } from 'vue';
+import { ref, computed, h } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import { message } from 'ant-design-vue';
 
 import { useVbenForm } from '#/adapter/form';
 import { qualificationInfo, qualificationAdd, qualificationUpdate } from '#/api/resource/qualification';
+import SectionTitle from './section-title.vue';
 
 const emit = defineEmits<{
   reload: [];
@@ -32,13 +33,17 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         drawerApi.drawerLoading(true);
         try {
           const res = await qualificationInfo(data.id);
+          // 后端返回逗号分隔字符串，ImageUpload maxCount>1 需要数组
+          if (res.certImages && typeof res.certImages === 'string') {
+            res.certImages = res.certImages.split(',').filter(Boolean);
+          }
           await formApi.setValues(res);
         } finally {
           drawerApi.drawerLoading(false);
         }
       } else {
         qualificationId.value = undefined;
-        await formApi.setValues({ deptId: data.deptId, dataPermissionType: '0' });
+        await formApi.setValues({ deptId: data.deptId });
       }
     }
   },
@@ -56,23 +61,31 @@ const [Form, formApi] = useVbenForm({
     labelWidth: 120,
   },
   schema: [
+    // ---- 证书信息 ----
     {
-      fieldName: 'certImages',
-      label: '证书图片',
-      component: 'Upload',
-      rules: 'required',
-      componentProps: {
-        api: '/system/oss/upload',
-        maxCount: 30,
-        maxSize: 10,
-        accept: 'image/jpg,image/jpeg,image/png',
-        multiple: true,
-      },
-      help: '最多上传30张，支持jpg、jpeg、png格式，单张最大10M',
+      component: 'Divider',
+      fieldName: '_divider_cert',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '证书信息' }),
+      }),
+      formItemClass: 'col-span-2',
     },
     {
       fieldName: 'certName',
       label: '证书名称',
+      component: 'Input',
+      rules: 'required',
+      componentProps: {
+        maxlength: 80,
+        showCount: true,
+      },
+    },
+    {
+      fieldName: 'certNumber',
+      label: '证书编号',
       component: 'Input',
       rules: 'required',
       componentProps: {
@@ -101,14 +114,21 @@ const [Form, formApi] = useVbenForm({
       },
     },
     {
-      fieldName: 'certNumber',
-      label: '证书编号',
+      fieldName: 'certStatus',
+      label: '证书状态',
       component: 'Input',
-      rules: 'required',
-      componentProps: {
-        maxlength: 80,
-        showCount: true,
-      },
+    },
+    // ---- 有效期 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_validity',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '有效期' }),
+      }),
+      formItemClass: 'col-span-2',
     },
     {
       fieldName: 'validStartDate',
@@ -131,33 +151,56 @@ const [Form, formApi] = useVbenForm({
         valueFormat: 'YYYY-MM-DD',
       },
     },
+    // ---- 图片资料 ----
     {
-      fieldName: 'dataPermissionType',
-      label: '数据权限类型',
-      component: 'RadioGroup',
-      componentProps: {
-        options: [
-          { label: '公域', value: '0' },
-          { label: '私域', value: '1' },
-        ],
-      },
+      component: 'Divider',
+      fieldName: '_divider_images',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '图片资料' }),
+      }),
+      formItemClass: 'col-span-2',
     },
     {
-      fieldName: 'certStatus',
-      label: '证书状态',
-      component: 'Input',
+      fieldName: 'certImages',
+      label: '证书图片',
+      component: 'ImageUpload',
+      rules: 'required',
+      formItemClass: 'col-span-2',
+      componentProps: {
+        maxCount: 30,
+        maxSize: 10,
+        accept: 'image/jpg,image/jpeg,image/png',
+        multiple: true,
+      },
+      help: '最多上传30张，支持jpg、jpeg、png格式，单张最大10M',
+    },
+    // ---- 其他信息 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_other',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '其他信息' }),
+      }),
+      formItemClass: 'col-span-2',
     },
     {
       fieldName: 'remark',
       label: '备注',
       component: 'Textarea',
+      formItemClass: 'col-span-2',
       componentProps: {
         rows: 3,
       },
     },
   ],
   showDefaultActions: false,
-  wrapperClass: 'grid-cols-1',
+  wrapperClass: 'grid-cols-1 md:grid-cols-2',
 });
 
 async function handleSubmit() {
@@ -171,6 +214,10 @@ async function handleSubmit() {
       ...values,
       id: isEdit.value ? qualificationId.value : undefined,
       deptId: deptId.value,
+      // ImageUpload maxCount>1 时返回数组，后端期望逗号分隔字符串
+      certImages: Array.isArray(values.certImages)
+        ? values.certImages.join(',')
+        : values.certImages,
     };
 
     if (isEdit.value) {
@@ -191,7 +238,18 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <BasicDrawer class="w-[800px]">
+  <BasicDrawer class="w-[900px]">
     <Form />
   </BasicDrawer>
 </template>
+
+<style scoped>
+:deep(.section-title-divider.ant-divider-horizontal.ant-divider-with-text)::before,
+:deep(.section-title-divider.ant-divider-horizontal.ant-divider-with-text)::after {
+  display: none;
+}
+
+:deep(.section-title-divider .ant-divider-inner-text) {
+  padding-left: 0;
+}
+</style>
