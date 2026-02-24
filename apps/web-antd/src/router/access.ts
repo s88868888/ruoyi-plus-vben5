@@ -51,6 +51,10 @@ const routeMetaMapping: Record<string, Omit<RouteMeta, 'title'>> = {
     activePath: '/demo/leave',
     requireHomeRedirect: true,
   },
+
+  'bid/project/detail/:id': {
+    activePath: '/bid/project',
+  },
 };
 
 /**

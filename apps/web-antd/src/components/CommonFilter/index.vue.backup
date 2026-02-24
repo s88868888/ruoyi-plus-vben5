@@ -1,0 +1,2317 @@
+<!-- 通用筛选条件 -->
+<template>
+  <div class="common-filter">
+    <el-popover
+      :visible="popoverVisible"
+      trigger="click"
+      :width="800"
+      @hide="handlePopoverClose"
+      class="common-filter-popover"
+      :popper-style="{ borderRadius: '12px' }"
+    >
+      <template #reference>
+        <el-button
+          :class="{ 'has-filter': hasActiveFilters }"
+          icon="filter"
+          @click="handleButtonClick"
+        >
+          <div style="display: flex; align-items: center; gap: 4px">
+            <div>筛选条件</div>
+            <div v-if="totalFilterCount" class="filter-count">{{ totalFilterCount }}</div>
+          </div>
+        </el-button>
+      </template>
+
+      <template #default>
+        <div
+          class="filter-container"
+          ref="elPopoverFilterCardWrapDivFinalRef"
+          :style="{ height: dynamicHeight + 'px' }"
+        >
+          <!-- 主要内容区域 -->
+          <div class="filter-main">
+            <!-- 左侧筛选类型选择 -->
+            <div class="filter-sidebar">
+              <div class="sidebar-title">条件类型</div>
+              <div class="filter-categories">
+                <div
+                  v-for="category in filterCategories"
+                  :key="category.key"
+                  :class="['category-item', { active: activeCategory === category.key }]"
+                  @click="selectCategory(category)"
+                >
+                  <el-icon v-if="category.iconType === 'element'" class="category-icon">
+                    <component :is="category.icon" />
+                  </el-icon>
+                  <Icon
+                    v-else
+                    :icon="category.icon"
+                    class="category-icon"
+                    :width="16"
+                    :height="16"
+                  />
+                  <span class="category-label">{{ category.label }}</span>
+                  <div v-if="category.count > 0" class="category-count">
+                    {{ category.count }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右侧内容区域 -->
+            <div class="filter-content">
+              <!-- 筛选条件列 -->
+              <div class="conditions-panel">
+                <div class="panel-title">条件列表</div>
+                <div class="conditions-list" v-if="!currentCategoryData.disabled">
+                  <!-- 常用筛选 -->
+                  <template v-if="activeCategory === 'common' || activeCategory === 'uncommon'">
+                    <div
+                      v-for="(item, index) in currentCategoryData.items"
+                      :key="index"
+                      class="condition-item-wrapper"
+                    >
+                      <div class="condition-label">{{ item.label }}</div>
+                      <div class="condition-control">
+                        <!-- 日期选择器 -->
+                        <el-date-picker
+                          v-if="item.type === 'el-date-picker'"
+                          v-model="item.data"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                          placeholder="请选择日期"
+                        />
+                        <!-- 日期范围选择 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-start-end'"
+                          v-model="item.data"
+                          type="daterange"
+                          :shortcuts="shortcuts"
+                          range-separator="至"
+                          start-placeholder="开始日期"
+                          end-placeholder="结束日期"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 年选择 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-year'"
+                          v-model="item.data"
+                          type="year"
+                          placeholder="选择年"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 月选择 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-month'"
+                          v-model="item.data"
+                          type="month"
+                          placeholder="选择月"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 月份范围 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-month-range'"
+                          v-model="item.data"
+                          type="monthrange"
+                          range-separator="至"
+                          start-placeholder="开始月份"
+                          end-placeholder="结束月份"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 年份范围 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-year-range'"
+                          v-model="item.data"
+                          type="yearrange"
+                          range-separator="至"
+                          start-placeholder="开始年份"
+                          end-placeholder="结束年份"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 日期时间范围 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-se-two'"
+                          v-model="item.data"
+                          type="datetimerange"
+                          range-separator="至"
+                          start-placeholder="开始日期"
+                          end-placeholder="结束日期"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 单选下拉 -->
+                        <el-select
+                          v-else-if="item.type === 'el-select'"
+                          v-model="item.data"
+                          placeholder="请选择"
+                          class="condition-input"
+                          clearable
+                        >
+                          <el-option
+                            v-for="option in item.options"
+                            :key="option.value"
+                            :label="option.label"
+                            :value="option.value"
+                          />
+                        </el-select>
+                        <!-- 多选下拉 -->
+                        <el-select
+                          v-else-if="item.type === 'el-select-more'"
+                          v-model="item.data"
+                          multiple
+                          clearable
+                          filterable
+                          placeholder="请选择"
+                          class="condition-input"
+                        >
+                          <el-option
+                            v-for="option in item.options"
+                            :key="option.value"
+                            :label="option.label"
+                            :value="option.value"
+                          />
+                        </el-select>
+                        <!-- 单选组 -->
+                        <el-radio-group
+                          v-else-if="item.type === 'el-radio'"
+                          v-model="item.data"
+                          class="condition-input"
+                        >
+                          <el-radio
+                            v-for="option in item.options"
+                            :key="option.value"
+                            :label="option.value"
+                          >
+                            {{ option.label }}
+                          </el-radio>
+                        </el-radio-group>
+                        <!-- 多选组 -->
+                        <el-checkbox-group
+                          v-else-if="item.type === 'el-checkbox'"
+                          v-model="item.data"
+                          class="condition-input"
+                        >
+                          <el-checkbox
+                            v-for="option in item.options"
+                            :key="option.value"
+                            :label="option.value"
+                          >
+                            {{ option.label }}
+                          </el-checkbox>
+                        </el-checkbox-group>
+                        <!-- 数值范围 -->
+                        <div
+                          v-else-if="item.type === 'el-input-range'"
+                          class="range-input condition-input"
+                        >
+                          <el-input
+                            v-model="item.data.start"
+                            type="number"
+                            placeholder="最小值"
+                            clearable
+                          />
+                          <span class="range-separator">至</span>
+                          <el-input
+                            v-model="item.data.end"
+                            type="number"
+                            placeholder="最大值"
+                            clearable
+                          />
+                        </div>
+                        <!-- 单行文本 -->
+                        <el-input
+                          v-else-if="item.type === 'el-input'"
+                          v-model="item.data"
+                          :placeholder="item.placeholder || '请输入'"
+                          clearable
+                          class="condition-input"
+                        />
+                        <!-- 多行文本 -->
+                        <el-input
+                          v-else-if="item.type === 'el-textarea'"
+                          v-model="item.data"
+                          type="textarea"
+                          :rows="3"
+                          :placeholder="item.placeholder || '请输入'"
+                          class="condition-input"
+                        />
+                        <!-- 带搜索建议 -->
+                        <el-autocomplete
+                          v-else-if="item.type === 'el-autocomplete'"
+                          v-model="item.data"
+                          :fetch-suggestions="
+                            (queryString, cb) => handleSuggestions(queryString, cb, item)
+                          "
+                          :placeholder="item.placeholder || '请输入，支持搜索建议'"
+                          clearable
+                          class="condition-input"
+                        />
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 时间类筛选 -->
+                  <template v-else-if="activeCategory === 'time'">
+                    <div
+                      v-for="(item, index) in currentCategoryData.items"
+                      :key="index"
+                      class="condition-item-wrapper"
+                    >
+                      <div class="condition-label">{{ item.label }}</div>
+                      <div class="condition-control">
+                        <!-- 单个日期选择 -->
+                        <el-date-picker
+                          v-if="item.type === 'el-date-picker'"
+                          v-model="item.data"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                          placeholder="请选择日期"
+                        />
+                        <!-- 日期范围选择 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-start-end'"
+                          v-model="item.data"
+                          type="daterange"
+                          :shortcuts="shortcuts"
+                          range-separator="至"
+                          start-placeholder="开始日期"
+                          end-placeholder="结束日期"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 年选择 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-year'"
+                          v-model="item.data"
+                          type="year"
+                          placeholder="选择年"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 月选择 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-month'"
+                          v-model="item.data"
+                          type="month"
+                          placeholder="选择月"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 月份范围选择 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-month-range'"
+                          v-model="item.data"
+                          type="monthrange"
+                          range-separator="至"
+                          start-placeholder="开始月份"
+                          end-placeholder="结束月份"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 年份范围选择 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-year-range'"
+                          v-model="item.data"
+                          type="yearrange"
+                          range-separator="至"
+                          start-placeholder="开始年份"
+                          end-placeholder="结束年份"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                        <!-- 日期时间范围 -->
+                        <el-date-picker
+                          v-else-if="item.type === 'el-date-picker-se-two'"
+                          v-model="item.data"
+                          type="datetimerange"
+                          range-separator="至"
+                          start-placeholder="开始日期"
+                          end-placeholder="结束日期"
+                          :format="item.format"
+                          :value-format="item.format"
+                          class="condition-input"
+                        />
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 选择类筛选 -->
+                  <template v-else-if="activeCategory === 'select'">
+                    <div
+                      v-for="(item, index) in currentCategoryData.items"
+                      :key="index"
+                      class="condition-item-wrapper"
+                    >
+                      <div class="condition-label">{{ item.label }}</div>
+                      <div class="condition-control">
+                        <!-- 单选下拉 -->
+                        <el-select
+                          v-if="item.type === 'el-select'"
+                          v-model="item.data"
+                          placeholder="请选择"
+                          class="condition-input"
+                          clearable
+                        >
+                          <el-option
+                            v-for="option in item.options"
+                            :key="option.value"
+                            :label="option.label"
+                            :value="option.value"
+                          />
+                        </el-select>
+                        <!-- 多选下拉 -->
+                        <el-select
+                          v-else-if="item.type === 'el-select-more'"
+                          v-model="item.data"
+                          multiple
+                          clearable
+                          filterable
+                          placeholder="请选择"
+                          class="condition-input"
+                        >
+                          <el-option
+                            v-for="option in item.options"
+                            :key="option.value"
+                            :label="option.label"
+                            :value="option.value"
+                          />
+                        </el-select>
+                        <!-- 单选组 -->
+                        <el-radio-group
+                          v-else-if="item.type === 'el-radio'"
+                          v-model="item.data"
+                          class="condition-input"
+                        >
+                          <el-radio
+                            v-for="option in item.options"
+                            :key="option.value"
+                            :label="option.value"
+                          >
+                            {{ option.label }}
+                          </el-radio>
+                        </el-radio-group>
+                        <!-- 多选组 -->
+                        <el-checkbox-group
+                          v-else-if="item.type === 'el-checkbox'"
+                          v-model="item.data"
+                          class="condition-input"
+                        >
+                          <el-checkbox
+                            v-for="option in item.options"
+                            :key="option.value"
+                            :label="option.value"
+                          >
+                            {{ option.label }}
+                          </el-checkbox>
+                        </el-checkbox-group>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 数值类筛选 -->
+                  <template v-else-if="activeCategory === 'number'">
+                    <div
+                      v-for="(item, index) in currentCategoryData.items"
+                      :key="index"
+                      class="condition-item-wrapper"
+                    >
+                      <div class="condition-label">{{ item.label }}</div>
+                      <div class="condition-control">
+                        <!-- 数值范围 -->
+                        <div
+                          v-if="item.type === 'el-input-range'"
+                          class="range-input condition-input"
+                        >
+                          <el-input
+                            v-model="item.data.start"
+                            type="number"
+                            placeholder="最小值"
+                            clearable
+                          />
+                          <span class="range-separator">至</span>
+                          <el-input
+                            v-model="item.data.end"
+                            type="number"
+                            placeholder="最大值"
+                            clearable
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 文本类筛选 -->
+                  <template v-else-if="activeCategory === 'text'">
+                    <div
+                      v-for="(item, index) in currentCategoryData.items"
+                      :key="index"
+                      class="condition-item-wrapper"
+                    >
+                      <div class="condition-label">{{ item.label }}</div>
+                      <div class="condition-control">
+                        <!-- 单行文本输入 -->
+                        <el-input
+                          v-if="item.type === 'el-input'"
+                          v-model="item.data"
+                          :placeholder="item.placeholder || '请输入'"
+                          clearable
+                          class="condition-input"
+                        />
+                        <!-- 多行文本输入 -->
+                        <el-input
+                          v-else-if="item.type === 'el-textarea'"
+                          v-model="item.data"
+                          type="textarea"
+                          :rows="3"
+                          :placeholder="item.placeholder || '请输入'"
+                          class="condition-input"
+                        />
+                        <!-- 带搜索建议的输入框 -->
+                        <el-autocomplete
+                          v-else-if="item.type === 'el-autocomplete'"
+                          v-model="item.data"
+                          :fetch-suggestions="
+                            (queryString, cb) => handleSuggestions(queryString, cb, item)
+                          "
+                          :placeholder="item.placeholder || '请输入，支持搜索建议'"
+                          clearable
+                          class="condition-input"
+                        />
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 标签类筛选 -->
+                  <template v-else-if="activeCategory === 'tags'">
+                    <div v-if="labelList.length === 0" class="empty-state">
+                      <el-icon class="empty-icon"><Document /></el-icon>
+                      <div class="empty-text">暂无标签信息</div>
+                      <div class="empty-desc">请联系管理员配置标签</div>
+                    </div>
+                    <div v-else class="tags-content">
+                      <template v-for="group in groupedLabels" :key="group.type">
+                        <div v-if="group.labels.length" class="tag-group">
+                          <div class="group-title">{{ group.title }}</div>
+                          <div class="tag-list">
+                            <div
+                              v-for="item in group.labels"
+                              :key="item.id"
+                              :class="['tag-item', { selected: selectedTagIds.includes(item.id) }]"
+                              @click="handleTagToggle(item)"
+                            >
+                              {{ item.name }}
+                            </div>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+
+                  <!-- 自定义筛选 -->
+                  <!-- 已移除自定义筛选分类，所有筛选条件都归入时间、选择、数值三个类别 -->
+                </div>
+                <div v-else class="empty-state">
+                  <el-icon class="empty-icon"><Document /></el-icon>
+                  <div class="empty-text">该类型暂无筛选条件</div>
+                </div>
+              </div>
+
+              <!-- 已选条件列 -->
+              <div class="selected-panel">
+                <div class="panel-title">已选条件</div>
+                <div class="selected-list">
+                  <!-- 已选标签 -->
+                  <template v-if="tempSelectedTags.length">
+                    <div class="selected-group">
+                      <div class="group-title">标签</div>
+                      <div class="selected-items">
+                        <div v-for="tag in tempSelectedTags" :key="tag.id" class="selected-item">
+                          <el-tooltip
+                            :content="tag.name"
+                            placement="top"
+                            :disabled="tag.name.length <= 15"
+                          >
+                            <span class="item-text">{{ tag.name }}</span>
+                          </el-tooltip>
+                          <el-icon class="remove-icon" @click.stop="removeTag(tag)">
+                            <Close />
+                          </el-icon>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 已选筛选条件 -->
+                  <template v-if="previewConditions.length">
+                    <div
+                      v-for="group in groupedPreviewConditions"
+                      :key="group.category"
+                      class="selected-group"
+                    >
+                      <div class="group-title">{{ group.title }}</div>
+                      <div class="selected-items">
+                        <div
+                          v-for="condition in group.items"
+                          :key="condition.field"
+                          class="selected-item"
+                        >
+                          <el-tooltip
+                            :content="`${condition.label}: ${getConditionDisplayValue(condition)}`"
+                            placement="top"
+                            :disabled="!isTextOverflow(condition)"
+                          >
+                            <span class="item-text">
+                              {{ condition.label }}:
+                              {{ getConditionDisplayValue(condition) }}
+                            </span>
+                          </el-tooltip>
+                          <el-icon
+                            class="remove-icon"
+                            @click.stop="removePreviewCondition(condition)"
+                          >
+                            <Close />
+                          </el-icon>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 空状态 -->
+                  <div
+                    v-if="!tempSelectedTags.length && !previewConditions.length"
+                    class="empty-state"
+                  >
+                    <el-icon class="empty-icon"><Filter /></el-icon>
+                    <div class="empty-text">暂无已选条件</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部固定操作区 -->
+          <div class="filter-footer">
+            <div class="footer-left">
+              <el-button @click="handlePreviewClear">重置条件</el-button>
+            </div>
+            <div class="footer-right">
+              <el-button @click="handleCancel">取消</el-button>
+              <el-button type="primary" @click="handleConfirm">应用条件</el-button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </el-popover>
+
+    <!-- 已选条件展示区域 -->
+    <div class="selected-conditions" ref="conditionsContainer" v-if="hasActiveFilters">
+      <!-- 已选标签 -->
+      <template v-if="selectedTags.length">
+        <div
+          v-for="tag in selectedTags"
+          :key="tag.id"
+          class="condition-item"
+          @click="removeSelectedTag(tag)"
+        >
+          <el-tooltip :content="tag.name" placement="top" :disabled="tag.name.length <= 12">
+            <span class="condition-text">{{ tag.name }}</span>
+          </el-tooltip>
+          <el-icon class="close-icon"><Close /></el-icon>
+        </div>
+      </template>
+
+      <!-- 已选筛选条件 -->
+      <template v-if="selectedConditions.length">
+        <div
+          v-for="condition in visibleConditions"
+          :key="condition.id"
+          class="condition-item"
+          @click="removeCondition(condition)"
+        >
+          <el-tooltip
+            :content="`${condition.label}: ${getConditionValue(condition)}`"
+            placement="top"
+            :disabled="!isExternalTextOverflow(condition)"
+          >
+            <span class="condition-text"
+              >{{ condition.label }}: {{ getConditionValue(condition) }}</span
+            >
+          </el-tooltip>
+          <el-icon class="close-icon"><Close /></el-icon>
+        </div>
+
+        <!-- 溢出展示 -->
+        <el-popover
+          v-if="hiddenConditions.length"
+          placement="bottom-end"
+          trigger="click"
+          :width="300"
+        >
+          <template #reference>
+            <div class="condition-item more-conditions">
+              <span class="condition-text">更多 +{{ hiddenConditions.length }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+          </template>
+          <div class="hidden-conditions">
+            <div
+              v-for="condition in hiddenConditions"
+              :key="condition.id"
+              class="condition-item"
+              @click="removeCondition(condition)"
+            >
+              <el-tooltip
+                :content="`${condition.label}: ${getConditionValue(condition)}`"
+                placement="top"
+              >
+                <span class="condition-text"
+                  >{{ condition.label }}: {{ getConditionValue(condition) }}</span
+                >
+              </el-tooltip>
+              <el-icon class="close-icon"><Close /></el-icon>
+            </div>
+          </div>
+        </el-popover>
+      </template>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue'
+import { nanoid } from 'nanoid'
+import elementResizeDetectorMaker from 'element-resize-detector'
+import { ArrowDown, Close, Document, Filter, Star } from '@element-plus/icons-vue'
+import { Icon } from '@iconify/vue'
+import { getLabelList } from '@/api/label'
+import { useUserStore } from '@/store/modules/user'
+import dayjs from 'dayjs'
+import _ from 'lodash'
+
+interface LabelItem {
+  id: string
+  name: string
+  objtype: string
+  isglobal: string
+  ispublic: string
+  createuserid: string
+  [key: string]: any
+}
+
+interface FilterCategory {
+  key: string
+  label: string
+  icon: any
+  iconType?: 'element' | 'iconify' // 新增图标类型标识
+  count: number
+  disabled: boolean
+}
+
+interface GroupedCondition {
+  category: string
+  title: string
+  items: any[]
+}
+
+const props = defineProps({
+  type: {
+    type: String,
+    default: 'both',
+    validator: (value: string) => ['label', 'more', 'both'].includes(value)
+  },
+  objectType: {
+    type: String,
+    default: ''
+  },
+  filterData: {
+    type: Array,
+    default: () => []
+  }
+})
+
+const emit = defineEmits(['update:selectedTags', 'handle-query', 'change'])
+
+const userStore = useUserStore()
+const popoverVisible = ref(false)
+const conditionsContainer = ref(null)
+
+// 筛选配置管理
+interface FilterConfig {
+  objectType: string
+  commonFilters: string[]
+  uncommonFilters: string[]
+}
+
+const filterConfig = ref<FilterConfig>({
+  objectType: props.objectType,
+  commonFilters: [],
+  uncommonFilters: []
+})
+
+// 筛选类别管理
+const activeCategory = ref('common')
+
+// 标签相关状态
+const labelList = ref<LabelItem[]>([])
+const tempSelectedTags = ref<LabelItem[]>([])
+const selectedTags = ref<LabelItem[]>([])
+const selectedTagIds = ref<string[]>([])
+
+// 更多筛选相关状态
+const myFilterData = ref(JSON.parse(JSON.stringify(props.filterData)))
+const selectedConditions = ref([])
+
+// 动态高度计算
+const dynamicHeight = computed(() => {
+  const isMobile = window.innerWidth <= 768
+  const maxHeight = isMobile ? 400 : 520
+  const minHeight = isMobile ? 250 : 300
+
+  const baseHeight = 80 // 底部操作区 + padding
+  const headerHeight = 0 // 无顶部标题
+
+  // 计算左侧筛选类型所需高度
+  const categoriesCount = filterCategories.value.length
+  const categoryTitleHeight = 45 // 筛选类型标题
+  const sidebarHeight = Math.max(200, categoriesCount * 45 + categoryTitleHeight)
+
+  // 计算中间筛选条件所需高度
+  let conditionsHeight = 60 // 标题高度
+  if (currentCategoryData.value.items.length > 0) {
+    // 根据不同类型计算不同高度
+    let itemHeight = 70 // 默认条件高度
+    if (activeCategory.value === 'select') {
+      // 选择类可能需要更多空间（radio/checkbox组）
+      itemHeight = 90
+    } else if (activeCategory.value === 'text') {
+      // 文本类可能需要更多空间（textarea）
+      itemHeight = 80
+    }
+    conditionsHeight += currentCategoryData.value.items.length * itemHeight
+  } else {
+    conditionsHeight += 200 // 空状态高度
+  }
+
+  // 计算右侧已选条件所需高度
+  let selectedHeight = 60 // 标题高度
+  const totalSelectedItems = tempSelectedTags.value.length + previewConditions.value.length
+  if (totalSelectedItems > 0) {
+    selectedHeight += totalSelectedItems * 35 + Math.ceil(totalSelectedItems / 5) * 20 // 考虑分组间距
+  } else {
+    selectedHeight += 200 // 空状态高度
+  }
+
+  // 取最大值作为内容高度
+  const contentHeight = Math.max(sidebarHeight, conditionsHeight, selectedHeight)
+  const totalHeight = contentHeight + baseHeight + headerHeight
+
+  // 限制在最小和最大高度之间
+  return Math.max(minHeight, Math.min(maxHeight, totalHeight))
+})
+
+// 筛选类别配置（优化版）
+const filterCategories = computed<FilterCategory[]>(() => {
+  const categories = []
+
+  // 根据type属性决定显示哪些类别
+  if (props.type === 'more' || props.type === 'both') {
+    // 常用条件
+    if (categorizedFilterData.value.common.length > 0) {
+      categories.push({
+        key: 'common',
+        label: '常用条件',
+        icon: Star,
+        iconType: 'element',
+        count: categorizedFilterData.value.common.length,
+        disabled: false
+      })
+    }
+
+    // 其他条件
+    if (categorizedFilterData.value.uncommon.length > 0) {
+      categories.push({
+        key: 'uncommon',
+        label: '其他条件',
+        icon: 'mdi:dots-grid',
+        iconType: 'iconify',
+        count: categorizedFilterData.value.uncommon.length,
+        disabled: false
+      })
+    }
+  }
+
+  if (props.type === 'label' || props.type === 'both') {
+    // 标签筛选类别 - 只有在有对象类型时才显示
+    if (props.objectType) {
+      categories.push({
+        key: 'tags',
+        label: '标签条件',
+        icon: 'mdi:tag-multiple',
+        iconType: 'iconify',
+        count: labelList.value.length,
+        disabled: false
+      })
+    }
+  }
+
+  return categories
+})
+
+// 配置管理方法
+const loadFilterConfig = () => {
+  initDefaultConfig()
+}
+
+const initDefaultConfig = () => {
+  const commonFilters: string[] = []
+  const uncommonFilters: string[] = []
+
+  props.filterData.forEach((item: any) => {
+    if (item.isCommon !== false) {
+      commonFilters.push(item.field)
+    } else {
+      uncommonFilters.push(item.field)
+    }
+  })
+
+  filterConfig.value = {
+    objectType: props.objectType,
+    commonFilters,
+    uncommonFilters
+  }
+}
+
+// 根据field数组获取筛选项
+const getFilterItemsByFields = (fields: string[]) => {
+  return fields
+    .map((field) => myFilterData.value.find((item) => item.field === field))
+    .filter((item) => item !== undefined)
+}
+
+// 按类型分类筛选数据（优化版 - 根据配置分类）
+const categorizedFilterData = computed(() => {
+  const data = {
+    common: [],
+    uncommon: [],
+    time: [],
+    select: [],
+    number: [],
+    text: []
+  }
+
+  // 根据配置分类常用和不常用
+  data.common = getFilterItemsByFields(filterConfig.value.commonFilters)
+  data.uncommon = getFilterItemsByFields(filterConfig.value.uncommonFilters)
+
+  // 保留原有的类型分类逻辑（备用）
+  myFilterData.value.forEach((item) => {
+    if (item.type.includes('date-picker')) {
+      data.time.push(item)
+    } else if (
+      item.type === 'el-select' ||
+      item.type === 'el-select-more' ||
+      item.type === 'el-radio' ||
+      item.type === 'el-checkbox'
+    ) {
+      data.select.push(item)
+    } else if (item.type === 'el-input-range') {
+      data.number.push(item)
+    } else if (
+      item.type === 'el-input' ||
+      item.type === 'el-textarea' ||
+      item.type === 'el-autocomplete'
+    ) {
+      data.text.push(item)
+    }
+  })
+
+  return data
+})
+
+// 当前活动类别的数据（优化版）
+const currentCategoryData = computed(() => {
+  const categoryData = {
+    common: {
+      items: categorizedFilterData.value.common,
+      disabled: false
+    },
+    uncommon: {
+      items: categorizedFilterData.value.uncommon,
+      disabled: false
+    },
+    time: {
+      items: categorizedFilterData.value.time,
+      disabled: false
+    },
+    select: {
+      items: categorizedFilterData.value.select,
+      disabled: false
+    },
+    number: {
+      items: categorizedFilterData.value.number,
+      disabled: false
+    },
+    text: {
+      items: categorizedFilterData.value.text,
+      disabled: false
+    },
+    tags: { items: [], disabled: false }
+  }
+
+  return categoryData[activeCategory.value] || { items: [], disabled: false }
+})
+
+// 预览条件（用于实时显示已选条件）
+const previewConditions = computed(() => {
+  const conditions = []
+  for (const item of myFilterData.value) {
+    if (hasValue(item)) {
+      conditions.push(item)
+    }
+  }
+  return conditions
+})
+
+// 分组显示预览条件
+const groupedPreviewConditions = computed<GroupedCondition[]>(() => {
+  const groups: Record<string, GroupedCondition> = {}
+
+  previewConditions.value.forEach((condition) => {
+    const category = getCategoryByType(condition.type)
+    if (!groups[category]) {
+      groups[category] = {
+        category,
+        title: getCategoryTitle(category),
+        items: []
+      }
+    }
+    groups[category].items.push(condition)
+  })
+
+  return Object.values(groups)
+})
+
+// 控制条件显示
+const containerWidth = ref(0)
+const visibleConditions = computed(() => {
+  if (!containerWidth.value) return selectedConditions.value
+
+  let totalWidth = 0
+  return selectedConditions.value.filter((condition) => {
+    const estimatedWidth = (condition.label.length + getConditionValue(condition).length) * 12 + 50
+    totalWidth += estimatedWidth
+    return totalWidth < containerWidth.value - 100
+  })
+})
+
+const hiddenConditions = computed(() => {
+  return selectedConditions.value.filter(
+    (condition) => !visibleConditions.value.includes(condition)
+  )
+})
+
+const elPopoverFilterCardWrapDivFinalRef = ref(null)
+
+// 工具函数
+const hasValue = (item) => {
+  if (typeof item.data === 'string' && item.data.trim() !== '') return true
+  if (Array.isArray(item.data) && item.data.length > 0) return true
+  if (item.type === 'el-input-range' && (item.data?.start || item.data?.end)) return true
+  if (item.type.includes('range') && Array.isArray(item.data) && item.data.length === 2) return true
+  if (item.type === 'el-input' && item.data.trim() !== '') return true
+  if (item.type === 'el-textarea' && item.data.trim() !== '') return true
+  if (item.type === 'el-autocomplete' && item.data.trim() !== '') return true
+  return false
+}
+
+const getCategoryByType = (type) => {
+  if (type.includes('date-picker')) return 'time'
+  if (
+    type === 'el-select' ||
+    type === 'el-select-more' ||
+    type === 'el-radio' ||
+    type === 'el-checkbox'
+  )
+    return 'select'
+  if (type === 'el-input-range') return 'number'
+  if (type === 'el-input' || type === 'el-textarea' || type === 'el-autocomplete') return 'text'
+  return 'tags'
+}
+
+const getCategoryTitle = (category) => {
+  const titles = {
+    time: '时间筛选',
+    select: '选择筛选',
+    number: '数值筛选',
+    text: '文本筛选',
+    tags: '标签筛选'
+  }
+  return titles[category] || '其他筛选'
+}
+
+// 类别选择
+const selectCategory = (category: FilterCategory) => {
+  activeCategory.value = category.key
+}
+
+// 标签操作
+const handleTagToggle = (item: LabelItem) => {
+  const index = selectedTagIds.value.indexOf(item.id)
+  if (index > -1) {
+    selectedTagIds.value.splice(index, 1)
+    tempSelectedTags.value = tempSelectedTags.value.filter((tag) => tag.id !== item.id)
+  } else {
+    selectedTagIds.value.push(item.id)
+    tempSelectedTags.value.push(item)
+  }
+}
+
+// 获取条件显示值
+const getConditionDisplayValue = (condition) => {
+  return getConditionValue(condition)
+}
+
+// 移除预览条件
+const removePreviewCondition = (condition) => {
+  const targetItem = myFilterData.value.find((item) => item.field === condition.field)
+  if (targetItem) {
+    if (targetItem.type === 'el-checkbox' || targetItem.type === 'el-select-more') {
+      targetItem.data = []
+    } else if (targetItem.type === 'el-input-range') {
+      targetItem.data = { start: '', end: '' }
+    } else if (targetItem.type === 'el-input') {
+      targetItem.data = ''
+    } else if (targetItem.type === 'el-textarea') {
+      targetItem.data = ''
+    } else if (targetItem.type === 'el-autocomplete') {
+      targetItem.data = ''
+    } else {
+      targetItem.data = ''
+    }
+  }
+  // 注意：这里不调用 emitChange()，因为是在弹窗内的预览操作
+}
+
+const isPopoverChildComponent = (element, parent) => {
+  if (element && element.classList) {
+    // 检查是否是日期选择器的弹出层
+    if (
+      element.classList.contains('el-picker__popper') ||
+      element.classList.contains('el-select__popper') ||
+      element.classList.contains('ItemValueDataPickerPopoverVitualClass')
+    ) {
+      return true
+    }
+  }
+
+  if (element === parent) {
+    return true
+  }
+  if (element.parentElement) {
+    return isPopoverChildComponent(element.parentElement, parent)
+  }
+  return false
+}
+
+const handleGlobalClick = (event) => {
+  nextTick(() => {
+    if (!isPopoverChildComponent(event.target, elPopoverFilterCardWrapDivFinalRef.value)) {
+      popoverVisible.value = false
+    }
+  })
+}
+
+const registerGlobalClick = () => {
+  window.addEventListener('click', handleGlobalClick)
+}
+
+const unregisterGlobalClick = () => {
+  window.removeEventListener('click', handleGlobalClick)
+}
+
+// 标签分组
+const groupTitles = {
+  '0': '集团标签',
+  '1': '公司标签',
+  '2': '个人标签'
+}
+
+const groupedLabels = computed(() => {
+  const groups = {
+    '0': [],
+    '1': [],
+    '2': []
+  }
+
+  labelList.value.forEach((label) => {
+    const groupKey = label.labelgroup
+    if (groupKey in groups) {
+      groups[groupKey].push(label)
+    }
+  })
+
+  return Object.entries(groups)
+    .map(([type, labels]) => ({
+      type,
+      title: groupTitles[type],
+      labels
+    }))
+    .filter((group) => group.labels.length > 0)
+})
+
+// 添加日期快捷选项
+const shortcuts = [
+  {
+    text: '今天',
+    value: () => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const end = new Date(today)
+      end.setHours(23, 59, 59, 999)
+      return [today, end]
+    }
+  },
+  {
+    text: '昨天',
+    value: () => {
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      yesterday.setHours(0, 0, 0, 0)
+      const end = new Date(yesterday)
+      end.setHours(23, 59, 59, 999)
+      return [yesterday, end]
+    }
+  },
+  {
+    text: '本周',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setDate(start.getDate() - start.getDay())
+      start.setHours(0, 0, 0, 0)
+      end.setDate(end.getDate() - end.getDay() + 6)
+      end.setHours(23, 59, 59, 999)
+      return [start, end]
+    }
+  },
+  {
+    text: '上周',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setDate(start.getDate() - start.getDay() - 7)
+      start.setHours(0, 0, 0, 0)
+      end.setDate(end.getDate() - end.getDay() - 1)
+      end.setHours(23, 59, 59, 999)
+      return [start, end]
+    }
+  },
+  {
+    text: '本月',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setDate(1)
+      start.setHours(0, 0, 0, 0)
+      end.setHours(23, 59, 59, 999)
+      return [start, end]
+    }
+  },
+  {
+    text: '上个月',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setMonth(start.getMonth() - 1)
+      start.setDate(1)
+      start.setHours(0, 0, 0, 0)
+      end.setMonth(end.getMonth(), 0)
+      end.setHours(23, 59, 59, 999)
+      return [start, end]
+    }
+  },
+  {
+    text: '下个月',
+    value: () => {
+      const start = new Date()
+      const end = new Date()
+      start.setMonth(start.getMonth() + 1)
+      start.setDate(1)
+      start.setHours(0, 0, 0, 0)
+      end.setMonth(end.getMonth() + 2, 0)
+      end.setHours(23, 59, 59, 999)
+      return [start, end]
+    }
+  },
+  {
+    text: '本季度',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      const month = start.getMonth()
+      const quarterStartMonth = Math.floor(month / 3) * 3
+      start.setMonth(quarterStartMonth, 1)
+      start.setHours(0, 0, 0, 0)
+      end.setMonth(quarterStartMonth + 3, 0)
+      end.setHours(23, 59, 59, 999)
+      return [start, end]
+    }
+  },
+  {
+    text: '上季度',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      const month = start.getMonth()
+      const quarterStartMonth = Math.floor(month / 3) * 3 - 3
+      start.setMonth(quarterStartMonth, 1)
+      start.setHours(0, 0, 0, 0)
+      end.setMonth(quarterStartMonth + 3, 0)
+      end.setHours(23, 59, 59, 999)
+      return [start, end]
+    }
+  }
+]
+
+// 获取标签数据
+const getLabelData = async () => {
+  if (!props.objectType) {
+    // 如果没有传递对象类型，不请求标签数据
+    return
+  }
+
+  try {
+    // 获取可选择的标签列表
+    const res = await getLabelList({
+      head: { requestId: '' },
+      dic: [
+        { key: 'txtEqual_objtype', value: props.objectType },
+        { key: 'txtEqual_status', value: 1 }
+      ],
+      pageIndex: 1,
+      pageSize: -1,
+      orderFile: 'updatetime',
+      sortType: 1
+    })
+
+    if (res.responseData && Array.isArray(res.responseData)) {
+      labelList.value = res.responseData.filter(
+        (label) =>
+          label.isglobal === '1' ||
+          label.ispublic === '1' ||
+          label.createuserid === userStore.userInfo?.id
+      )
+    }
+  } catch (error) {
+    console.error('获取标签列表失败:', error)
+  }
+}
+
+// 标签相关操作
+const handleTagChange = (checked, item: LabelItem) => {
+  if (checked) {
+    if (!tempSelectedTags.value.find((tag) => tag.id === item.id)) {
+      tempSelectedTags.value.push(item)
+    }
+  } else {
+    tempSelectedTags.value = tempSelectedTags.value.filter((tag) => tag.id !== item.id)
+  }
+}
+
+const removeTag = (tag: LabelItem) => {
+  tempSelectedTags.value = tempSelectedTags.value.filter((item) => item.id !== tag.id)
+  selectedTagIds.value = selectedTagIds.value.filter((id) => id !== tag.id)
+  // 注意：这里也不调用 emitChange()，因为是在弹窗内的预览操作
+}
+
+const removeSelectedTag = (tag: LabelItem) => {
+  selectedTags.value = selectedTags.value.filter((item) => item.id !== tag.id)
+  tempSelectedTags.value = tempSelectedTags.value.filter((item) => item.id !== tag.id)
+  selectedTagIds.value = selectedTagIds.value.filter((id) => id !== tag.id)
+  emitChange()
+}
+
+// 更多筛选相关操作
+const getDatePickerType = (type: string) => {
+  switch (type) {
+    case 'el-date-picker-year':
+      return 'year'
+    case 'el-date-picker-month':
+      return 'month'
+    case 'el-date-picker-start-end':
+      return 'daterange'
+    case 'el-date-picker-se-two':
+      return 'datetimerange'
+    default:
+      return 'date'
+  }
+}
+
+const getConditionValue = (condition) => {
+  if (condition.type === 'el-select' || condition.type === 'el-radio') {
+    return condition.options.find((opt) => opt.value === condition.data)?.label || condition.data
+  } else if (condition.type === 'el-select-more' || condition.type === 'el-checkbox') {
+    return condition.options
+      .filter((opt) => condition.data.includes(opt.value))
+      .map((opt) => opt.label)
+      .join(',')
+  } else if (condition.type === 'el-input-range') {
+    return `${condition.data.start || 'N/A'} 至 ${condition.data.end || 'N/A'}`
+  } else if (
+    condition.type === 'el-date-picker-start-end' ||
+    condition.type === 'el-date-picker-se-two'
+  ) {
+    return `${dayjs(condition.data[0]).format('YY-MM-DD')} 至 ${dayjs(condition.data[1]).format(
+      'YY-MM-DD'
+    )}`
+  } else if (condition.type === 'el-date-picker-month-range') {
+    return `${dayjs(condition.data[0]).format('YYYY-MM')} 至 ${dayjs(condition.data[1]).format(
+      'YYYY-MM'
+    )}`
+  } else if (condition.type === 'el-date-picker-year-range') {
+    return `${dayjs(condition.data[0]).format('YYYY')} 至 ${dayjs(condition.data[1]).format(
+      'YYYY'
+    )}`
+  } else if (condition.type === 'el-input') {
+    return condition.data
+  } else if (condition.type === 'el-textarea') {
+    return condition.data
+  } else if (condition.type === 'el-autocomplete') {
+    return condition.data
+  }
+  return condition.data
+}
+
+const isTextOverflow = (condition) => {
+  const text = `${condition.label}: ${getConditionDisplayValue(condition)}`
+  return text.length > 20 // 假设超过20个字符就认为溢出
+}
+
+const isExternalTextOverflow = (condition) => {
+  const text = `${condition.label}: ${getConditionValue(condition)}`
+  return text.length > 20 // 假设超过20个字符就认为溢出
+}
+
+const removeCondition = (condition) => {
+  selectedConditions.value = selectedConditions.value.filter((c) => c.id !== condition.id)
+  const targetItem = myFilterData.value.find((item) => item.field === condition.field)
+  if (targetItem) {
+    targetItem.data = targetItem.type === 'el-checkbox' ? [] : ''
+  }
+  emitChange()
+}
+
+// 通用操作
+const handleClear = () => {
+  tempSelectedTags.value = []
+  selectedTags.value = []
+  selectedTagIds.value = []
+  selectedConditions.value = []
+  myFilterData.value = JSON.parse(JSON.stringify(props.filterData))
+  emitChange()
+}
+
+// 弹窗内的重置操作（不触发查询）
+const handlePreviewClear = () => {
+  // 清空临时选中的标签
+  tempSelectedTags.value = []
+  selectedTagIds.value = []
+
+  // 重置所有筛选条件到初始状态
+  myFilterData.value = JSON.parse(JSON.stringify(props.filterData)).map((item) => {
+    if (item.type === 'el-input-range') {
+      item.data = { start: '', end: '' }
+    } else if (item.type === 'el-checkbox' || item.type === 'el-select-more') {
+      item.data = []
+    } else if (
+      item.type === 'el-date-picker-start-end' ||
+      item.type === 'el-date-picker-se-two' ||
+      item.type === 'el-date-picker-month-range' ||
+      item.type === 'el-date-picker-year-range'
+    ) {
+      item.data = []
+    } else if (item.type === 'el-input') {
+      item.data = ''
+    } else if (item.type === 'el-textarea') {
+      item.data = ''
+    } else if (item.type === 'el-autocomplete') {
+      item.data = ''
+    } else {
+      item.data = ''
+    }
+    return item
+  })
+
+  // 注意：这里不调用 emitChange()，因为是在弹窗内的预览操作
+}
+
+const handleCancel = () => {
+  // 取消操作，恢复到上次确认的状态
+  tempSelectedTags.value = [...selectedTags.value]
+  selectedTagIds.value = selectedTags.value.map((tag) => tag.id)
+  myFilterData.value = JSON.parse(JSON.stringify(props.filterData))
+  popoverVisible.value = false
+}
+
+const handleConfirm = () => {
+  // 处理标签
+  selectedTags.value = [...tempSelectedTags.value]
+
+  // 处理筛选条件
+  const validConditions = []
+  for (const item of myFilterData.value) {
+    if (
+      (typeof item.data === 'string' && item.data.trim() !== '') ||
+      (Array.isArray(item.data) && item.data.length > 0) ||
+      (item.type === 'el-input-range' && (item.data?.start || item.data?.end)) ||
+      (item.type.includes('range') && Array.isArray(item.data) && item.data.length === 2) ||
+      (item.type === 'el-input' && item.data.trim() !== '') ||
+      (item.type === 'el-textarea' && item.data.trim() !== '') ||
+      (item.type === 'el-autocomplete' && item.data.trim() !== '')
+    ) {
+      validConditions.push({
+        ...item,
+        id: nanoid()
+      })
+    }
+  }
+  selectedConditions.value = validConditions
+
+  popoverVisible.value = false
+  emitChange()
+}
+
+const handlePopoverClose = () => {
+  handleConfirm()
+}
+
+const emitChange = () => {
+  emit('update:selectedTags', selectedTags.value)
+
+  const queryConditions = []
+
+  // 处理标签查询条件 - 将选中的标签ID用逗号分割
+  if (selectedTags.value.length > 0) {
+    const tagIds = selectedTags.value.map((tag) => tag.id).join(',')
+    queryConditions.push({
+      key: 'label',
+      value: tagIds
+    })
+  }
+
+  // 处理其他筛选条件
+  for (const item of selectedConditions.value) {
+    queryConditions.push(...makeQueryKey(item))
+  }
+
+  emit('handle-query', queryConditions)
+
+  emit('change', {
+    tags: selectedTags.value,
+    conditions: queryConditions
+  })
+}
+
+const makeQueryKey = (item) => {
+  const objs = []
+  const obj = { key: '', value: '' }
+
+  switch (item.type) {
+    case 'el-select':
+      obj.key = 'txtEqual_' + item.field
+      obj.value = item.data
+      objs.push(obj)
+      break
+    case 'el-select-more':
+      obj.key = 'txtMult_' + item.field
+      obj.value = item.data ? item.data.join(',') : ''
+      objs.push(obj)
+      break
+    case 'el-radio':
+    case 'el-date-picker':
+    case 'el-date-picker-year':
+    case 'el-date-picker-month':
+      obj.key = 'txtEqual_' + item.field
+      obj.value = item.data
+      objs.push(obj)
+      break
+    case 'el-date-picker-start':
+      obj.key = 'dtS_' + item.field
+      obj.value = item.data
+      objs.push(obj)
+      break
+    case 'el-date-picker-end':
+      obj.key = 'dtE_' + item.field
+      obj.value = item.data
+      objs.push(obj)
+      break
+    case 'el-checkbox':
+      obj.key = 'txtMult_' + item.field
+      obj.value = item.data.join(',')
+      objs.push(obj)
+      break
+    case 'el-date-picker-start-end':
+      // 开始时间设置为当天的 00:00:00
+      obj.key = 'dtS_' + item.field
+      obj.value = item.data[0] ? dayjs(item.data[0]).format('YYYY-MM-DD 00:00:00') : ''
+      objs.push(obj)
+      // 结束时间设置为当天的 23:59:59
+      const obj2 = {
+        key: 'dtE_' + item.field,
+        value: item.data[1] ? dayjs(item.data[1]).format('YYYY-MM-DD 23:59:59') : ''
+      }
+      objs.push(obj2)
+      break
+    case 'el-date-picker-month-range':
+      obj.key = 'dtE_' + item.field
+      obj.value = item.data[1]
+      objs.push(obj)
+      const obj3 = { key: 'dtS_' + item.field, value: item.data[0] }
+      objs.push(obj3)
+      break
+    case 'el-date-picker-year-range':
+      obj.key = 'dtE_' + item.field
+      obj.value = item.data[1]
+      objs.push(obj)
+      const obj5 = { key: 'dtS_' + item.field, value: item.data[0] }
+      objs.push(obj5)
+      break
+    case 'el-date-picker-se-two':
+      obj.key = 'dtS_' + item.field
+      obj.value = item.data[1]
+      objs.push(obj)
+      const obj4 = { key: 'dtE_' + item.field2, value: item.data[0] }
+      objs.push(obj4)
+      break
+    case 'el-input-range':
+      if (item.data && typeof item.data === 'object') {
+        if (item.data.start) {
+          objs.push({
+            key: 'GreaterThanOrEqual_' + item.field,
+            value: parseInt(item.data.start)
+          })
+        }
+        if (item.data.end) {
+          objs.push({
+            key: 'LessThanOrEqual_' + item.field,
+            value: parseInt(item.data.end)
+          })
+        }
+      }
+      break
+    case 'el-input':
+      if (item.data) {
+        // 支持配置搜索模式: 'fuzzy'(模糊) 或 'exact'(精确，默认)
+        const keyPrefix = item.searchMode === 'fuzzy' ? 'txt_' : 'txtEqual_'
+        objs.push({
+          key: keyPrefix + item.field,
+          value: item.data
+        })
+      }
+      break
+    case 'el-textarea':
+      if (item.data) {
+        // 支持配置搜索模式: 'fuzzy'(模糊) 或 'exact'(精确，默认)
+        const keyPrefix = item.searchMode === 'fuzzy' ? 'txt_' : 'txtEqual_'
+        objs.push({
+          key: keyPrefix + item.field,
+          value: item.data
+        })
+      }
+      break
+    case 'el-autocomplete':
+      if (item.data) {
+        // 支持配置搜索模式: 'fuzzy'(模糊) 或 'exact'(精确，默认)
+        const keyPrefix = item.searchMode === 'fuzzy' ? 'txt_' : 'txtEqual_'
+        objs.push({
+          key: keyPrefix + item.field,
+          value: item.data
+        })
+      }
+      break
+    default:
+      obj.key = 'txt_' + item.field
+      obj.value = item.data
+      objs.push(obj)
+  }
+
+  return objs
+}
+
+// 搜索建议处理函数
+const handleSuggestions = (queryString: string, cb: (suggestions: any[]) => void, item: any) => {
+  // 根据输入项的配置提供搜索建议
+  const suggestions = []
+
+  if (item.suggestions && Array.isArray(item.suggestions)) {
+    // 如果配置了建议项，进行模糊匹配
+    const filtered = item.suggestions.filter((suggestion: any) => {
+      return suggestion.value.toLowerCase().includes(queryString.toLowerCase())
+    })
+    suggestions.push(...filtered)
+  } else {
+    // 默认建议（可以根据字段类型提供不同的建议）
+    const defaultSuggestions = getDefaultSuggestions(item.field, queryString)
+    suggestions.push(...defaultSuggestions)
+  }
+
+  cb(suggestions)
+}
+
+// 获取默认搜索建议
+const getDefaultSuggestions = (field: string, queryString: string) => {
+  const suggestions: { value: string }[] = []
+
+  // 根据字段类型提供不同的默认建议
+  if (field === 'username' || field === 'applicant' || field === 'creator') {
+    // 人名建议
+    const nameList = ['张三', '李四', '王五', '赵六', '陈七', '周八', '吴九', '郑十']
+    nameList.forEach((name) => {
+      if (!queryString || name.includes(queryString)) {
+        suggestions.push({ value: name })
+      }
+    })
+  } else if (field === 'projectno' || field === 'taskno' || field === 'orderid') {
+    // 编号建议
+    const prefixes = ['PRJ', 'TASK', 'ORD', 'REQ']
+    prefixes.forEach((prefix) => {
+      for (let i = 1; i <= 3; i++) {
+        const value = `${prefix}${new Date().getFullYear()}${String(i).padStart(3, '0')}`
+        if (!queryString || value.toLowerCase().includes(queryString.toLowerCase())) {
+          suggestions.push({ value })
+        }
+      }
+    })
+  }
+
+  return suggestions.slice(0, 8) // 限制建议数量
+}
+
+// 监听容器大小变化
+onMounted(async () => {
+  registerGlobalClick()
+  loadFilterConfig() // 加载筛选配置
+  await getLabelData()
+
+  if (conditionsContainer.value) {
+    const erd = elementResizeDetectorMaker()
+    erd.listenTo(conditionsContainer.value, (element) => {
+      containerWidth.value = element.offsetWidth
+    })
+  }
+})
+
+onUnmounted(() => {
+  // 组件卸载时取消注册全局点击事件
+  unregisterGlobalClick()
+})
+
+// 监听筛选数据变化
+watch(
+  () => props.filterData,
+  (val) => {
+    // 确保range类型数据有正确的初始结构
+    myFilterData.value = JSON.parse(JSON.stringify(val)).map((item) => {
+      if (item.type === 'el-input-range' && (!item.data || typeof item.data !== 'object')) {
+        item.data = { start: '', end: '' }
+      }
+      return item
+    })
+
+    // 如果配置未初始化或filterData变化，重新初始化配置
+    if (
+      filterConfig.value.commonFilters.length === 0 &&
+      filterConfig.value.uncommonFilters.length === 0
+    ) {
+      loadFilterConfig()
+    }
+  },
+  { deep: true, immediate: true }
+)
+
+// 监听标签ID变化
+watch(
+  selectedTagIds,
+  (newIds) => {
+    tempSelectedTags.value = labelList.value.filter((item) => newIds.includes(item.id))
+  },
+  { deep: true }
+)
+
+// 计算是否有激活的筛选条件
+const hasActiveFilters = computed(() => {
+  return selectedTags.value.length > 0 || selectedConditions.value.length > 0
+})
+
+// 计算总筛选条件数量
+const totalFilterCount = computed(() => {
+  return selectedTags.value.length + selectedConditions.value.length
+})
+
+// 添加按钮点击处理函数
+const handleButtonClick = (e) => {
+  e.stopPropagation() // 阻止事件冒泡
+  popoverVisible.value = !popoverVisible.value
+
+  // 初始化临时状态
+  if (popoverVisible.value) {
+    tempSelectedTags.value = [...selectedTags.value]
+    selectedTagIds.value = selectedTags.value.map((tag) => tag.id)
+
+    // 确保默认选择第一个可用的类别（优先选择常用筛选）
+    const firstAvailableCategory = filterCategories.value[0]
+    if (firstAvailableCategory) {
+      activeCategory.value = firstAvailableCategory.key
+    } else {
+      activeCategory.value = 'common' // 默认选择常用筛选
+    }
+  }
+}
+
+// 添加标签区域的折叠状态
+const labelSectionVisible = ref(false)
+
+// 切换标签区域的显示/隐藏
+const toggleLabelSection = () => {
+  labelSectionVisible.value = !labelSectionVisible.value
+}
+</script>
+
+<style scoped>
+.common-filter {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* 筛选弹出框 */
+.filter-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 300px;
+  max-height: 520px;
+  position: relative;
+  z-index: 2000;
+}
+
+/* 主要内容区域 */
+.filter-main {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 左侧筛选类型选择器 */
+.filter-sidebar {
+  width: 160px;
+  background: var(--el-bg-color);
+  border-right: 1px solid var(--el-border-color-lighter);
+  padding-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  margin-bottom: 8px;
+  margin-top: 10px;
+  margin-right: 10px;
+  padding: 7px 10px;
+  flex-shrink: 0;
+}
+
+.filter-categories {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  margin: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  position: relative;
+}
+
+.category-item:hover {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.category-item.active {
+  background: var(--el-color-primary-light-8);
+  color: var(--el-color-primary);
+  font-weight: 500;
+}
+
+.category-icon {
+  font-size: 16px;
+  margin-right: 8px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.category-label {
+  flex: 1;
+  font-size: 13px;
+}
+
+.category-count {
+  font-size: 11px;
+  background: var(--el-color-info-light-7);
+  color: var(--el-color-info);
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.category-item.active .category-count {
+  background: var(--el-color-primary);
+  color: white;
+}
+
+/* 右侧内容区域 */
+.filter-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 筛选条件面板 */
+.conditions-panel {
+  flex: 1;
+  padding: 16px;
+  background: var(--el-bg-color);
+  border-right: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
+}
+
+.conditions-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+  min-height: 0;
+}
+
+.condition-item-wrapper {
+  margin-bottom: 16px;
+}
+
+.condition-label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.condition-control {
+  width: 100%;
+}
+
+.condition-input {
+  width: 100% !important;
+}
+
+/* 范围输入特殊样式 */
+.range-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.range-input .el-input {
+  flex: 1;
+}
+
+.range-separator {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+/* 标签内容样式 */
+.tags-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tag-group {
+  margin-bottom: 20px;
+}
+
+.group-title {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-item {
+  padding: 6px 12px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  border-radius: 16px;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.tag-item:hover {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-color-primary-light-9);
+}
+
+.tag-item.selected {
+  background: var(--el-color-primary);
+  color: white;
+  border-color: var(--el-color-primary);
+}
+
+/* 已选条件面板 */
+.selected-panel {
+  width: 280px;
+  padding: 16px;
+  background: var(--el-bg-color);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.selected-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+  min-height: 0;
+}
+
+.selected-group {
+  margin-bottom: 16px;
+}
+
+.selected-group:last-child {
+  margin-bottom: 0;
+}
+
+.selected-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selected-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.selected-item:hover {
+  border-color: var(--el-color-danger-light-5);
+  background: var(--el-color-danger-light-9);
+}
+
+.item-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 6px;
+  color: var(--el-text-color-regular);
+}
+
+.remove-icon {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.remove-icon:hover {
+  color: var(--el-color-danger);
+}
+
+/* 空状态样式 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  height: 200px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  color: var(--el-text-color-placeholder);
+  margin-bottom: 12px;
+}
+
+.empty-text {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 4px;
+}
+
+.empty-desc {
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+}
+
+/* 底部操作区 */
+.filter-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px 2px 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  background: var(--el-bg-color);
+  flex-shrink: 0;
+}
+
+.footer-left,
+.footer-right {
+  display: flex;
+  gap: 8px;
+}
+
+/* 重置筛选按钮样式 */
+.footer-left .el-button {
+  border: none;
+  background: transparent;
+  color: var(--el-color-primary);
+  padding: 8px 0;
+  font-weight: 500;
+}
+
+.footer-left .el-button:hover {
+  background: transparent;
+  color: var(--el-color-primary-dark-2);
+}
+
+/* 已选条件展示区域（弹窗外部） */
+.selected-conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.condition-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  height: 30px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.3s;
+  user-select: none;
+}
+
+.condition-item:hover {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
+.condition-text {
+  line-height: 1;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close-icon {
+  font-size: 14px;
+  margin-left: 2px;
+}
+
+.more-conditions {
+  color: var(--el-color-info);
+}
+
+.more-conditions:hover {
+  border-color: var(--el-color-info);
+  color: var(--el-color-info);
+  background-color: var(--el-color-info-light-9);
+}
+
+.hidden-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.has-filter {
+  background-color: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary-light-5);
+  color: var(--el-color-primary);
+}
+
+.filter-count {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #fff;
+  background-color: var(--el-color-primary);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 深度选择器样式 */
+:deep(.el-popover.el-popper) {
+  padding: 0;
+}
+
+:deep(.common-filter-popover) {
+  max-height: 80vh !important;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* 表单控件样式统一 */
+:deep(.el-select) {
+  width: 100% !important;
+}
+
+:deep(.el-date-editor) {
+  width: 100% !important;
+}
+
+:deep(.el-radio-group) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+:deep(.el-checkbox-group) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+:deep(.el-radio) {
+  margin-right: 0;
+}
+
+:deep(.el-checkbox) {
+  margin-right: 0;
+}
+
+/* 滚动条样式 */
+.conditions-list::-webkit-scrollbar,
+.selected-list::-webkit-scrollbar,
+.tags-content::-webkit-scrollbar,
+.filter-categories::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.conditions-list::-webkit-scrollbar-thumb,
+.selected-list::-webkit-scrollbar-thumb,
+.tags-content::-webkit-scrollbar-thumb,
+.filter-categories::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background-color: rgba(144, 147, 153, 0.3);
+}
+
+.conditions-list::-webkit-scrollbar-track,
+.selected-list::-webkit-scrollbar-track,
+.tags-content::-webkit-scrollbar-track,
+.filter-categories::-webkit-scrollbar-track {
+  border-radius: 3px;
+  background-color: transparent;
+}
+
+/* 响应式适配 */
+@media screen and (max-width: 768px) {
+  .filter-container {
+    min-height: 250px;
+    max-height: 400px;
+  }
+
+  .filter-sidebar {
+    width: 120px;
+  }
+
+  .selected-panel {
+    width: 240px;
+  }
+
+  .category-label {
+    font-size: 12px;
+  }
+}
+</style>

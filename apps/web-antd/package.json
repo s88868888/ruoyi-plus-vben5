@@ -49,6 +49,7 @@
     "dayjs": "catalog:",
     "echarts": "catalog:conflicts_echarts_h5_5_1",
     "lodash-es": "catalog:",
+    "nanoid": "^5.1.6",
     "pinia": "catalog:",
     "tinymce": "catalog:",
     "unplugin-vue-components": "catalog:",
