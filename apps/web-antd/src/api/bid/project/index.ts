@@ -29,6 +29,8 @@ export interface BizBidProject {
   aiPrompt?: string; // AI 分析提示词
   aiAnalysisResult?: string; // AI 分析结果
   aiAnalysisStatus?: string; // AI 分析状态
+  scoringCriteria?: string; // 评分标准
+  scoringCriteriaStatus?: string; // 评分标准提取状态
   createTime?: string;
   updateTime?: string;
 }
@@ -58,7 +60,7 @@ export async function bidProjectList(params: BizBidProjectQuery) {
 /**
  * 查询招标项目详情
  */
-export async function bidProjectInfo(id: number) {
+export async function bidProjectInfo(id: number | string) {
   return requestClient.get<BizBidProject>(`/bid/project/${id}`);
 }
 
@@ -101,4 +103,18 @@ export interface BidProjectStep2Params {
 
 export async function bidProjectAnalyzeStep2(data: BidProjectStep2Params) {
   return requestClient.post<string>('/bid/project/step2', data);
+}
+
+/**
+ * 提取评分标准
+ */
+export interface ExtractScoringCriteriaParams {
+  projectId: number;
+  async?: boolean;
+}
+
+export async function extractScoringCriteria(params: ExtractScoringCriteriaParams) {
+  return requestClient.post<string>('/bid/project/extractScoringCriteria', null, {
+    params,
+  });
 }

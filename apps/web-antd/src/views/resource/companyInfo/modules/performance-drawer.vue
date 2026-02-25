@@ -7,11 +7,14 @@ import { message } from 'ant-design-vue';
 
 import { useVbenForm } from '#/adapter/form';
 import { performanceInfo, performanceAdd, performanceUpdate } from '#/api/resource/performance';
+import { useEditPageStyle } from '#/preferences/useEditPageStyle';
 import SectionTitle from './section-title.vue';
 
 const emit = defineEmits<{
   reload: [];
 }>();
+
+const { formContainerStyle } = useEditPageStyle();
 
 const isEdit = ref(false);
 const performanceId = ref<number>();
@@ -435,7 +438,9 @@ async function handleSubmit() {
 
 <template>
   <BasicDrawer class="w-[1000px]">
-    <Form />
+    <div :style="formContainerStyle">
+      <Form />
+    </div>
   </BasicDrawer>
 </template>
 

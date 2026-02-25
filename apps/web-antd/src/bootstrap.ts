@@ -14,6 +14,7 @@ import { $t, setupI18n } from '#/locales';
 
 import { initComponentAdapter } from './adapter/component';
 import { initSetupVbenForm } from './adapter/form';
+import { setupEditPageStyleAdapter } from './preferences/editPageStyleAdapter';
 import App from './app.vue';
 import { router } from './router';
 
@@ -23,6 +24,9 @@ async function bootstrap(namespace: string) {
 
   // 初始化表单组件
   await initSetupVbenForm();
+
+  // 初始化编辑页面样式适配器（应用详情页偏好设置）
+  setupEditPageStyleAdapter();
 
   // // 设置弹窗的默认配置
   // setDefaultModalProps({

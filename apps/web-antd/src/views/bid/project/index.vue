@@ -16,6 +16,7 @@ import { bidProjectList, bidProjectRemove } from '#/api/bid/project';
 import BidProjectDrawer from './modules/bid-project-three-step-drawer.vue';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 
+
 const router = useRouter();
 
 // 筛选条件数据
@@ -263,11 +264,6 @@ const gridOptions: VxeGridProps = {
     keyField: 'id',
   },
   id: 'bid-project-index',
-  cellEvents: {
-    dblclick: ({ row }: any) => {
-      handleView(row);
-    },
-  },
 };
 
 const [BasicTable, tableApi] = useVbenVxeGrid({
@@ -298,6 +294,9 @@ function handleEdit(record: BizBidProject) {
 
 // 查看
 function handleView(record: BizBidProject) {
+
+  console.log(record);
+  
   // 跳转到详情页
   router.push(`/bid/project/detail/${record.id}`);
 }

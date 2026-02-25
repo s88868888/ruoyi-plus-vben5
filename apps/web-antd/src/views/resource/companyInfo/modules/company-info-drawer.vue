@@ -7,6 +7,7 @@ import { useVbenDrawer, useVbenForm } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
 
 import { companyInfoAdd, companyInfoUpdate } from '#/api/resource/companyInfo';
+import { useEditPageStyle } from '#/preferences/useEditPageStyle';
 import {
   businessLicenseSchema,
   enterpriseInfoSchema,
@@ -17,6 +18,8 @@ import {
 const emit = defineEmits<{
   success: [];
 }>();
+
+const { formContainerStyle, drawerWidthStyle } = useEditPageStyle();
 
 // 当前编辑的分区
 const currentSection = ref<string>('license');
@@ -134,11 +137,13 @@ defineExpose({
 </script>
 
 <template>
-  <BasicDrawer :title="sectionTitle" class="w-[900px]">
+  <BasicDrawer :title="sectionTitle" class="w-[900px]" :style="drawerWidthStyle">
     <template #headerPrefix>
       <IconifyIcon :icon="sectionIcon" class="text-lg text-primary" />
     </template>
-    <BasicForm />
+    <div :style="formContainerStyle">
+      <BasicForm />
+    </div>
   </BasicDrawer>
 </template>
 

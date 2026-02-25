@@ -43,6 +43,7 @@ import {
   ColorMode,
   Content,
   Copyright,
+  DetailPage,
   FontSize,
   Footer,
   General,
@@ -332,6 +333,9 @@ async function handleReset() {
             </Block>
             <Block :title="$t('preferences.theme.fontSize')">
               <FontSize v-model="themeFontSize" />
+            </Block>
+            <Block title="详情页">
+              <DetailPage />
             </Block>
             <Block :title="$t('preferences.other')">
               <ColorMode

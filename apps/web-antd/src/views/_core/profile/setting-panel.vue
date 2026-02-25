@@ -3,6 +3,7 @@ import { TabPane, Tabs } from 'ant-design-vue';
 
 import AccountBind from './components/account-bind.vue';
 import BaseSetting from './components/base-setting.vue';
+import LayoutSetting from './components/layout-setting.vue';
 import OnlineDevice from './components/online-device.vue';
 import SecureSetting from './components/secure-setting.vue';
 
@@ -11,6 +12,11 @@ const settingList = [
     component: BaseSetting,
     key: '1',
     name: '基本设置',
+  },
+  {
+    component: LayoutSetting,
+    key: '5',
+    name: '布局偏好',
   },
   {
     component: SecureSetting,

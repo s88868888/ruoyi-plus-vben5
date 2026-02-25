@@ -185,7 +185,7 @@ function handleView(record: CompanyListVo) {
 
 // 编辑
 function handleEdit(record: CompanyListVo) {
-  router.push(`/resource/companyInfo/detail/${record.deptId}?edit=true`);
+  router.push(`/resource/companyInfo/detail/${record.deptId}`);
 }
 
 // 删除

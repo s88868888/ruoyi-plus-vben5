@@ -6,13 +6,16 @@ import { useVbenDrawer } from '@vben/common-ui';
 import { message, Steps } from 'ant-design-vue';
 
 import { useVbenForm } from '#/adapter/form';
-import { bidProjectInfo, bidProjectSaveStep1, bidProjectAnalyzeStep2 } from '#/api/bid/project';
+import { bidProjectInfo, bidProjectSaveStep1, bidProjectAnalyzeStep2, extractScoringCriteria } from '#/api/bid/project';
 import { FileUpload } from '#/components/upload';
 import SectionTitle from '#/views/resource/companyInfo/modules/section-title.vue';
+import { useEditPageStyle } from '#/preferences/useEditPageStyle';
 
 const emit = defineEmits<{
   reload: [];
 }>();
+
+const { formContainerStyle, drawerWidthStyle } = useEditPageStyle();
 
 const isEdit = ref(false);
 const isView = ref(false);
@@ -350,7 +353,7 @@ const [Step3Form, step3FormApi] = useVbenForm({
     {
       fieldName: 'enableAnalysis',
       component: 'Switch',
-      label: '执行 AI 分析',
+      label: '执行 AI 分析总结',
       defaultValue: true,
       componentProps: {
         class: '',
@@ -393,6 +396,30 @@ const [Step3Form, step3FormApi] = useVbenForm({
           return values.enableAnalysis;
         },
       },
+    },
+    // ---- 评分标准提取 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_scoring',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '评分标准提取' }),
+      }),
+      formItemClass: 'col-span-2',
+    },
+    {
+      fieldName: 'extractScoringCriteria',
+      component: 'Switch',
+      label: '自动提取评分标准',
+      defaultValue: false,
+      componentProps: {
+        class: '',
+        checkedChildren: '是',
+        unCheckedChildren: '否',
+      },
+      help: '启用后将使用 AI 从招标文档中自动提取评分标准',
     },
   ],
   showDefaultActions: false,
@@ -486,6 +513,20 @@ async function handleStep3Submit() {
       message.success('保存成功');
     }
 
+    // 提取评分标准
+    if (values.extractScoringCriteria) {
+      try {
+        await extractScoringCriteria({
+          projectId: projectId.value,
+          async: true,
+        });
+        message.info('评分标准提取任务已提交，请稍后查看结果');
+      } catch (error) {
+        message.error('评分标准提取失败，请重试');
+        console.error('提取评分标准失败:', error);
+      }
+    }
+
     emit('reload');
     drawerApi.close();
   } finally {
@@ -495,8 +536,8 @@ async function handleStep3Submit() {
 </script>
 
 <template>
-  <BasicDrawer class="w-[1000px]">
-    <div class="mb-6">
+  <BasicDrawer class="w-[1000px]" :style="drawerWidthStyle">
+    <div class="mb-6" :style="formContainerStyle">
       <Steps :current="currentStep" size="small">
         <Steps.Step title="基本信息" description="填写项目基本信息" />
         <Steps.Step title="上传附件" description="上传招标文档等附件" />
@@ -504,11 +545,11 @@ async function handleStep3Submit() {
       </Steps>
     </div>
 
-    <div v-show="currentStep === 0">
+    <div v-show="currentStep === 0" :style="formContainerStyle">
       <Step1Form />
     </div>
 
-    <div v-if="currentStep === 1">
+    <div v-if="currentStep === 1" :style="formContainerStyle">
       <div class="section-title-divider-standalone">
         <SectionTitle title="上传附件" />
       </div>
@@ -528,7 +569,7 @@ async function handleStep3Submit() {
       </div>
     </div>
 
-    <div v-show="currentStep === 2">
+    <div v-show="currentStep === 2" :style="formContainerStyle">
       <Step3Form />
     </div>
   </BasicDrawer>

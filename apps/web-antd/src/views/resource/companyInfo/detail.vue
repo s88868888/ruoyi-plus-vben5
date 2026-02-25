@@ -101,13 +101,6 @@ onMounted(() => {
   if (id) {
     deptId.value = Number(id);
     loadData();
-
-    // 如果URL带有edit参数，自动打开编辑
-    if (route.query.edit === 'true') {
-      setTimeout(() => {
-        handleEditSection('license');
-      }, 500);
-    }
   }
 });
 </script>
