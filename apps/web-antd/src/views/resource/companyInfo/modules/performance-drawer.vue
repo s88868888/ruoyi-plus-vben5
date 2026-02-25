@@ -14,7 +14,7 @@ const emit = defineEmits<{
   reload: [];
 }>();
 
-const { formContainerStyle } = useEditPageStyle();
+const { formContainerStyle, drawerWidthStyle } = useEditPageStyle();
 
 const isEdit = ref(false);
 const performanceId = ref<number>();
@@ -437,7 +437,7 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <BasicDrawer class="w-[1000px]">
+  <BasicDrawer class="w-[1000px]" :style="drawerWidthStyle">
     <div :style="formContainerStyle">
       <Form />
     </div>
