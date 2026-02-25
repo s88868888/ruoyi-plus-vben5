@@ -36,6 +36,7 @@ const layoutPreference = useDetailPagePreference();
 
 // 锚点导航项配置
 const anchorNavItems = ref<AnchorNavItem[]>([
+  { key: 'basic-info', title: '基本信息' },
   { key: 'bid-info', title: '招标信息' },
   { key: 'contact-info', title: '联系信息' },
   { key: 'scoring-criteria', title: '评分标准' },
@@ -315,10 +316,28 @@ onUnmounted(() => {
 
 <template>
 
-    <div class="h-full overflow-auto bg-gray-50 hide-scrollbar" ref="scrollContainer">
+  <div class="detail-page-layout">
+    <!-- 侧边锚点导航（绝对定位，不随内容滚动） -->
+    <div
+      v-if="layoutPreference.showAnchorNav"
+      class="side-nav-panel hide-scrollbar"
+      :style="{
+        width: `${layoutPreference.anchorNavWidth}px`,
+        margin: `20px ${layoutPreference.anchorNavMarginRight}px 20px ${layoutPreference.anchorNavMarginLeft}px`,
+      }"
+    >
+      <AnchorNav :items="anchorNavItems" :container="scrollContainer" />
+    </div>
+
+    <!-- 主内容滚动区域 -->
+    <div
+      class="main-scroll-area hide-scrollbar"
+      :style="{ left: layoutPreference.showAnchorNav ? `${layoutPreference.anchorNavMarginLeft + layoutPreference.anchorNavWidth + layoutPreference.anchorNavMarginRight}px` : '0' }"
+      ref="scrollContainer"
+    >
       <div :style="containerStyle">
       <!-- 顶部基本信息卡片：白色背景 -->
-      <div class="header-card" :style="cardRadiusStyle">
+      <div id="basic-info" class="header-card" :style="cardRadiusStyle">
         <!-- 第一行：项目名称 + 编号 + 状态 -->
         <div class="header-title-row">
           <span class="header-project-name">{{ projectDetail.projectName || '项目详情' }}</span>
@@ -361,13 +380,8 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 内容区域 -->
-      <div class="content-area">
-        <!-- 锚点导航条 -->
-        <AnchorNav :items="anchorNavItems" :container="scrollContainer" />
-
-        <!-- 卡片容器 -->
-        <div class="cards-container">
+      <!-- 内容卡片 -->
+      <div class="cards-wrapper">
           <!-- 卡片2：招标信息 -->
           <Card id="bid-info" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
@@ -499,8 +513,8 @@ onUnmounted(() => {
           </Card>
         </div>
       </div>
-      </div>
     </div>
+  </div>
 
 </template>
 
@@ -567,11 +581,42 @@ onUnmounted(() => {
   line-height: 22px;
 }
 
-/* ========== 内容区域 ========== */
-.content-area {
+/* ========== 页面整体布局 ========== */
+.detail-page-layout {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 侧边导航面板 — 绝对定位，不随内容滚动 */
+.side-nav-panel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  /* width / margin 由内联样式动态控制 */
+  height: 800px;
+  background: #ffffff;
+  z-index: 10;
+  padding: 8px 10px;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+}
+
+/* 主内容滚动区 — 绝对定位，左侧偏移由 showAnchorNav 动态控制 */
+.main-scroll-area {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
+  /* background: #f5f7fa; */
+  
+}
+
+/* ========== 内容卡片包装 ========== */
+.cards-wrapper {
   padding: 16px 0 24px;
-  display: flex;
-  gap: 24px;
 }
 
 /* ========== 内容卡片 ========== */
@@ -594,17 +639,6 @@ onUnmounted(() => {
   color: hsl(var(--primary));
   font-size: 16px;
   margin-right: 8px;
-}
-
-/* 卡片容器 */
-.content-area > div:not(:first-child) {
-  flex: 1;
-  min-width: 0;
-}
-
-.cards-container {
-  flex: 1;
-  min-width: 0;
 }
 
 /* 字段网格：标签在上，值在下 */
@@ -710,39 +744,6 @@ onUnmounted(() => {
 @media (max-width: 1200px) {
   .field-grid {
     grid-template-columns: repeat(3, 1fr);
-  }
-
-  .content-area {
-    flex-direction: column;
-  }
-
-  .anchor-nav {
-    position: static;
-    width: 100%;
-    display: flex;
-    gap: 16px;
-    padding: 12px 0;
-    overflow-x: auto;
-    margin-bottom: 16px;
-  }
-
-  .anchor-nav-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 0;
-  }
-
-  .anchor-nav-group-title {
-    padding: 0;
-    margin: 0;
-    font-size: 12px;
-    white-space: nowrap;
-  }
-
-  .anchor-nav-item {
-    padding: 6px 12px;
-    white-space: nowrap;
   }
 }
 

@@ -2,7 +2,7 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 import type { BizBidProject } from '#/api/bid/project';
 
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
@@ -12,12 +12,21 @@ import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { bidProjectList, bidProjectRemove } from '#/api/bid/project';
+import { useListTablePreference } from '#/preferences/userPreference';
 
 import BidProjectDrawer from './modules/bid-project-three-step-drawer.vue';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 
 
 const router = useRouter();
+const tablePreference = useListTablePreference();
+
+const tableCssVars = computed(() => ({
+  '--list-header-bg': tablePreference.headerBgColor,
+  '--list-header-color': tablePreference.headerTextColor,
+  '--list-header-padding-y': `${tablePreference.headerPaddingY}px`,
+  '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
+}));
 
 // 筛选条件数据
 const filterData = ref([
@@ -320,7 +329,7 @@ async function handleSuccess() {
     <div class="flex h-full flex-col gap-4">
       <!-- 筛选条件区域 -->
       <div class="shrink-0 bg-white p-4 rounded shadow-sm">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between" >
           <CommonFilter
             :filter-data="filterData"
             type="both"
@@ -334,10 +343,11 @@ async function handleSuccess() {
       </div>
 
       <!-- 表格区域 -->
-      <BasicTable
-        class="flex-1 overflow-hidden"
-        table-title="招标项目列表"
-      >
+      <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
+        <BasicTable
+          class="h-full"
+          table-title="招标项目列表"
+        >
         <template #projectName="{ row }">
           <div class="flex flex-col">
             <span class="font-bold">{{ row.projectName }}</span>
@@ -410,8 +420,34 @@ async function handleSuccess() {
             </Dropdown>
           </Space>
         </template>
-      </BasicTable>
+        </BasicTable>
+      </div>
     </div>
     <BidProjectDetailDrawer @reload="handleSuccess" />
   </Page>
 </template>
+
+<style scoped>
+/* 表头背景色 */
+.table-style-wrapper :deep(.vxe-table--header-wrapper),
+.table-style-wrapper :deep(.vxe-header--column) {
+  background-color: var(--list-header-bg) !important;
+}
+
+/* 表头文字颜色 */
+.table-style-wrapper :deep(.vxe-header--column .vxe-cell) {
+  color: var(--list-header-color) !important;
+}
+
+/* 表头上下内边距（作用于 th 元素） */
+.table-style-wrapper :deep(.vxe-header--column) {
+  padding-top: var(--list-header-padding-y) !important;
+  padding-bottom: var(--list-header-padding-y) !important;
+}
+
+/* 单元格上下内边距（作用于 td 元素） */
+.table-style-wrapper :deep(.vxe-body--column) {
+  padding-top: var(--list-cell-padding-y) !important;
+  padding-bottom: var(--list-cell-padding-y) !important;
+}
+</style>

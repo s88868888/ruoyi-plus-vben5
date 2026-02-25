@@ -2,7 +2,7 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 import type { CompanyListVo } from '#/api/resource/companyInfo';
 
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Avatar, Button, Dropdown, Menu, MenuItem, Popconfirm, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
@@ -12,10 +12,19 @@ import { getVxePopupContainer } from '@vben/utils';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { companyList, companyInfoRemove } from '#/api/resource/companyInfo';
+import { useListTablePreference } from '#/preferences/userPreference';
 
 import CommonFilter from '#/components/CommonFilter/index.vue';
 
 const router = useRouter();
+const tablePreference = useListTablePreference();
+
+const tableCssVars = computed(() => ({
+  '--list-header-bg': tablePreference.headerBgColor,
+  '--list-header-color': tablePreference.headerTextColor,
+  '--list-header-padding-y': `${tablePreference.headerPaddingY}px`,
+  '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
+}));
 
 // 筛选条件数据
 const filterData = ref([
@@ -237,10 +246,11 @@ function getAvatarColor(name: string) {
       </div>
 
       <!-- 表格区域 -->
-      <BasicTable
-        class="flex-1 overflow-hidden"
-        table-title="公司管理列表"
-      >
+      <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
+        <BasicTable
+          class="h-full"
+          table-title="公司管理列表"
+        >
         <template #deptName="{ row }">
           <div class="flex items-center gap-2">
             <Avatar
@@ -299,7 +309,33 @@ function getAvatarColor(name: string) {
             </Dropdown>
           </Space>
         </template>
-      </BasicTable>
+        </BasicTable>
+      </div>
     </div>
   </Page>
 </template>
+
+<style scoped>
+/* 表头背景色 */
+.table-style-wrapper :deep(.vxe-table--header-wrapper),
+.table-style-wrapper :deep(.vxe-header--column) {
+  background-color: var(--list-header-bg) !important;
+}
+
+/* 表头文字颜色 */
+.table-style-wrapper :deep(.vxe-header--column .vxe-cell) {
+  color: var(--list-header-color) !important;
+}
+
+/* 表头上下内边距 */
+.table-style-wrapper :deep(.vxe-header--column) {
+  padding-top: var(--list-header-padding-y) !important;
+  padding-bottom: var(--list-header-padding-y) !important;
+}
+
+/* 单元格上下内边距 */
+.table-style-wrapper :deep(.vxe-body--column) {
+  padding-top: var(--list-cell-padding-y) !important;
+  padding-bottom: var(--list-cell-padding-y) !important;
+}
+</style>

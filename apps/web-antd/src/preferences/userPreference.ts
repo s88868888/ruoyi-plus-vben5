@@ -12,10 +12,30 @@ export interface DetailPagePreference {
   contentWidth: number;
   /** 内容字体大小(px) */
   fontSize: number;
+  /** 是否显示侧边锚点导航 */
+  showAnchorNav: boolean;
+  /** 侧边导航左外边距(px) */
+  anchorNavMarginLeft: number;
+  /** 侧边导航右外边距(px) */
+  anchorNavMarginRight: number;
+  /** 侧边导航宽度(px) */
+  anchorNavWidth: number;
+}
+
+export interface ListTablePreference {
+  /** 表头背景色 */
+  headerBgColor: string;
+  /** 表头文字颜色 */
+  headerTextColor: string;
+  /** 表头上下内边距(px) */
+  headerPaddingY: number;
+  /** 单元格上下内边距(px) */
+  cellPaddingY: number;
 }
 
 export interface UserPreference {
   detailPage: DetailPagePreference;
+  listTable: ListTablePreference;
 }
 
 const DEFAULT_PREFERENCE: UserPreference = {
@@ -23,6 +43,16 @@ const DEFAULT_PREFERENCE: UserPreference = {
     cardRadius: 16,
     contentWidth: 0,
     fontSize: 14,
+    showAnchorNav: true,
+    anchorNavMarginLeft: 10,
+    anchorNavMarginRight: 20,
+    anchorNavWidth: 210,
+  },
+  listTable: {
+    headerBgColor: '#f6f6f6',
+    headerTextColor: '#2b3445',
+    headerPaddingY: 8,
+    cellPaddingY: 8,
   },
 };
 
@@ -41,6 +71,10 @@ export function getUserPreference(): UserPreference {
         detailPage: {
           ...DEFAULT_PREFERENCE.detailPage,
           ...parsed.detailPage,
+        },
+        listTable: {
+          ...DEFAULT_PREFERENCE.listTable,
+          ...parsed.listTable,
         },
       };
     }
@@ -71,6 +105,11 @@ const _state = reactive<DetailPagePreference>({
   ...DEFAULT_PREFERENCE.detailPage,
 });
 
+/** 模块级响应式列表表格偏好状态，所有消费方共享同一个引用 */
+const _listState = reactive<ListTablePreference>({
+  ...DEFAULT_PREFERENCE.listTable,
+});
+
 /** 是否正在从 storage 同步（防止 watch 和事件监听器形成循环） */
 let _syncing = false;
 
@@ -84,6 +123,12 @@ function _syncFromStorage() {
         Object.assign(_state, {
           ...DEFAULT_PREFERENCE.detailPage,
           ...parsed.detailPage,
+        });
+      }
+      if (parsed.listTable) {
+        Object.assign(_listState, {
+          ...DEFAULT_PREFERENCE.listTable,
+          ...parsed.listTable,
         });
       }
     }
@@ -105,6 +150,16 @@ _scope.run(() => {
       if (_syncing) return;
       const userPref = getUserPreference();
       userPref.detailPage = toRaw(val);
+      setUserPreference(userPref);
+    },
+    { deep: true },
+  );
+  watch(
+    _listState,
+    (val) => {
+      if (_syncing) return;
+      const userPref = getUserPreference();
+      userPref.listTable = toRaw(val);
       setUserPreference(userPref);
     },
     { deep: true },
@@ -131,4 +186,21 @@ export function setDetailPagePreference(
   preference: Partial<DetailPagePreference>,
 ): void {
   Object.assign(_state, preference);
+}
+
+/**
+ * 响应式获取列表表格偏好设置。
+ * 返回的对象与所有调用方共享，任意一方修改立即全局生效，无需刷新。
+ */
+export function useListTablePreference(): ListTablePreference {
+  return _listState;
+}
+
+/**
+ * 保存列表表格偏好设置（同时更新响应式状态）
+ */
+export function setListTablePreference(
+  preference: Partial<ListTablePreference>,
+): void {
+  Object.assign(_listState, preference);
 }

@@ -143,12 +143,9 @@ watch(
 
 <style scoped>
 .anchor-nav {
-  width: 140px;
-  flex-shrink: 0;
-  position: sticky;
-  top: 20px;
-  align-self: flex-start;
-  padding: 12px 0;
+  width: 100%;
+  padding: 8px 0;
+
 }
 
 .anchor-nav-group {
@@ -156,33 +153,38 @@ watch(
 }
 
 .anchor-nav-group-title {
-  font-size: 13px;
-  color: #909399;
-  padding: 10px 0 4px 16px;
+  font-size: 12px;
+  color: #bfbfbf;
+  padding: 10px 16px 4px;
   line-height: 20px;
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .anchor-nav-item {
   display: flex;
   align-items: center;
-  padding: 7px 12px 7px 16px;
+  padding: 8px 12px;
+  margin: 2px 0;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
   color: rgba(0, 0, 0, 0.55);
   transition: all 0.2s;
-  border-left: 2px solid transparent;
+  border-radius: 8px;
   line-height: 20px;
 }
 
 .anchor-nav-item:hover {
   color: hsl(var(--primary));
+  background-color: hsl(var(--primary) / 0.05);
 }
 
 .anchor-nav-item-active {
   color: hsl(var(--primary));
-  border-left-color: hsl(var(--primary));
-  font-weight: 500;
+  font-weight: 600;
+  background-color: hsl(var(--primary) / 0.10);
+  border-radius: 8px;
 }
 
 .anchor-nav-dot {
@@ -192,6 +194,11 @@ watch(
   background: currentColor;
   margin-right: 8px;
   flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.anchor-nav-item-active .anchor-nav-dot {
+  opacity: 1;
 }
 
 .anchor-nav-text {

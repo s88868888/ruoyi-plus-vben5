@@ -527,6 +527,7 @@ const handleLeftSearch = () => {
   display: flex;
   gap: 12px;
   align-items: center;
+  border-radius: 16px;
 }
 
 /* 左侧常用条件输入框 */
