@@ -105,7 +105,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           await step3FormApi.setValues({
             enableAnalysis: false,
             aiPrompt: formData.aiPrompt || '',
-            async: true,
           });
 
           if (data.isView) {
@@ -128,7 +127,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         });
         await step3FormApi.setValues({
           enableAnalysis: true,
-          async: true,
         });
       }
     }
@@ -424,25 +422,6 @@ const [Step3Form, step3FormApi] = useVbenForm({
         },
       },
     },
-    {
-      fieldName: 'async',
-      component: 'Switch',
-      label: '异步分析',
-      defaultValue: true,
-      formItemClass: 'col-span-2',
-      componentProps: {
-        class: '',
-        checkedChildren: '是',
-        unCheckedChildren: '否',
-      },
-      help: '异步分析不会阻塞操作，分析完成后可在详情页查看结果',
-      dependencies: {
-        triggerFields: ['enableAnalysis'],
-        if(values) {
-          return values.enableAnalysis;
-        },
-      },
-    },
     // ---- 评分标准提取 ----
     {
       component: 'Divider',
@@ -665,14 +644,10 @@ async function handleStep3Submit() {
       await bidProjectAnalyzeStep2({
         projectId: projectId.value,
         aiPrompt: values.aiPrompt,
-        async: values.async,
+        async: true,
       });
 
-      if (values.async) {
-        message.success('保存成功，AI 分析任务已提交，请稍后查看结果');
-      } else {
-        message.success('保存成功，AI 分析已完成');
-      }
+      message.success('保存成功，AI 分析任务已提交，请稍后查看结果');
     } else {
       message.success('保存成功');
     }

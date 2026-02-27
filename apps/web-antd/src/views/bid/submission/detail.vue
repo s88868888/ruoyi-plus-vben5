@@ -174,7 +174,7 @@
       width="900px"
       :footer="null"
     >
-      <div class="markdown-preview" v-html="previewContent"></div>
+      <pre class="markdown-preview">{{ previewContent }}</pre>
     </AModal>
   </div>
 </template>
@@ -191,7 +191,6 @@ import {
   type BizBidSubmissionVO,
 } from '#/api/bid/submission';
 import ProgressModal from './modules/progress-modal.vue';
-import { marked } from 'marked';
 
 const route = useRoute();
 const router = useRouter();
@@ -306,7 +305,7 @@ function handleDownload(record: any) {
 // 预览文档
 function handlePreview(record: any) {
   if (record.documentContent) {
-    previewContent.value = marked(record.documentContent);
+    previewContent.value = record.documentContent;
     previewModalOpen.value = true;
   } else {
     message.warning('暂无文档内容');
@@ -409,38 +408,10 @@ function getDocumentProgressStatus(status: string) {
     padding: 16px;
     background: #f5f5f5;
     border-radius: 4px;
-
-    :deep(h1),
-    :deep(h2),
-    :deep(h3) {
-      margin-top: 16px;
-      margin-bottom: 8px;
-    }
-
-    :deep(p) {
-      margin-bottom: 8px;
-      line-height: 1.6;
-    }
-
-    :deep(ul),
-    :deep(ol) {
-      margin-left: 20px;
-      margin-bottom: 8px;
-    }
-
-    :deep(code) {
-      background: #e8e8e8;
-      padding: 2px 4px;
-      border-radius: 2px;
-    }
-
-    :deep(pre) {
-      background: #2d2d2d;
-      color: #f8f8f2;
-      padding: 12px;
-      border-radius: 4px;
-      overflow-x: auto;
-    }
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    line-height: 1.6;
   }
 }
 </style>

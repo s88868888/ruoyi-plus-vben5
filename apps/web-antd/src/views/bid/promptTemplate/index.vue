@@ -2,7 +2,7 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 import type { BizAiPromptTemplate } from '#/api/bid/promptTemplate';
 
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Button, Dropdown, Menu, MenuItem, Popconfirm, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
@@ -11,9 +11,19 @@ import { getVxePopupContainer } from '@vben/utils';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { promptTemplateList, promptTemplateRemove } from '#/api/bid/promptTemplate';
+import { useListTablePreference } from '#/preferences/userPreference';
 
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import PromptTemplateDrawer from './modules/prompt-template-drawer.vue';
+
+const tablePreference = useListTablePreference();
+
+const tableCssVars = computed(() => ({
+  '--list-header-bg': tablePreference.headerBgColor,
+  '--list-header-color': tablePreference.headerTextColor,
+  '--list-header-padding-y': `${tablePreference.headerPaddingY}px`,
+  '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
+}));
 
 // 筛选条件数据
 const filterData = ref([
@@ -32,6 +42,7 @@ const filterData = ref([
     options: [
       { label: '招标分析', value: 'bid_analysis' },
       { label: '评分标准', value: 'scoring_criteria' },
+      { label: '契合度分析', value: 'match_analysis' },
       { label: '风险评估', value: 'risk_assessment' },
       { label: '其他', value: 'other' },
     ],
@@ -186,11 +197,12 @@ async function handleSuccess() {
       </div>
 
       <!-- 表格区域 -->
-      <div class="flex-1 overflow-hidden">
+      <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
         <BasicTable class="h-full" table-title="AI提示词模板列表">
           <template #templateType="{ row }">
             <Tag v-if="row.templateType === 'bid_analysis'" color="blue">招标分析</Tag>
             <Tag v-else-if="row.templateType === 'scoring_criteria'" color="green">评分标准</Tag>
+            <Tag v-else-if="row.templateType === 'match_analysis'" color="cyan">契合度分析</Tag>
             <Tag v-else-if="row.templateType === 'risk_assessment'" color="orange">风险评估</Tag>
             <Tag v-else color="default">其他</Tag>
           </template>
@@ -238,3 +250,28 @@ async function handleSuccess() {
 
 
 </template>
+
+<style scoped>
+/* 表头背景色 */
+.table-style-wrapper :deep(.vxe-table--header-wrapper),
+.table-style-wrapper :deep(.vxe-header--column) {
+  background-color: var(--list-header-bg) !important;
+}
+
+/* 表头文字颜色 */
+.table-style-wrapper :deep(.vxe-header--column .vxe-cell) {
+  color: var(--list-header-color) !important;
+}
+
+/* 表头上下内边距（作用于 th 元素） */
+.table-style-wrapper :deep(.vxe-header--column) {
+  padding-top: var(--list-header-padding-y) !important;
+  padding-bottom: var(--list-header-padding-y) !important;
+}
+
+/* 单元格上下内边距（作用于 td 元素） */
+.table-style-wrapper :deep(.vxe-body--column) {
+  padding-top: var(--list-cell-padding-y) !important;
+  padding-bottom: var(--list-cell-padding-y) !important;
+}
+</style>

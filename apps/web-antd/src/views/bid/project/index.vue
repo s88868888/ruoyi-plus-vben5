@@ -7,15 +7,15 @@ import { useRouter } from 'vue-router';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 import { getVxePopupContainer } from '@vben/utils';
-import { Button, Dropdown, Menu, MenuItem, Popconfirm, Progress, Space, Tag, message } from 'ant-design-vue';
+import { Button, Dropdown, Menu, MenuItem, Modal, Popconfirm, Progress, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { bidProjectList, bidProjectRemove } from '#/api/bid/project';
+import { createSubmissionFromProject } from '#/api/bid/submission';
 import { useListTablePreference } from '#/preferences/userPreference';
 
 import BidProjectDrawer from './modules/bid-project-three-step-drawer.vue';
-import CreateSubmissionDrawer from '../submission/modules/create-submission-drawer.vue';
 import QuickGenerateDrawer from './modules/quick-generate-drawer.vue';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 
@@ -286,11 +286,6 @@ const [BidProjectDetailDrawer, drawerApi] = useVbenDrawer({
   connectedComponent: BidProjectDrawer,
 });
 
-// 创建投标项目抽屉
-const [CreateSubmissionDrawerComp, createSubmissionDrawerApi] = useVbenDrawer({
-  connectedComponent: CreateSubmissionDrawer,
-});
-
 // 快速生成抽屉
 const [QuickGenerateDrawerComp, quickGenerateDrawerApi] = useVbenDrawer({
   connectedComponent: QuickGenerateDrawer,
@@ -310,38 +305,64 @@ function handleQuickGenerateSuccess(projectId: number) {
 }
 
 // 转为投标 - 从列表操作列点击
-function handleCreateSubmission(record: BizBidProject) {
+async function handleCreateSubmission(record: BizBidProject) {
   if (!record?.id) {
     message.warning('请先选择招标项目');
     return;
   }
-  createSubmissionDrawerApi.setData({
-    id: record.id,
-    projectName: record.projectName,
+
+  Modal.confirm({
+    title: '确认转为投标项目',
+    content: `确定将"${record.projectName}"转为投标项目吗？`,
+    width: 420,
+    centered: true,
+    async onOk() {
+      try {
+        const submissionId = await createSubmissionFromProject({
+          bidProjectId: record.id,
+          selectedCompanies: [],
+          generationConfig: [],
+        });
+        message.success('创建投标项目成功');
+        router.push('/bid/submission');
+      } catch (error) {
+        console.error('创建投标项目失败:', error);
+        message.error('创建投标项目失败');
+      }
+    },
   });
-  createSubmissionDrawerApi.open();
 }
 
-// 顶部转为投标按钮 - 提示用户从列表选择
+// 顶部转为投标按钮 - 获取勾选的行
 function handleTopCreateSubmission() {
-  message.info('请先在列表中选择一个招标项目，然后点击操作列的"转为投标"按钮');
+  const checkboxRecords = tableApi.grid.getCheckboxRecords();
+  if (!checkboxRecords || checkboxRecords.length === 0) {
+    message.warning('请先勾选一个招标项目');
+    return;
+  }
+  if (checkboxRecords.length > 1) {
+    message.warning('只能选择一个招标项目进行转为投标');
+    return;
+  }
+  const record = checkboxRecords[0] as BizBidProject;
+  handleCreateSubmission(record);
 }
 
 // 新增
 function handleAdd() {
-  drawerApi.setData({
+  (drawerApi as any).setData({
     isEdit: false,
   });
-  drawerApi.open();
+  (drawerApi as any).open();
 }
 
 // 编辑
 function handleEdit(record: BizBidProject) {
-  drawerApi.setData({
+  (drawerApi as any).setData({
     id: record.id,
     isEdit: true,
   });
-  drawerApi.open();
+  (drawerApi as any).open();
 }
 
 // 查看
@@ -444,15 +465,15 @@ async function handleSuccess() {
 
         <template #action="{ row }">
           <Space>
-            <ghost-button @click.stop="handleCreateSubmission(row)">
-              转为投标
-            </ghost-button>
             <ghost-button @click.stop="handleEdit(row)">
               编辑
             </ghost-button>
             <Dropdown placement="bottomRight">
               <template #overlay>
                 <Menu>
+                  <MenuItem key="toSubmission" @click="handleCreateSubmission(row)">
+                    转为投标
+                  </MenuItem>
                   <MenuItem key="view" @click="handleView(row)">
                     查看
                   </MenuItem>
@@ -478,7 +499,6 @@ async function handleSuccess() {
       </div>
     </div>
     <BidProjectDetailDrawer @reload="handleSuccess" />
-    <CreateSubmissionDrawer @reload="handleSuccess" />
     <QuickGenerateDrawerComp @success="handleQuickGenerateSuccess" />
   </Page>
 </template>

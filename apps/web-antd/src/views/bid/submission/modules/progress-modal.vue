@@ -102,10 +102,25 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { message, Modal } from 'ant-design-vue';
 import {
-  submissionCancel,
-  submissionProgress,
+  Button as AButton,
+  Collapse as ACollapse,
+  CollapsePanel as ACollapsePanel,
+  Divider as ADivider,
+  List as AList,
+  ListItem as AListItem,
+  ListItemMeta as AListItemMeta,
+  message,
+  Modal,
+  Modal as AModal,
+  Progress as AProgress,
+  Space as ASpace,
+  Spin as ASpin,
+  Tag as ATag,
+} from 'ant-design-vue';
+import {
+  cancelSubmissionGeneration,
+  getSubmissionProgress,
   type BidSubmissionProgressVO,
 } from '#/api/bid/submission';
 
@@ -147,7 +162,7 @@ async function loadProgress() {
 
   loading.value = true;
   try {
-    progressData.value = await submissionProgress(props.submissionId);
+    progressData.value = await getSubmissionProgress(props.submissionId);
 
     // 如果已完成或失败，停止轮询
     if (
@@ -191,7 +206,7 @@ function handleCancel() {
     content: '确定要取消生成任务吗？',
     async onOk() {
       if (!props.submissionId) return;
-      await submissionCancel(props.submissionId);
+      await cancelSubmissionGeneration(props.submissionId);
       message.success('已取消生成');
       loadProgress();
     },

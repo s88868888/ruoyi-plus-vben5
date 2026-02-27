@@ -56,7 +56,7 @@ export interface GenerationConfig {
  * 创建投标项目参数
  */
 export interface CreateSubmissionParams {
-  bidProjectId: number;
+  bidProjectId: number | string;
   selectedCompanies: number[];
   generationConfig: GenerationConfig[];
   remark?: string;
@@ -89,7 +89,8 @@ export async function submissionInfo(id: number | string) {
  * 从招标项目创建投标项目
  */
 export async function createSubmissionFromProject(data: CreateSubmissionParams) {
-  return requestClient.post<number>('/bid/submission/createFrom/' + data.bidProjectId, {
+  return requestClient.post<number>(`/bid/submission/createFrom/${data.bidProjectId}`, {
+    bidProjectId: data.bidProjectId,
     selectedCompanies: JSON.stringify(data.selectedCompanies),
     generationConfig: JSON.stringify(data.generationConfig),
     remark: data.remark,

@@ -31,7 +31,7 @@ const route = useRoute();
 
 // 数据
 const loading = ref(false);
-const deptId = ref<number>();
+const deptId = ref<number | string>();
 const deptName = ref<string>('');
 const deptStatus = ref<string>('0');
 const companyData = ref<BizCompanyInfo>({});
@@ -99,7 +99,7 @@ function handleSaveSuccess() {
 onMounted(() => {
   const id = route.params.deptId;
   if (id) {
-    deptId.value = Number(id);
+    deptId.value = id as string;
     loadData();
   }
 });

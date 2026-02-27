@@ -140,7 +140,10 @@ export async function analyzeMatchDegree(data: MatchAnalysisParams) {
 export interface QuickGenerateParams {
   enableAiAnalysis?: boolean;
   enableExtractScoringCriteria?: boolean;
+  analyzeMatchDegree?: boolean;
   aiPrompt?: string;
+  scoringPrompt?: string;
+  matchAnalysisPrompt?: string;
 }
 
 /**
@@ -151,8 +154,15 @@ export async function quickGenerateFromPdf(params: QuickGenerateParams, file: Fi
   formData.append('file', file);
   formData.append('enableAiAnalysis', String(params.enableAiAnalysis || false));
   formData.append('enableExtractScoringCriteria', String(params.enableExtractScoringCriteria || false));
+  formData.append('analyzeMatchDegree', String(params.analyzeMatchDegree || false));
   if (params.aiPrompt) {
     formData.append('aiPrompt', params.aiPrompt);
+  }
+  if (params.scoringPrompt) {
+    formData.append('scoringPrompt', params.scoringPrompt);
+  }
+  if (params.matchAnalysisPrompt) {
+    formData.append('matchAnalysisPrompt', params.matchAnalysisPrompt);
   }
 
   return requestClient.postWithMsg<number>('/bid/project/quickGenerate', formData, {
