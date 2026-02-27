@@ -15,6 +15,8 @@ import { bidProjectList, bidProjectRemove } from '#/api/bid/project';
 import { useListTablePreference } from '#/preferences/userPreference';
 
 import BidProjectDrawer from './modules/bid-project-three-step-drawer.vue';
+import CreateSubmissionDrawer from '../submission/modules/create-submission-drawer.vue';
+import QuickGenerateDrawer from './modules/quick-generate-drawer.vue';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 
 
@@ -284,6 +286,47 @@ const [BidProjectDetailDrawer, drawerApi] = useVbenDrawer({
   connectedComponent: BidProjectDrawer,
 });
 
+// 创建投标项目抽屉
+const [CreateSubmissionDrawerComp, createSubmissionDrawerApi] = useVbenDrawer({
+  connectedComponent: CreateSubmissionDrawer,
+});
+
+// 快速生成抽屉
+const [QuickGenerateDrawerComp, quickGenerateDrawerApi] = useVbenDrawer({
+  connectedComponent: QuickGenerateDrawer,
+});
+
+// 打开快速生成弹窗
+function handleQuickGenerate() {
+  quickGenerateDrawerApi.open();
+}
+
+// 快速生成成功回调
+function handleQuickGenerateSuccess(projectId: number) {
+  // 刷新列表
+  tableApi.query();
+  // 跳转到详情页或提示用户
+  message.success('招标项目创建成功');
+}
+
+// 转为投标 - 从列表操作列点击
+function handleCreateSubmission(record: BizBidProject) {
+  if (!record?.id) {
+    message.warning('请先选择招标项目');
+    return;
+  }
+  createSubmissionDrawerApi.setData({
+    id: record.id,
+    projectName: record.projectName,
+  });
+  createSubmissionDrawerApi.open();
+}
+
+// 顶部转为投标按钮 - 提示用户从列表选择
+function handleTopCreateSubmission() {
+  message.info('请先在列表中选择一个招标项目，然后点击操作列的"转为投标"按钮');
+}
+
 // 新增
 function handleAdd() {
   drawerApi.setData({
@@ -335,10 +378,18 @@ async function handleSuccess() {
             type="both"
             @handle-query="handleFilterQuery"
           />
-          <Button type="primary" @click="handleAdd">
-            <PlusOutlined />
-            新增
-          </Button>
+          <Space>
+            <Button type="primary" @click="handleTopCreateSubmission">
+              转为投标
+            </Button>
+            <Button type="primary" @click="handleQuickGenerate">
+              快速生成
+            </Button>
+            <Button type="primary" @click="handleAdd">
+              <PlusOutlined />
+              新增
+            </Button>
+          </Space>
         </div>
       </div>
 
@@ -393,6 +444,9 @@ async function handleSuccess() {
 
         <template #action="{ row }">
           <Space>
+            <ghost-button @click.stop="handleCreateSubmission(row)">
+              转为投标
+            </ghost-button>
             <ghost-button @click.stop="handleEdit(row)">
               编辑
             </ghost-button>
@@ -424,6 +478,8 @@ async function handleSuccess() {
       </div>
     </div>
     <BidProjectDetailDrawer @reload="handleSuccess" />
+    <CreateSubmissionDrawer @reload="handleSuccess" />
+    <QuickGenerateDrawerComp @success="handleQuickGenerateSuccess" />
   </Page>
 </template>
 

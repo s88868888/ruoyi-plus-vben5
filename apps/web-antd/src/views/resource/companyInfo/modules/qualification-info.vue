@@ -37,7 +37,7 @@ const filterData = ref([
     label: '证书编号',
     type: 'a-input',
     value: '',
-    isCommon: false,
+    isCommon: true,
   },
   {
     field: 'certName',
@@ -51,14 +51,14 @@ const filterData = ref([
     label: '证书类别',
     type: 'a-input',
     value: '',
-    isCommon: false,
+    isCommon: true,
   },
   {
     field: 'certStatus',
     label: '证书状态',
     type: 'a-input',
     value: '',
-    isCommon: false,
+    isCommon: true,
   },
   {
     field: 'validStartDate',

@@ -31,6 +31,9 @@ export interface BizBidProject {
   aiAnalysisStatus?: string; // AI 分析状态
   scoringCriteria?: string; // 评分标准
   scoringCriteriaStatus?: string; // 评分标准提取状态
+  matchAnalysisResult?: string; // 契合度分析结果(Markdown格式)
+  matchAnalysisStatus?: string; // 契合度分析状态
+  matchAnalysisPrompt?: string; // 契合度分析提示词
   createTime?: string;
   updateTime?: string;
 }
@@ -110,11 +113,51 @@ export async function bidProjectAnalyzeStep2(data: BidProjectStep2Params) {
  */
 export interface ExtractScoringCriteriaParams {
   projectId: number;
+  aiPrompt?: string;
   async?: boolean;
 }
 
-export async function extractScoringCriteria(params: ExtractScoringCriteriaParams) {
-  return requestClient.post<string>('/bid/project/extractScoringCriteria', null, {
-    params,
+export async function extractScoringCriteria(data: ExtractScoringCriteriaParams) {
+  return requestClient.post<string>('/bid/project/extractScoringCriteria', data);
+}
+
+/**
+ * 契合度分析
+ */
+export interface MatchAnalysisParams {
+  projectId: number;
+  aiPrompt?: string;
+  async?: boolean;
+}
+
+export async function analyzeMatchDegree(data: MatchAnalysisParams) {
+  return requestClient.post<string>('/bid/project/analyzeMatchDegree', data);
+}
+
+/**
+ * 快速生成参数
+ */
+export interface QuickGenerateParams {
+  enableAiAnalysis?: boolean;
+  enableExtractScoringCriteria?: boolean;
+  aiPrompt?: string;
+}
+
+/**
+ * 快速生成：从PDF招标文件提取信息创建项目
+ */
+export async function quickGenerateFromPdf(params: QuickGenerateParams, file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('enableAiAnalysis', String(params.enableAiAnalysis || false));
+  formData.append('enableExtractScoringCriteria', String(params.enableExtractScoringCriteria || false));
+  if (params.aiPrompt) {
+    formData.append('aiPrompt', params.aiPrompt);
+  }
+
+  return requestClient.postWithMsg<number>('/bid/project/quickGenerate', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
   });
 }

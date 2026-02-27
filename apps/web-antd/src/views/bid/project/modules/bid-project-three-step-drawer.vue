@@ -3,10 +3,11 @@ import type { BizBidProject } from '#/api/bid/project';
 
 import { ref, computed, h } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
-import { message, Steps } from 'ant-design-vue';
+import { message, Steps, Modal, Input, Button } from 'ant-design-vue';
 
 import { useVbenForm } from '#/adapter/form';
-import { bidProjectInfo, bidProjectSaveStep1, bidProjectAnalyzeStep2, extractScoringCriteria } from '#/api/bid/project';
+import { bidProjectInfo, bidProjectSaveStep1, bidProjectAnalyzeStep2, extractScoringCriteria, analyzeMatchDegree } from '#/api/bid/project';
+import { promptTemplateListByType, promptTemplateAdd } from '#/api/bid/promptTemplate';
 import { FileUpload } from '#/components/upload';
 import SectionTitle from '#/views/resource/companyInfo/modules/section-title.vue';
 import { useEditPageStyle } from '#/preferences/useEditPageStyle';
@@ -22,6 +23,9 @@ const isView = ref(false);
 const projectId = ref<number>();
 const currentStep = ref(0); // 当前步骤：0=第一步，1=第二步，2=第三步
 const attachmentIds = ref<string[]>([]);
+const templateOptions = ref<Array<{ label: string; value: number; promptContent: string }>>([]);
+const scoringTemplateOptions = ref<Array<{ label: string; value: number; promptContent: string }>>([]);
+const matchAnalysisTemplateOptions = ref<Array<{ label: string; value: number; promptContent: string }>>([]);
 
 const [BasicDrawer, drawerApi] = useVbenDrawer({
   title: computed(() => {
@@ -39,6 +43,33 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       currentStep.value = 0;
       return;
     }
+
+    // 加载模板列表
+    try {
+      const [templates, scoringTemplates, matchAnalysisTemplates] = await Promise.all([
+        promptTemplateListByType('bid_analysis'),
+        promptTemplateListByType('scoring_criteria'),
+        promptTemplateListByType('match_analysis'),
+      ]);
+      templateOptions.value = templates.map(t => ({
+        label: `${t.templateName}`,
+        value: t.id!,
+        promptContent: t.promptContent || '',
+      }));
+      scoringTemplateOptions.value = scoringTemplates.map(t => ({
+        label: `${t.templateName}`,
+        value: t.id!,
+        promptContent: t.promptContent || '',
+      }));
+      matchAnalysisTemplateOptions.value = matchAnalysisTemplates.map(t => ({
+        label: `${t.templateName}`,
+        value: t.id!,
+        promptContent: t.promptContent || '',
+      }));
+    } catch (error) {
+      console.error('加载模板列表失败:', error);
+    }
+
     const data = drawerApi.getData<{ id?: number; isEdit: boolean; isView?: boolean }>();
     if (data) {
       isEdit.value = data.isEdit;
@@ -94,7 +125,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         await step1FormApi.setValues({
           status: 'following',
           projectSource: 'manual',
-          matchDegree: 0,
         });
         await step3FormApi.setValues({
           enableAnalysis: true,
@@ -234,17 +264,6 @@ const [Step1Form, step1FormApi] = useVbenForm({
       },
     },
     {
-      fieldName: 'matchDegree',
-      component: 'InputNumber',
-      label: '契合度',
-      componentProps: {
-        min: 0,
-        max: 100,
-        class: 'w-full',
-      },
-      help: '0-100之间的整数',
-    },
-    {
       fieldName: 'projectRegion',
       component: 'Input',
       label: '项目地区',
@@ -355,12 +374,38 @@ const [Step3Form, step3FormApi] = useVbenForm({
       component: 'Switch',
       label: '执行 AI 分析总结',
       defaultValue: true,
+      formItemClass: 'col-span-2',
       componentProps: {
         class: '',
         checkedChildren: '是',
         unCheckedChildren: '否',
       },
       help: '关闭后将直接保存项目，不执行 AI 分析',
+    },
+    {
+      fieldName: 'templateId',
+      component: 'Select',
+      label: '提示词模板',
+      formItemClass: 'col-span-2',
+      suffix: () => h(Button, { type: 'link', size: 'small', class: 'text-xs', onClick: () => handleSaveAsTemplate('bid_analysis') }, { default: () => '另存为模板' }),
+      componentProps: {
+        placeholder: '请选择提示词模板',
+        options: templateOptions,
+        class: '!w-[260px]',
+        onChange: (value: number) => {
+          const template = templateOptions.value.find(t => t.value === value);
+          if (template) {
+            step3FormApi.setFieldValue('aiPrompt', template.promptContent);
+          }
+        },
+      },
+      help: '选择模板后会自动填充提示词内容',
+      dependencies: {
+        triggerFields: ['enableAnalysis'],
+        if(values) {
+          return values.enableAnalysis;
+        },
+      },
     },
     {
       fieldName: 'aiPrompt',
@@ -384,6 +429,7 @@ const [Step3Form, step3FormApi] = useVbenForm({
       component: 'Switch',
       label: '异步分析',
       defaultValue: true,
+      formItemClass: 'col-span-2',
       componentProps: {
         class: '',
         checkedChildren: '是',
@@ -414,12 +460,122 @@ const [Step3Form, step3FormApi] = useVbenForm({
       component: 'Switch',
       label: '自动提取评分标准',
       defaultValue: false,
+      formItemClass: 'col-span-2',
       componentProps: {
         class: '',
         checkedChildren: '是',
         unCheckedChildren: '否',
       },
       help: '启用后将使用 AI 从招标文档中自动提取评分标准',
+    },
+    {
+      fieldName: 'scoringTemplateId',
+      component: 'Select',
+      label: '提示词模板',
+      formItemClass: 'col-span-2',
+      suffix: () => h(Button, { type: 'link', size: 'small', class: 'text-xs', onClick: () => handleSaveAsTemplate('scoring_criteria') }, { default: () => '另存为模板' }),
+      componentProps: {
+        placeholder: '请选择评分标准提示词模板',
+        options: scoringTemplateOptions,
+        class: '!w-[260px]',
+        onChange: (value: number) => {
+          const template = scoringTemplateOptions.value.find(t => t.value === value);
+          if (template) {
+            step3FormApi.setFieldValue('scoringPrompt', template.promptContent);
+          }
+        },
+      },
+      help: '选择模板后会自动填充提示词内容',
+      dependencies: {
+        triggerFields: ['extractScoringCriteria'],
+        if(values) {
+          return values.extractScoringCriteria;
+        },
+      },
+    },
+    {
+      fieldName: 'scoringPrompt',
+      component: 'Textarea',
+      label: '评分标准提示词',
+      formItemClass: 'col-span-2',
+      componentProps: {
+        rows: 6,
+        placeholder: '请输入自定义的评分标准提取提示词，留空则使用默认提示词。',
+      },
+      help: '不填写则使用系统默认的评分标准提取提示词',
+      dependencies: {
+        triggerFields: ['extractScoringCriteria'],
+        if(values) {
+          return values.extractScoringCriteria;
+        },
+      },
+    },
+    // ---- 契合度分析 ----
+    {
+      component: 'Divider',
+      fieldName: '_divider_match',
+      label: '',
+      hideLabel: true,
+      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
+      renderComponentContent: () => ({
+        default: () => h(SectionTitle, { title: '契合度分析' }),
+      }),
+      formItemClass: 'col-span-2',
+    },
+    {
+      fieldName: 'analyzeMatchDegree',
+      component: 'Switch',
+      label: '执行契合度分析',
+      defaultValue: false,
+      formItemClass: 'col-span-2',
+      componentProps: {
+        class: '',
+        checkedChildren: '是',
+        unCheckedChildren: '否',
+      },
+      help: '启用后将使用 AI 分析项目与租户下所有公司的契合度，取最高值',
+    },
+    {
+      fieldName: 'matchAnalysisTemplateId',
+      component: 'Select',
+      label: '提示词模板',
+      formItemClass: 'col-span-2',
+      suffix: () => h(Button, { type: 'link', size: 'small', class: 'text-xs', onClick: () => handleSaveAsTemplate('match_analysis') }, { default: () => '另存为模板' }),
+      componentProps: {
+        placeholder: '请选择契合度分析提示词模板',
+        options: matchAnalysisTemplateOptions,
+        class: '!w-[260px]',
+        onChange: (value: number) => {
+          const template = matchAnalysisTemplateOptions.value.find(t => t.value === value);
+          if (template) {
+            step3FormApi.setFieldValue('matchAnalysisPrompt', template.promptContent);
+          }
+        },
+      },
+      help: '选择模板后会自动填充提示词内容',
+      dependencies: {
+        triggerFields: ['analyzeMatchDegree'],
+        if(values) {
+          return values.analyzeMatchDegree;
+        },
+      },
+    },
+    {
+      fieldName: 'matchAnalysisPrompt',
+      component: 'Textarea',
+      label: '契合度分析提示词',
+      formItemClass: 'col-span-2',
+      componentProps: {
+        rows: 6,
+        placeholder: '请输入自定义的契合度分析提示词，留空则使用默认提示词。',
+      },
+      help: '不填写则使用系统默认的契合度分析提示词',
+      dependencies: {
+        triggerFields: ['analyzeMatchDegree'],
+        if(values) {
+          return values.analyzeMatchDegree;
+        },
+      },
     },
   ],
   showDefaultActions: false,
@@ -496,6 +652,14 @@ async function handleStep3Submit() {
     drawerApi.lock(true);
     const values = await step3FormApi.getValues();
 
+    // 保存提示词到项目（无论是否执行分析）
+    const step1Values = await step1FormApi.getValues();
+    await bidProjectSaveStep1({
+      ...step1Values,
+      id: projectId.value,
+      aiPrompt: values.aiPrompt,
+    });
+
     if (values.enableAnalysis) {
       // 执行 AI 分析
       await bidProjectAnalyzeStep2({
@@ -518,6 +682,7 @@ async function handleStep3Submit() {
       try {
         await extractScoringCriteria({
           projectId: projectId.value,
+          aiPrompt: values.scoringPrompt,
           async: true,
         });
         message.info('评分标准提取任务已提交，请稍后查看结果');
@@ -527,11 +692,97 @@ async function handleStep3Submit() {
       }
     }
 
+    // 契合度分析
+    if (values.analyzeMatchDegree) {
+      try {
+        await analyzeMatchDegree({
+          projectId: projectId.value,
+          aiPrompt: values.matchAnalysisPrompt,
+          async: true,
+        });
+        message.info('契合度分析任务已提交，请稍后查看结果');
+      } catch (error) {
+        message.error('契合度分析失败，请重试');
+        console.error('契合度分析失败:', error);
+      }
+    }
+
     emit('reload');
     drawerApi.close();
   } finally {
     drawerApi.lock(false);
   }
+}
+
+// 另存为模板
+async function handleSaveAsTemplate(templateType: 'bid_analysis' | 'scoring_criteria' | 'match_analysis') {
+  const promptFieldMap = {
+    bid_analysis: 'aiPrompt',
+    scoring_criteria: 'scoringPrompt',
+    match_analysis: 'matchAnalysisPrompt',
+  };
+  const promptField = promptFieldMap[templateType];
+  const values = await step3FormApi.getValues();
+  const promptContent = values[promptField];
+
+  if (!promptContent || promptContent.trim() === '') {
+    message.warning('提示词内容不能为空');
+    return;
+  }
+
+  Modal.confirm({
+    title: '另存为模板',
+    content: h('div', [
+      h('div', { class: 'mb-2' }, '请输入模板名称：'),
+      h(Input, {
+        id: 'templateNameInput',
+        placeholder: '请输入模板名称',
+        maxlength: 50,
+      }),
+    ]),
+    okText: '保存',
+    cancelText: '取消',
+    onOk: async () => {
+      const input = document.getElementById('templateNameInput') as HTMLInputElement;
+      const templateName = input?.value?.trim();
+
+      if (!templateName) {
+        message.warning('模板名称不能为空');
+        return Promise.reject();
+      }
+
+      try {
+        await promptTemplateAdd({
+          templateName,
+          templateType,
+          promptContent,
+          isSystem: '0',
+          status: '0',
+          sortOrder: 0,
+        });
+        message.success('模板保存成功');
+
+        // 重新加载对应类型的模板列表
+        const templates = await promptTemplateListByType(templateType);
+        const options = templates.map(t => ({
+          label: `${t.templateName}`,
+          value: t.id!,
+          promptContent: t.promptContent || '',
+        }));
+
+        if (templateType === 'bid_analysis') {
+          templateOptions.value = options;
+        } else if (templateType === 'scoring_criteria') {
+          scoringTemplateOptions.value = options;
+        } else if (templateType === 'match_analysis') {
+          matchAnalysisTemplateOptions.value = options;
+        }
+      } catch (error) {
+        message.error('模板保存失败');
+        return Promise.reject();
+      }
+    },
+  });
 }
 </script>
 

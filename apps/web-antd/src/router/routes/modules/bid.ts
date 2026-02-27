@@ -30,6 +30,37 @@ const routes: RouteRecordRaw[] = [
           activePath: '/bid/project',
         },
       },
+      {
+        name: 'BidSubmission',
+        path: '/bid/submission',
+        component: () => import('#/views/bid/submission/index.vue'),
+        meta: {
+          icon: 'lucide:file-check',
+          title: '投标项目管理',
+        },
+      },
+      {
+        name: 'BidSubmissionDetail',
+        path: '/bid/submission/detail/:id',
+        component: () => import('#/views/bid/submission/detail.vue'),
+        meta: {
+          hideInMenu: true,
+          icon: 'lucide:file-check',
+          title: '投标项目详情',
+          activePath: '/bid/submission',
+        },
+      },
+      {
+        name: 'BidSubmissionEditor',
+        path: '/bid/submission/editor/:id',
+        component: () => import('#/views/bid/submission/editor.vue'),
+        meta: {
+          hideInMenu: true,
+          icon: 'lucide:file-edit',
+          title: '标书编辑',
+          activePath: '/bid/submission',
+        },
+      },
     ],
   },
 ];

@@ -61,7 +61,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         await formApi.setValues({
           status: 'following',
           projectSource: 'manual',
-          matchDegree: 0,
         });
       }
     }
@@ -148,17 +147,6 @@ const [Form, formApi] = useVbenForm({
           { label: '已放弃', value: 'abandoned' },
         ],
       },
-    },
-    {
-      fieldName: 'matchDegree',
-      component: 'InputNumber',
-      label: '契合度',
-      componentProps: {
-        min: 0,
-        max: 100,
-        class: 'w-full',
-      },
-      help: '0-100之间的整数',
     },
     {
       fieldName: 'projectRegion',

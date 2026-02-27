@@ -15,6 +15,7 @@ import {
   RobotOutlined,
   TeamOutlined,
   CheckCircleOutlined,
+  TrophyOutlined,
 } from '@ant-design/icons-vue';
 
 import { AnchorNav } from '#/components/anchor-nav';
@@ -39,6 +40,7 @@ const anchorNavItems = ref<AnchorNavItem[]>([
   { key: 'basic-info', title: '基本信息' },
   { key: 'bid-info', title: '招标信息' },
   { key: 'contact-info', title: '联系信息' },
+  { key: 'match-analysis', title: '契合度分析' },
   { key: 'scoring-criteria', title: '评分标准' },
   { key: 'ai-analysis', title: 'AI 分析' },
 ]);
@@ -122,12 +124,16 @@ const statusColor = computed(() => {
 
 const aiAnalysisContent = ref('');
 const scoringCriteriaContent = ref('');
+const matchAnalysisContent = ref('');
 
 // AI 分析全屏
 const isFullscreen = ref(false);
 
 // 评分标准全屏
 const isScoringFullscreen = ref(false);
+
+// 契合度分析全屏
+const isMatchAnalysisFullscreen = ref(false);
 
 // 全屏切换
 function toggleFullscreen() {
@@ -137,6 +143,11 @@ function toggleFullscreen() {
 // 评分标准全屏切换
 function toggleScoringFullscreen() {
   isScoringFullscreen.value = !isScoringFullscreen.value;
+}
+
+// 契合度分析全屏切换
+function toggleMatchAnalysisFullscreen() {
+  isMatchAnalysisFullscreen.value = !isMatchAnalysisFullscreen.value;
 }
 
 // 下载 PDF
@@ -246,9 +257,11 @@ async function loadProjectDetail() {
       projectDetail.value = data;
       aiAnalysisContent.value = cleanMarkdownContent(data.aiAnalysisResult || '');
       scoringCriteriaContent.value = cleanMarkdownContent(data.scoringCriteria || '');
+      matchAnalysisContent.value = cleanMarkdownContent(data.matchAnalysisResult || '');
       console.log('项目详情加载完成:', {
         aiAnalysisResult: data.aiAnalysisResult,
         scoringCriteria: data.scoringCriteria,
+        matchAnalysisResult: data.matchAnalysisResult,
       });
     }
   } catch (error) {
@@ -267,7 +280,8 @@ function startAutoRefresh() {
     // 检查是否有任务在进行
     const hasTask =
       projectDetail.value.aiAnalysisStatus === 'analyzing' ||
-      projectDetail.value.scoringCriteriaStatus === 'extracting';
+      projectDetail.value.scoringCriteriaStatus === 'extracting' ||
+      projectDetail.value.matchAnalysisStatus === 'processing';
 
     if (hasTask && !isRefreshing.value) {
       isRefreshing.value = true;
@@ -281,7 +295,8 @@ function startAutoRefresh() {
     // 如果没有任务了，停止刷新
     if (
       projectDetail.value.aiAnalysisStatus !== 'analyzing' &&
-      projectDetail.value.scoringCriteriaStatus !== 'extracting'
+      projectDetail.value.scoringCriteriaStatus !== 'extracting' &&
+      projectDetail.value.matchAnalysisStatus !== 'processing'
     ) {
       stopAutoRefresh();
     }
@@ -302,7 +317,8 @@ onMounted(() => {
   setTimeout(() => {
     if (
       projectDetail.value.aiAnalysisStatus === 'analyzing' ||
-      projectDetail.value.scoringCriteriaStatus === 'extracting'
+      projectDetail.value.scoringCriteriaStatus === 'extracting' ||
+      projectDetail.value.matchAnalysisStatus === 'processing'
     ) {
       startAutoRefresh();
     }
@@ -442,7 +458,42 @@ onUnmounted(() => {
             </div>
           </Card>
 
-          <!-- 卡片4：评分标准 -->
+          <!-- 卡片4：契合度分析 -->
+          <Card id="match-analysis" class="mb-4 detail-card" :style="cardRadiusStyle" :class="{ 'ai-fullscreen-card': isMatchAnalysisFullscreen }">
+            <template #title>
+              <span class="card-title">
+                <TrophyOutlined class="card-title-icon" />
+                契合度分析
+              </span>
+            </template>
+            <template #extra>
+              <Space v-if="matchAnalysisContent">
+                <Button type="text" size="small" @click="toggleMatchAnalysisFullscreen">
+                  <ExpandOutlined v-if="!isMatchAnalysisFullscreen" />
+                  <FullscreenExitOutlined v-else />
+                  {{ isMatchAnalysisFullscreen ? '退出' : '全屏' }}
+                </Button>
+                <Button type="text" size="small" @click="downloadPdf">
+                  <DownloadOutlined />
+                  下载PDF
+                </Button>
+              </Space>
+            </template>
+
+            <div v-if="projectDetail.matchAnalysisStatus === 'processing'" class="ai-loading">
+              <Spin tip="正在分析契合度，请稍候..." />
+            </div>
+
+            <div v-else-if="matchAnalysisContent" class="ai-result">
+              <MarkdownPreviewer :key="matchAnalysisContent" v-model:value="matchAnalysisContent" height="auto" />
+            </div>
+
+            <div v-else>
+              <Empty description="暂无契合度分析结果" />
+            </div>
+          </Card>
+
+          <!-- 卡片5：评分标准 -->
           <Card id="scoring-criteria" class="mb-4 detail-card" :style="cardRadiusStyle" :class="{ 'ai-fullscreen-card': isScoringFullscreen }">
             <template #title>
               <span class="card-title">
@@ -477,7 +528,7 @@ onUnmounted(() => {
             </div>
           </Card>
 
-          <!-- 卡片5：AI 分析 -->
+          <!-- 卡片6：AI 分析 -->
           <Card id="ai-analysis" class="detail-card" :style="cardRadiusStyle" :class="{ 'ai-fullscreen-card': isFullscreen }">
             <template #title>
               <span class="card-title">
