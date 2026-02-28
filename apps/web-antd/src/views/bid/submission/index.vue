@@ -232,16 +232,8 @@ function handleView(record: BizBidSubmission) {
 
 // 开始生成
 function handleGenerate(record: BizBidSubmission) {
-  Modal.confirm({
-    title: '确认生成',
-    content: `确定开始生成"${record.projectName}"的标书吗？`,
-    async onOk() {
-      if (!record.id) return;
-      await startSubmissionGeneration(record.id);
-      message.success('已开始生成，请稍后查看进度');
-      await tableApi.query();
-    },
-  });
+  // 跳转到生成页面
+  router.push(`/bid/submission/generate/${record.id}`);
 }
 
 // 查看进度

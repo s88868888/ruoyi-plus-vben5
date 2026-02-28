@@ -6,6 +6,7 @@ enum Api {
   root = '/resource/companyInfo',
   companyList = '/resource/companyInfo/list',
   companyInfo = '/resource/companyInfo/',
+  syncVector = '/resource/companyInfo/syncVector',
 }
 
 /**
@@ -137,4 +138,18 @@ export function companyInfoUpdate(data: Partial<BizCompanyInfo>) {
  */
 export function companyInfoRemove(ids: IDS) {
   return requestClient.deleteWithMsg<void>(`${Api.root}/${ids}`);
+}
+
+/**
+ * 同步所有企业信息到向量库
+ */
+export function companyInfoSyncVector() {
+  return requestClient.postWithMsg<string>(Api.syncVector);
+}
+
+/**
+ * 同步指定企业信息到向量库
+ */
+export function companyInfoSyncVectorByDept(deptId: ID) {
+  return requestClient.postWithMsg<void>(`${Api.syncVector}/${deptId}`);
 }

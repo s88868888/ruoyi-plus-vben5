@@ -156,6 +156,22 @@ const bidMethodLabels: Record<string, string> = {
   inquiry: '询价采购',
   single: '单一来源',
 };
+const projectSourceLabels: Record<string, string> = {
+  manual: '\u624B\u52A8\u5F55\u5165',
+  import: '\u5BFC\u5165',
+  crawl: '\u722C\u866B\u91C7\u96C6',
+  ai: 'AI \u751F\u6210',
+  quick_generate: '\u5FEB\u901F\u751F\u6210',
+  ai_generate: '\u624B\u52A8\u5F55\u5165',
+};
+const projectSourceColors: Record<string, string> = {
+  manual: 'default',
+  import: 'blue',
+  crawl: 'cyan',
+  ai: 'purple',
+  quick_generate: 'green',
+  ai_generate: 'default',
+};
 
 // 状态标签颜色
 const statusColors: Record<string, string> = {
@@ -176,6 +192,29 @@ const statusLabels: Record<string, string> = {
 };
 
 // 表格配置
+const formatBudgetAmount = (value?: number | string) => {
+  if (value === null || value === undefined || value === '') return '-';
+  const num = Number(value);
+  if (Number.isNaN(num)) return String(value);
+  return num.toLocaleString('en-US');
+};
+const formatRemainingDays = (deadline?: string) => {
+  if (!deadline) return '-';
+  const endDate = new Date(deadline);
+  if (Number.isNaN(endDate.getTime())) return '-';
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  endDate.setHours(0, 0, 0, 0);
+
+  const diff = endDate.getTime() - today.getTime();
+  if (diff < 0) return '\u5DF2\u622A\u6B62';
+  if (diff === 0) return '\u4ECA\u5929\u622A\u6B62';
+
+  const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
+  return `${days}\u5929`;
+};
+
 const gridOptions: VxeGridProps = {
   checkboxConfig: {
     highlight: true,
@@ -208,12 +247,20 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'bidMethod' },
     },
     {
+      field: 'projectSource',
+      title: '\u9879\u76EE\u6765\u6E90',
+      width: 120,
+      headerAlign: 'left',
+      align: 'left',
+      slots: { default: 'projectSource' },
+    },
+    {
       field: 'budgetAmount',
       title: '预算金额(万元)',
       width: 130,
       align: 'right',
       headerAlign: 'right',
-      formatter: ({ cellValue }: any) => cellValue ? `¥${cellValue}` : '-',
+      formatter: ({ cellValue }: any) => formatBudgetAmount(cellValue),
     },
     {
       field: 'publishDate',
@@ -230,6 +277,14 @@ const gridOptions: VxeGridProps = {
       headerAlign: 'left',
       align: 'left',
       formatter: ({ cellValue }: any) => cellValue?.split(' ')[0] || '-',
+    },
+    {
+      field: 'remainingDays',
+      title: '\u5269\u4F59\u5929\u6570',
+      width: 100,
+      headerAlign: 'left',
+      align: 'left',
+      formatter: ({ row }: any) => formatRemainingDays(row?.deadline),
     },
     {
       field: 'matchDegree',
@@ -443,6 +498,12 @@ async function handleSuccess() {
           <span v-if="row.bidMethod">
             {{ bidMethodLabels[row.bidMethod] || row.bidMethod }}
           </span>
+          <span v-else class="text-gray-400">-</span>
+        </template>
+        <template #projectSource="{ row }">
+          <Tag v-if="row.projectSource" :color="projectSourceColors[row.projectSource] || 'default'">
+            {{ projectSourceLabels[row.projectSource] || row.projectSource }}
+          </Tag>
           <span v-else class="text-gray-400">-</span>
         </template>
 

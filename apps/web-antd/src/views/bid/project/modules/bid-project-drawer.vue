@@ -109,7 +109,7 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'budgetAmount',
       component: 'InputNumber',
-      label: '预算金额(万元)',
+      label: '预算金额',
       componentProps: {
         min: 0,
         precision: 2,

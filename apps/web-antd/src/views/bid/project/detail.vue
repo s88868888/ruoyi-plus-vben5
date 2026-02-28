@@ -21,11 +21,22 @@ import {
 import { AnchorNav } from '#/components/anchor-nav';
 import { bidProjectInfo } from '#/api/bid/project';
 import { useDetailPagePreference } from '#/preferences/userPreference';
+import {
+  formatCnyAmount,
+  formatCnyScientific,
+  formatCnyUppercase,
+  formatDateOnly,
+  formatRemainingDays,
+} from './utils/format';
 
 const route = useRoute();
 
-// 项目详情数据
-const projectDetail = ref<BizBidProject>({});
+// 项目详情数据，从 query 参数读取初始 loading 状态
+const projectDetail = ref<BizBidProject>({
+  aiAnalysisStatus: route.query.analyzing === '1' ? 'analyzing' : undefined,
+  scoringCriteriaStatus: route.query.extracting === '1' ? 'extracting' : undefined,
+  matchAnalysisStatus: route.query.processing === '1' ? 'processing' : undefined,
+});
 const loading = ref(false);
 
 // 自动刷新相关
@@ -119,6 +130,15 @@ const statusColor = computed(() => {
   const status = projectDetail.value.status;
   return status ? statusConfig[status]?.color || 'default' : 'default';
 });
+
+const budgetAmountDisplay = computed(() => formatCnyAmount(projectDetail.value.budgetAmount));
+const budgetAmountScientific = computed(() => formatCnyScientific(projectDetail.value.budgetAmount));
+const budgetAmountUppercase = computed(() => formatCnyUppercase(projectDetail.value.budgetAmount));
+const publishDateDisplay = computed(() => formatDateOnly(projectDetail.value.publishDate));
+const deadlineDisplay = computed(() => formatDateOnly(projectDetail.value.deadline));
+const remainingDaysDisplay = computed(() =>
+  formatRemainingDays(projectDetail.value.publishDate, projectDetail.value.deadline),
+);
 
 
 
@@ -254,6 +274,16 @@ async function loadProjectDetail() {
   try {
     const data = await bidProjectInfo(id as any);
     if (data) {
+      // 如果 query 参数标记了 loading，但后端状态还未更新（pending或空），保留 loading 状态
+      if (route.query.analyzing === '1' && (!data.aiAnalysisStatus || data.aiAnalysisStatus === 'pending')) {
+        data.aiAnalysisStatus = 'analyzing';
+      }
+      if (route.query.extracting === '1' && (!data.scoringCriteriaStatus || data.scoringCriteriaStatus === 'pending')) {
+        data.scoringCriteriaStatus = 'extracting';
+      }
+      if (route.query.processing === '1' && (!data.matchAnalysisStatus || data.matchAnalysisStatus === 'pending')) {
+        data.matchAnalysisStatus = 'processing';
+      }
       projectDetail.value = data;
       aiAnalysisContent.value = cleanMarkdownContent(data.aiAnalysisResult || '');
       scoringCriteriaContent.value = cleanMarkdownContent(data.scoringCriteria || '');
@@ -311,10 +341,28 @@ function stopAutoRefresh() {
   }
 }
 
-onMounted(() => {
-  loadProjectDetail();
-  // 初始加载后检查是否需要启动自动刷新
-  setTimeout(() => {
+onMounted(async () => {
+  await loadProjectDetail();
+  if (
+    projectDetail.value.aiAnalysisStatus === 'analyzing' ||
+    projectDetail.value.scoringCriteriaStatus === 'extracting' ||
+    projectDetail.value.matchAnalysisStatus === 'processing'
+  ) {
+    startAutoRefresh();
+  }
+
+  // 页面重新可见时（如从抽屉返回），刷新数据并检查是否需要轮询
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+});
+
+onUnmounted(() => {
+  stopAutoRefresh();
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+});
+
+async function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    await loadProjectDetail();
     if (
       projectDetail.value.aiAnalysisStatus === 'analyzing' ||
       projectDetail.value.scoringCriteriaStatus === 'extracting' ||
@@ -322,12 +370,8 @@ onMounted(() => {
     ) {
       startAutoRefresh();
     }
-  }, 500);
-});
-
-onUnmounted(() => {
-  stopAutoRefresh();
-});
+  }
+}
 </script>
 
 <template>
@@ -363,13 +407,18 @@ onUnmounted(() => {
         <!-- 第二行：关键指标 -->
         <div class="header-metrics-row">
           <div class="header-metric">
-            <div class="header-metric-label">预算金额（万元）</div>
+            <div class="header-metric-label">预算金额</div>
             <div class="header-metric-value">
-              <span v-if="projectDetail.budgetAmount" class="text-orange-500">
-                ¥{{ projectDetail.budgetAmount }}
-              </span>
-              <span v-else>¥0.00</span>
+              <span class="text-orange-500">{{ budgetAmountDisplay }}</span>
             </div>
+          </div>
+          <div class="header-metric">
+            <div class="header-metric-label">预算金额（科学计数法）</div>
+            <div class="header-metric-value header-metric-value-small">{{ budgetAmountScientific }}</div>
+          </div>
+          <div class="header-metric header-metric-wide">
+            <div class="header-metric-label">预算金额（人民币大写）</div>
+            <div class="header-metric-value header-metric-value-wrap">{{ budgetAmountUppercase }}</div>
           </div>
           <div class="header-metric">
             <div class="header-metric-label">项目类型</div>
@@ -379,11 +428,15 @@ onUnmounted(() => {
           </div>
           <div class="header-metric">
             <div class="header-metric-label">发布日期</div>
-            <div class="header-metric-value">{{ projectDetail.publishDate?.split(' ')[0] || '-' }}</div>
+            <div class="header-metric-value">{{ publishDateDisplay }}</div>
           </div>
           <div class="header-metric">
             <div class="header-metric-label">截止日期</div>
-            <div class="header-metric-value">{{ projectDetail.deadline?.split(' ')[0] || '-' }}</div>
+            <div class="header-metric-value">{{ deadlineDisplay }}</div>
+          </div>
+          <div class="header-metric">
+            <div class="header-metric-label">剩余天数</div>
+            <div class="header-metric-value">{{ remainingDaysDisplay }}</div>
           </div>
           <div class="header-metric">
             <div class="header-metric-label">招标方式</div>
@@ -608,14 +661,21 @@ onUnmounted(() => {
 /* 关键指标行 */
 .header-metrics-row {
   display: flex;
-  align-items: center;
-  gap: 32px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  column-gap: 32px;
+  row-gap: 16px;
   padding: 16px 0;
   border-top: 1px solid #f0f0f0;
 }
 
 .header-metric {
   padding: 0;
+  min-width: 140px;
+}
+
+.header-metric-wide {
+  min-width: 280px;
 }
 
 .header-metric-label {
@@ -630,6 +690,16 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 600;
   line-height: 22px;
+}
+
+.header-metric-value-small {
+  font-size: 13px;
+}
+
+.header-metric-value-wrap {
+  max-width: 520px;
+  line-height: 1.6;
+  word-break: break-all;
 }
 
 /* ========== 页面整体布局 ========== */

@@ -61,6 +61,17 @@ const routes: RouteRecordRaw[] = [
           activePath: '/bid/submission',
         },
       },
+      {
+        name: 'BidSubmissionGenerate',
+        path: '/bid/submission/generate/:id',
+        component: () => import('#/views/bid/submission/generate.vue'),
+        meta: {
+          hideInMenu: true,
+          icon: 'lucide:wand-2',
+          title: '生成标书',
+          activePath: '/bid/submission',
+        },
+      },
     ],
   },
 ];

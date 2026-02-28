@@ -2,6 +2,7 @@
 import type { BizBidProject } from '#/api/bid/project';
 
 import { ref, computed, h } from 'vue';
+import { useRouter } from 'vue-router';
 import { useVbenDrawer } from '@vben/common-ui';
 import { message, Steps, Modal, Input, Button } from 'ant-design-vue';
 
@@ -21,6 +22,7 @@ const { formContainerStyle, drawerWidthStyle } = useEditPageStyle();
 const isEdit = ref(false);
 const isView = ref(false);
 const projectId = ref<number>();
+const router = useRouter();
 const currentStep = ref(0); // 当前步骤：0=第一步，1=第二步，2=第三步
 const attachmentIds = ref<string[]>([]);
 const templateOptions = ref<Array<{ label: string; value: number; promptContent: string }>>([]);
@@ -210,7 +212,7 @@ const [Step1Form, step1FormApi] = useVbenForm({
     {
       fieldName: 'budgetAmount',
       component: 'InputNumber',
-      label: '预算金额(万元)',
+      label: '预算金额',
       componentProps: {
         min: 0,
         precision: 2,
@@ -684,6 +686,18 @@ async function handleStep3Submit() {
 
     emit('reload');
     drawerApi.close();
+
+    // 如果有任何分析任务提交，跳转到 detail 页面并带上 loading 标记
+    if (values.enableAnalysis || values.extractScoringCriteria || values.analyzeMatchDegree) {
+      router.push({
+        path: `/bid/project/detail/${projectId.value}`,
+        query: {
+          analyzing: values.enableAnalysis ? '1' : undefined,
+          extracting: values.extractScoringCriteria ? '1' : undefined,
+          processing: values.analyzeMatchDegree ? '1' : undefined,
+        },
+      });
+    }
   } finally {
     drawerApi.lock(false);
   }

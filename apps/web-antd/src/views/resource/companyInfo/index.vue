@@ -5,13 +5,13 @@ import type { CompanyListVo } from '#/api/resource/companyInfo';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Avatar, Button, Dropdown, Menu, MenuItem, Popconfirm, Space, Tag, message } from 'ant-design-vue';
-import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
+import { CloudSyncOutlined, EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { Page } from '@vben/common-ui';
 import { getVxePopupContainer } from '@vben/utils';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { companyList, companyInfoRemove } from '#/api/resource/companyInfo';
+import { companyList, companyInfoRemove, companyInfoSyncVector } from '#/api/resource/companyInfo';
 import { useListTablePreference } from '#/preferences/userPreference';
 
 import CommonFilter from '#/components/CommonFilter/index.vue';
@@ -213,6 +213,17 @@ function handleAdd() {
   message.info('请在系统管理-部门管理中新增公司');
 }
 
+// 同步向量库
+const syncLoading = ref(false);
+async function handleSyncVector() {
+  syncLoading.value = true;
+  try {
+    await companyInfoSyncVector();
+  } finally {
+    syncLoading.value = false;
+  }
+}
+
 // 根据公司名称生成头像背景色
 const avatarColors = [
   '#1677ff', '#13c2c2', '#52c41a', '#faad14',
@@ -238,10 +249,16 @@ function getAvatarColor(name: string) {
             type="both"
             @handle-query="handleFilterQuery"
           />
-          <Button type="primary" @click="handleAdd">
-            <PlusOutlined />
-            新增公司
-          </Button>
+          <div class="flex items-center gap-2">
+            <Button :loading="syncLoading" @click="handleSyncVector">
+              <CloudSyncOutlined />
+              同步向量库
+            </Button>
+            <Button type="primary" @click="handleAdd">
+              <PlusOutlined />
+              新增公司
+            </Button>
+          </div>
         </div>
       </div>
 

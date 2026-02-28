@@ -14,7 +14,7 @@
             {{ detailData?.projectType }}
           </ADescriptionsItem>
           <ADescriptionsItem label="预算金额">
-            {{ detailData?.budgetAmount }} 万元
+            {{ detailData?.budgetAmount }} 元
           </ADescriptionsItem>
           <ADescriptionsItem label="项目地区">
             {{ detailData?.projectRegion }}

@@ -32,7 +32,7 @@ export function setupEditPageStyleAdapter() {
       }
 
       /* 模态框宽度适配 */
-      .ant-modal {
+      .ant-modal:not(.ant-modal-confirm) {
         width: ${drawerWidth} !important;
         max-width: 100vw !important;
       }
