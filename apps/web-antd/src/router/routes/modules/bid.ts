@@ -51,6 +51,17 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'BidSubmissionConfig',
+        path: '/bid/submission/config/:id',
+        component: () => import('#/views/bid/submission/config.vue'),
+        meta: {
+          hideInMenu: true,
+          icon: 'lucide:settings',
+          title: '配置文档',
+          activePath: '/bid/submission',
+        },
+      },
+      {
         name: 'BidSubmissionEditor',
         path: '/bid/submission/editor/:id',
         component: () => import('#/views/bid/submission/editor.vue'),

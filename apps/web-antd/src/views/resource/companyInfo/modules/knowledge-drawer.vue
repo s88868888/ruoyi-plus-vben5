@@ -3,12 +3,12 @@ import type { BizProjectKnowledge } from '#/api/resource/knowledge';
 
 import { ref, computed, h } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
-import { message, Space, Button } from 'ant-design-vue';
-import { DownloadOutlined, DeleteOutlined } from '@ant-design/icons-vue';
+import { message, Space, Button, Upload } from 'ant-design-vue';
+import { DownloadOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons-vue';
+import type { UploadChangeParam, UploadFile } from 'ant-design-vue';
 
 import { useVbenForm } from '#/adapter/form';
-import { knowledgeInfo, knowledgeAdd, knowledgeUpdate } from '#/api/resource/knowledge';
-import { ossInfo } from '#/api/system/oss';
+import { knowledgeInfo, knowledgeUpdate, knowledgeUpload } from '#/api/resource/knowledge';
 import SectionTitle from './section-title.vue';
 
 const emit = defineEmits<{
@@ -21,6 +21,9 @@ const deptId = ref<number>();
 const originalAttachmentUrl = ref('');
 const originalAttachmentName = ref('');
 const originalKnowledgeName = ref('');
+const fileList = ref<UploadFile[]>([]);
+const uploading = ref(false);
+
 const existingAttachments = computed(() => {
   if (!originalAttachmentUrl.value || !originalAttachmentName.value) return [];
   const urls = originalAttachmentUrl.value.split(',');
@@ -46,6 +49,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       originalAttachmentUrl.value = '';
       originalAttachmentName.value = '';
       originalKnowledgeName.value = '';
+      fileList.value = [];
       return;
     }
     const data = drawerApi.getData<{ id?: number; deptId?: number; mode: 'add' | 'edit' | 'view' }>();
@@ -58,14 +62,10 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         drawerApi.drawerLoading(true);
         try {
           const res = await knowledgeInfo(data.id);
-          // FileUpload 使用 ossId 绑定，后端返回的是 URL，无法直接回显
-          // 将附件信息分开存储，提交时再处理
           originalAttachmentUrl.value = res.attachmentUrl || '';
           originalAttachmentName.value = res.attachmentName || '';
           originalKnowledgeName.value = res.knowledgeName || '';
           const formData: any = { ...res };
-          // 不给 FileUpload 设置附件字段，避免将 URL 当成 ossId 传入
-          delete formData.attachmentUrl;
           await formApi.setValues(formData);
         } finally {
           drawerApi.drawerLoading(false);
@@ -75,6 +75,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         originalAttachmentUrl.value = '';
         originalAttachmentName.value = '';
         originalKnowledgeName.value = '';
+        fileList.value = [];
         await formApi.setValues({ deptId: data.deptId });
       }
     }
@@ -123,6 +124,16 @@ const [Form, formApi] = useVbenForm({
       formItemClass: 'col-span-2',
     },
     {
+      fieldName: 'knowledgeName',
+      label: '知识名称',
+      component: 'Input',
+      rules: 'required',
+      componentProps: {
+        disabled: isViewMode.value || mode.value === 'edit',
+        placeholder: '上传文件后自动填充',
+      },
+    },
+    {
       fieldName: 'projectType',
       label: '挂标项目类型',
       component: 'Input',
@@ -140,37 +151,9 @@ const [Form, formApi] = useVbenForm({
         rows: 3,
         maxlength: 1000,
         showCount: true,
-        disabled: isViewMode.value,
+        disabled: isViewMode.value || mode.value === 'edit',
+        placeholder: '上传文件后自动提取内容',
       },
-    },
-    // ---- 附件资料 ----
-    {
-      component: 'Divider',
-      fieldName: '_divider_attachment',
-      label: '',
-      hideLabel: true,
-      componentProps: { orientation: 'left', class: 'section-title-divider', style: { margin: '4px 0 12px' } },
-      renderComponentContent: () => ({
-        default: () => h(SectionTitle, { title: '附件资料' }),
-      }),
-      formItemClass: 'col-span-2',
-    },
-    {
-      fieldName: 'attachmentUrl',
-      label: '附件',
-      component: 'FileUpload',
-      rules: 'required',
-      formItemClass: 'col-span-2',
-      componentProps: {
-        maxCount: 5,
-        maxSize: 150,
-        accept: 'application/pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,image/jpg,image/jpeg,image/png',
-        multiple: true,
-        disabled: isViewMode.value,
-      },
-      help: isViewMode.value && originalAttachmentUrl.value
-        ? `当前附件：${originalAttachmentName.value || '未命名'}`
-        : undefined,
     },
   ]),
   showDefaultActions: false,
@@ -182,48 +165,40 @@ async function handleSubmit() {
     const { valid } = await formApi.validate();
     if (!valid) return;
 
+    // 新增模式必须上传文件
+    if (mode.value === 'add' && fileList.value.length === 0) {
+      message.error('请上传项目知识文档（仅支持 PDF 和 Word 格式）');
+      return;
+    }
+
     drawerApi.lock(true);
     const values = await formApi.getValues();
 
-    // 处理附件字段
-    // FileUpload 返回 ossId，需要通过 ossInfo 接口解析为 URL 和文件名
-    let attachmentUrl = originalAttachmentUrl.value;
-    let attachmentName = originalAttachmentName.value;
-    let knowledgeName = originalKnowledgeName.value;
-    const ossIds = values.attachmentUrl;
-
-    if (ossIds && (Array.isArray(ossIds) ? ossIds.length > 0 : ossIds !== '')) {
-      try {
-        const ossFiles = await ossInfo(ossIds);
-        if (ossFiles && ossFiles.length > 0) {
-          attachmentUrl = ossFiles.map((f) => f.url).join(',');
-          attachmentName = ossFiles.map((f) => f.originalName).join(',');
-          // 从第一个文件名提取知识名称（去掉扩展名）
-          knowledgeName = ossFiles[0].originalName.replace(/\.(pdf|docx|doc|xlsx|xls|pptx|ppt|png|jpg|jpeg)$/i, '');
-        }
-      } catch (error) {
-        // ossId 解析失败时保留原有附件信息
-        console.error('附件解析失败:', error);
+    if (mode.value === 'add') {
+      // 新增：使用文件上传接口
+      const formData = new FormData();
+      formData.append('file', fileList.value[0].originFileObj as File);
+      formData.append('projectType', values.projectType);
+      formData.append('deptId', String(deptId.value));
+      if (values.knowledgeName) {
+        formData.append('knowledgeName', values.knowledgeName);
       }
-    }
 
-    const data = {
-      ...values,
-      id: mode.value === 'edit' ? knowledgeId.value : undefined,
-      deptId: deptId.value,
-      knowledgeName,
-      attachmentUrl,
-      attachmentName,
-    };
+      await knowledgeUpload(formData);
+      message.success('上传成功');
+    } else {
+      // 编辑：使用普通更新接口
+      const data = {
+        ...values,
+        id: knowledgeId.value,
+        deptId: deptId.value,
+        knowledgeName: originalKnowledgeName.value,
+        attachmentUrl: originalAttachmentUrl.value,
+        attachmentName: originalAttachmentName.value,
+      };
 
-    if (mode.value === 'edit') {
       await knowledgeUpdate(data);
       message.success('修改成功');
-    } else {
-      const res = await knowledgeAdd(data);
-      knowledgeId.value = res?.id;
-      mode.value = 'edit';
-      message.success('新增成功');
     }
 
     emit('reload');
@@ -231,6 +206,32 @@ async function handleSubmit() {
   } finally {
     drawerApi.lock(false);
   }
+}
+
+function handleFileChange(info: UploadChangeParam) {
+  fileList.value = info.fileList.slice(-1); // 只保留最新的一个文件
+}
+
+function beforeUpload(file: UploadFile) {
+  const isValidType = file.type === 'application/pdf'
+    || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    || file.type === 'application/msword'
+    || file.name?.endsWith('.pdf')
+    || file.name?.endsWith('.docx')
+    || file.name?.endsWith('.doc');
+
+  if (!isValidType) {
+    message.error('仅支持上传 PDF 和 Word 文档！');
+    return false;
+  }
+
+  const isLt50M = (file.size || 0) / 1024 / 1024 < 50;
+  if (!isLt50M) {
+    message.error('文件大小不能超过 50MB！');
+    return false;
+  }
+
+  return false; // 阻止自动上传
 }
 
 function handleDownloadAttachment(url: string) {
@@ -251,8 +252,31 @@ function handleRemoveExistingAttachment(index: number) {
   <BasicDrawer class="w-[900px]">
     <Form />
 
-    <!-- 已有附件列表 -->
-    <div v-if="existingAttachments.length > 0 && !isViewMode" class="px-6 pb-4">
+    <!-- 文件上传区域（仅新增模式显示） -->
+    <div v-if="mode === 'add'" class="px-6 pb-4">
+      <div class="mb-2">
+        <span class="text-red-500">*</span>
+        <span class="text-sm font-medium ml-1">上传文档</span>
+      </div>
+      <Upload
+        v-model:file-list="fileList"
+        :before-upload="beforeUpload"
+        :max-count="1"
+        accept=".pdf,.doc,.docx"
+        @change="handleFileChange"
+      >
+        <Button :disabled="uploading">
+          <UploadOutlined />
+          选择文件（仅支持 PDF 和 Word）
+        </Button>
+      </Upload>
+      <div class="text-xs text-gray-500 mt-2">
+        支持格式：PDF、Word（.doc/.docx），文件大小不超过 50MB
+      </div>
+    </div>
+
+    <!-- 已有附件列表（编辑和查看模式显示） -->
+    <div v-if="existingAttachments.length > 0 && mode !== 'add'" class="px-6 pb-4">
       <div class="text-sm font-medium mb-2">已有附件：</div>
       <div class="space-y-2">
         <div
@@ -271,6 +295,7 @@ function handleRemoveExistingAttachment(index: number) {
               下载
             </Button>
             <Button
+              v-if="!isViewMode"
               size="small"
               type="link"
               danger

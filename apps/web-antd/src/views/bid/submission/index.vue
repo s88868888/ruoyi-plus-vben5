@@ -230,6 +230,11 @@ function handleView(record: BizBidSubmission) {
   router.push(`/bid/submission/detail/${record.id}`);
 }
 
+// 配置文档
+function handleConfig(record: BizBidSubmission) {
+  router.push(`/bid/submission/config/${record.id}`);
+}
+
 // 开始生成
 function handleGenerate(record: BizBidSubmission) {
   // 跳转到生成页面
@@ -368,9 +373,9 @@ function handleProgressModalClose() {
             <Space>
               <ghost-button
                 v-if="row.submissionStatus === 'draft'"
-                @click.stop="handleGenerate(row)"
+                @click.stop="handleConfig(row)"
               >
-                开始生成
+                配置文档
               </ghost-button>
               <ghost-button
                 v-if="row.submissionStatus === 'generating'"
@@ -383,6 +388,13 @@ function handleProgressModalClose() {
                   <Menu>
                     <MenuItem key="view" @click="handleView(row)">
                       查看详情
+                    </MenuItem>
+                    <MenuItem
+                      v-if="row.submissionStatus === 'draft'"
+                      key="config"
+                      @click="handleConfig(row)"
+                    >
+                      配置文档
                     </MenuItem>
                     <MenuItem
                       v-if="row.submissionStatus === 'generating'"

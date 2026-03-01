@@ -66,3 +66,14 @@ export async function knowledgeUpdate(data: BizProjectKnowledge) {
 export async function knowledgeRemove(ids: number[]) {
   return requestClient.delete(`/resource/knowledge/${ids.join(',')}`);
 }
+
+/**
+ * 上传项目知识文档
+ */
+export async function knowledgeUpload(data: FormData) {
+  return requestClient.post<BizProjectKnowledge>('/resource/knowledge/upload', data, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+}
