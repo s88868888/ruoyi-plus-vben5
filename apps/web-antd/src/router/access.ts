@@ -55,6 +55,14 @@ const routeMetaMapping: Record<string, Omit<RouteMeta, 'title'>> = {
   'bid/project/detail/:id': {
     activePath: '/bid/project',
   },
+
+  'resource/companyInfo/view/:id': {
+    activePath: '/resource/companyInfo',
+  },
+
+  'resource/companyInfo/edit/:id': {
+    activePath: '/resource/companyInfo',
+  },
 };
 
 /**

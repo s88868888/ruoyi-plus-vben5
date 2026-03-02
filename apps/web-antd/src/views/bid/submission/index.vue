@@ -93,7 +93,13 @@ const statusLabels: Record<string, string> = {
   failed: '失败',
 };
 
-// 解析关联公司JSON
+// 项目类型配置
+const projectTypeMap: Record<string, { label: string; color: string }> = {
+  engineering: { label: '工程', color: 'blue' },
+  goods: { label: '货物', color: 'green' },
+  service: { label: '服务', color: 'orange' },
+};
+
 function parseCompanies(json: string): string[] {
   try {
     const parsed = JSON.parse(json);
@@ -118,7 +124,7 @@ const gridOptions: VxeGridProps = {
     {
       field: 'projectName',
       title: '项目名称',
-      minWidth: 220,
+      minWidth: 200,
       headerAlign: 'left',
       align: 'left',
       slots: { default: 'projectName' },
@@ -128,6 +134,36 @@ const gridOptions: VxeGridProps = {
       title: '投标状态',
       width: 100,
       slots: { default: 'submissionStatus' },
+    },
+    {
+      field: 'projectType',
+      title: '项目类型',
+      width: 100,
+      slots: { default: 'projectType' },
+    },
+    {
+      field: 'bidOrg',
+      title: '招标单位',
+      minWidth: 160,
+      headerAlign: 'left',
+      align: 'left',
+      formatter: ({ cellValue }: any) => cellValue || '-',
+    },
+    {
+      field: 'budgetAmount',
+      title: '预算金额',
+      width: 130,
+      headerAlign: 'right',
+      align: 'right',
+      slots: { default: 'budgetAmount' },
+    },
+    {
+      field: 'projectRegion',
+      title: '项目区域',
+      width: 120,
+      headerAlign: 'left',
+      align: 'left',
+      formatter: ({ cellValue }: any) => cellValue || '-',
     },
     {
       field: 'selectedCompanies',
@@ -144,41 +180,9 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'generationProgress' },
     },
     {
-      field: 'documentStats',
-      title: '文档完成',
-      width: 110,
-      headerAlign: 'center',
-      align: 'center',
-      slots: { default: 'documentStats' },
-    },
-    {
-      field: 'chapterStructureGenerated',
-      title: '章节结构',
-      width: 100,
-      headerAlign: 'center',
-      align: 'center',
-      slots: { default: 'chapterStructure' },
-    },
-    {
-      field: 'startTime',
-      title: '开始生成时间',
-      width: 160,
-      headerAlign: 'left',
-      align: 'left',
-      formatter: ({ cellValue }: any) => cellValue?.replace(/:\d{2}$/, '') || '-',
-    },
-    {
-      field: 'endTime',
-      title: '完成时间',
-      width: 160,
-      headerAlign: 'left',
-      align: 'left',
-      formatter: ({ cellValue }: any) => cellValue?.replace(/:\d{2}$/, '') || '-',
-    },
-    {
       field: 'createTime',
       title: '创建时间',
-      width: 160,
+      width: 155,
       headerAlign: 'left',
       align: 'left',
       formatter: ({ cellValue }: any) => cellValue?.replace(/:\d{2}$/, '') || '-',
@@ -313,22 +317,27 @@ function handleProgressModalClose() {
       <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
         <BasicTable class="h-full" table-title="投标项目列表">
           <template #projectName="{ row }">
-            <div class="flex flex-col">
-              <span class="font-bold">{{ row.projectName }}</span>
-              <span
-                v-if="row.bidOrg"
-                class="text-xs text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap"
-                :title="row.bidOrg"
-              >
-                {{ row.bidOrg }}
-              </span>
-            </div>
+            <span class="font-medium">{{ row.projectName }}</span>
           </template>
 
           <template #submissionStatus="{ row }">
             <Tag :color="statusColors[row.submissionStatus]">
               {{ statusLabels[row.submissionStatus] || row.submissionStatus }}
             </Tag>
+          </template>
+
+          <template #projectType="{ row }">
+            <Tag v-if="row.projectType" :color="projectTypeMap[row.projectType]?.color">
+              {{ projectTypeMap[row.projectType]?.label || row.projectType }}
+            </Tag>
+            <span v-else class="text-gray-400">-</span>
+          </template>
+
+          <template #budgetAmount="{ row }">
+            <span v-if="row.budgetAmount" class="text-orange-500 font-medium">
+              ¥{{ Number(row.budgetAmount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+            </span>
+            <span v-else class="text-gray-400">-</span>
           </template>
 
           <template #selectedCompanies="{ row }">
@@ -354,28 +363,13 @@ function handleProgressModalClose() {
             />
           </template>
 
-          <template #documentStats="{ row }">
-            <span>
-              {{ row.completedDocuments || 0 }}/{{ row.totalDocuments || 0 }}
-              <span v-if="row.failedDocuments" class="text-red-500">
-                ({{ row.failedDocuments }}失败)
-              </span>
-            </span>
-          </template>
-
-          <template #chapterStructure="{ row }">
-            <Tag :color="row.chapterStructureGenerated === 'Y' ? 'success' : 'default'">
-              {{ row.chapterStructureGenerated === 'Y' ? '已生成' : '未生成' }}
-            </Tag>
-          </template>
-
           <template #action="{ row }">
             <Space>
               <ghost-button
                 v-if="row.submissionStatus === 'draft'"
                 @click.stop="handleConfig(row)"
               >
-                配置文档
+                标书管理
               </ghost-button>
               <ghost-button
                 v-if="row.submissionStatus === 'generating'"
@@ -388,13 +382,6 @@ function handleProgressModalClose() {
                   <Menu>
                     <MenuItem key="view" @click="handleView(row)">
                       查看详情
-                    </MenuItem>
-                    <MenuItem
-                      v-if="row.submissionStatus === 'draft'"
-                      key="config"
-                      @click="handleConfig(row)"
-                    >
-                      配置文档
                     </MenuItem>
                     <MenuItem
                       v-if="row.submissionStatus === 'generating'"

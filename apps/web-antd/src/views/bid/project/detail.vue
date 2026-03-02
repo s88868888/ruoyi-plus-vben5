@@ -96,6 +96,16 @@ const bidMethodConfig: Record<string, string> = {
   single: '单一来源',
 };
 
+// 项目来源配置
+const projectSourceConfig: Record<string, { label: string; color: string }> = {
+  manual: { label: '手动录入', color: 'default' },
+  import: { label: '导入', color: 'blue' },
+  crawl: { label: '爬虫采集', color: 'cyan' },
+  ai: { label: 'AI 生成', color: 'purple' },
+  quick_generate: { label: '快速生成', color: 'green' },
+  ai_generate: { label: '手动录入', color: 'default' },
+};
+
 // 状态配置
 const statusConfig: Record<string, { label: string; color: string }> = {
   following: { label: '跟进中', color: 'processing' },
@@ -129,6 +139,16 @@ const statusLabel = computed(() => {
 const statusColor = computed(() => {
   const status = projectDetail.value.status;
   return status ? statusConfig[status]?.color || 'default' : 'default';
+});
+
+const projectSourceLabel = computed(() => {
+  const source = projectDetail.value.projectSource;
+  return source ? projectSourceConfig[source]?.label || source : '-';
+});
+
+const projectSourceColor = computed(() => {
+  const source = projectDetail.value.projectSource;
+  return source ? projectSourceConfig[source]?.color || 'default' : 'default';
 });
 
 const budgetAmountDisplay = computed(() => formatCnyAmount(projectDetail.value.budgetAmount));
@@ -412,18 +432,14 @@ async function handleVisibilityChange() {
               <span class="text-orange-500">{{ budgetAmountDisplay }}</span>
             </div>
           </div>
-          <div class="header-metric">
-            <div class="header-metric-label">预算金额（科学计数法）</div>
-            <div class="header-metric-value header-metric-value-small">{{ budgetAmountScientific }}</div>
-          </div>
           <div class="header-metric header-metric-wide">
             <div class="header-metric-label">预算金额（人民币大写）</div>
             <div class="header-metric-value header-metric-value-wrap">{{ budgetAmountUppercase }}</div>
           </div>
           <div class="header-metric">
-            <div class="header-metric-label">项目类型</div>
+            <div class="header-metric-label">项目来源</div>
             <div class="header-metric-value">
-              <Tag :color="projectTypeColor">{{ projectTypeLabel }}</Tag>
+              <Tag :color="projectSourceColor">{{ projectSourceLabel }}</Tag>
             </div>
           </div>
           <div class="header-metric">
@@ -444,7 +460,10 @@ async function handleVisibilityChange() {
           </div>
           <div class="header-metric">
             <div class="header-metric-label">契合度</div>
-            <div class="header-metric-value">{{ projectDetail.matchDegree ? `${projectDetail.matchDegree}%` : '-' }}</div>
+            <div class="header-metric-value">
+              <span v-if="projectDetail.matchDegree" class="text-blue-500 font-semibold">{{ projectDetail.matchDegree }}%</span>
+              <span v-else class="text-gray-400">-</span>
+            </div>
           </div>
         </div>
       </div>
@@ -469,8 +488,10 @@ async function handleVisibilityChange() {
                 <div class="field-value">{{ projectDetail.projectRegion || '-' }}</div>
               </div>
               <div class="field-item">
-                <div class="field-label">项目来源</div>
-                <div class="field-value">{{ projectDetail.projectSource || '-' }}</div>
+                <div class="field-label">项目类型</div>
+                <div class="field-value">
+                  <Tag :color="projectTypeColor">{{ projectTypeLabel }}</Tag>
+                </div>
               </div>
               <div class="field-item field-item-full">
                 <div class="field-label">项目描述</div>

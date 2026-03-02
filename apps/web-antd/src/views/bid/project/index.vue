@@ -256,11 +256,11 @@ const gridOptions: VxeGridProps = {
     },
     {
       field: 'budgetAmount',
-      title: '预算金额(万元)',
-      width: 130,
+      title: '预算金额',
+      width: 150,
       align: 'right',
       headerAlign: 'right',
-      formatter: ({ cellValue }: any) => formatBudgetAmount(cellValue),
+      slots: { default: 'budgetAmount' },
     },
     {
       field: 'publishDate',
@@ -500,6 +500,14 @@ async function handleSuccess() {
           </span>
           <span v-else class="text-gray-400">-</span>
         </template>
+
+        <template #budgetAmount="{ row }">
+          <span v-if="row.budgetAmount" class="text-orange-500 font-medium">
+            ¥{{ Number(row.budgetAmount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+          </span>
+          <span v-else class="text-gray-400">-</span>
+        </template>
+
         <template #projectSource="{ row }">
           <Tag v-if="row.projectSource" :color="projectSourceColors[row.projectSource] || 'default'">
             {{ projectSourceLabels[row.projectSource] || row.projectSource }}

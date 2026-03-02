@@ -1,324 +1,518 @@
 <script setup lang="ts">
-import type { BizDocumentConfigBo } from '#/api/bid/documentConfig';
+import type { VxeGridProps } from '#/adapter/vxe-table';
+import type { BizDocumentConfig } from '#/api/bid/documentConfig';
 
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
-import { Button, Card, Divider, Empty, InputNumber, message, Modal, Select, Space, Table, Tag } from 'ant-design-vue';
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons-vue';
+import { getVxePopupContainer } from '@vben/utils';
+import { Button, message, Popconfirm, Space, Tag, Dropdown, Menu, MenuItem } from 'ant-design-vue';
+import { FileTextOutlined, PlusOutlined, EllipsisOutlined } from '@ant-design/icons-vue';
 
-import { batchSaveConfigs, getDocumentConfigList } from '#/api/bid/documentConfig';
+import { useVbenVxeGrid } from '#/adapter/vxe-table';
+import { addConfig, deleteConfig, getDocumentConfigList } from '#/api/bid/documentConfig';
 import { submissionInfo } from '#/api/bid/submission';
+import { useListTablePreference } from '#/preferences/userPreference';
+import DocumentConfigDrawer from './modules/document-config-drawer.vue';
 
 const route = useRoute();
 const router = useRouter();
+const tablePreference = useListTablePreference();
 
-const submissionId = computed(() => Number(route.params.id));
-const projectName = ref('');
-const loading = ref(false);
-const saving = ref(false);
+const submissionId = computed(() => route.params.id as string);
+const submissionData = ref<any>({});
 
-// 配置列表
-const configList = ref<BizDocumentConfigBo[]>([]);
+const tableCssVars = computed(() => ({
+  '--list-header-bg': tablePreference.headerBgColor,
+  '--list-header-color': tablePreference.headerTextColor,
+  '--list-header-padding-y': `${tablePreference.headerPaddingY}px`,
+  '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
+}));
 
-// 公司列表（从投标项目中获取）
-const companyOptions = ref<Array<{ id: number; name: string }>>([]);
+// 全量配置，用于统计卡片
+const allConfigs = ref<BizDocumentConfig[]>([]);
 
-// 文档类型选项
-const documentTypeOptions = [
-  { label: '商务标', value: 'commercial' },
-  { label: '技术标', value: 'technical' },
-  { label: '整本标书', value: 'complete' },
-];
+const documentStats = computed(() => {
+  const stats = { technical: 0, commercial: 0, complete: 0, total: 0 };
+  allConfigs.value.forEach((config) => {
+    if (config.documentType === 'technical') stats.technical++;
+    else if (config.documentType === 'commercial') stats.commercial++;
+    else if (config.documentType === 'complete') stats.complete++;
+  });
+  stats.total = stats.technical + stats.commercial + stats.complete;
+  return stats;
+});
 
-// 表格列配置
-const columns = [
-  {
-    title: '序号',
-    width: 60,
-    customRender: ({ index }: any) => index + 1,
-  },
-  {
-    title: '公司名称',
-    dataIndex: 'companyName',
-    width: 200,
-  },
-  {
-    title: '文档类型',
-    dataIndex: 'documentType',
-    width: 120,
-    customRender: ({ text }: any) => {
-      const typeMap: Record<string, string> = {
-        commercial: '商务标',
-        technical: '技术标',
-        complete: '整本标书',
-      };
-      return typeMap[text] || text;
+// 关联公司数
+const companyCount = computed(() => {
+  if (!submissionData.value?.selectedCompanies) return 0;
+  try {
+    const companies = JSON.parse(submissionData.value.selectedCompanies);
+    return Array.isArray(companies) ? companies.length : 0;
+  } catch {
+    return 0;
+  }
+});
+
+const documentTypeMap: Record<string, string> = {
+  commercial: '商务标',
+  technical: '技术标',
+  complete: '整本标书',
+};
+
+const documentTypeColors: Record<string, string> = {
+  commercial: 'blue',
+  technical: 'green',
+  complete: 'orange',
+};
+
+// 表格配置
+const gridOptions: VxeGridProps = {
+  height: 'auto',
+  columns: [
+    { type: 'seq', width: 60, title: '序号' },
+    {
+      field: 'companyName',
+      title: '公司名称',
+      minWidth: 200,
+      headerAlign: 'left',
+      align: 'left',
+    },
+    {
+      field: 'documentType',
+      title: '文档类型',
+      width: 120,
+      slots: { default: 'documentType' },
+    },
+    {
+      field: 'documentNo',
+      title: '同类型序号',
+      width: 120,
+      headerAlign: 'center',
+      align: 'center',
+    },
+    {
+      field: 'remark',
+      title: '备注',
+      minWidth: 180,
+      headerAlign: 'left',
+      align: 'left',
+      formatter: ({ cellValue }: any) => cellValue || '-',
+    },
+    {
+      field: 'action',
+      title: '操作',
+      width: 120,
+      fixed: 'right',
+      slots: { default: 'action' },
+    },
+  ],
+  keepSource: true,
+  pagerConfig: {},
+  proxyConfig: {
+    ajax: {
+      query: async ({ page }) => {
+        const configs = await getDocumentConfigList(submissionId.value as any);
+        allConfigs.value = configs;
+        const start = (page.currentPage - 1) * page.pageSize;
+        return {
+          rows: configs.slice(start, start + page.pageSize),
+          total: configs.length,
+        };
+      },
     },
   },
-  {
-    title: '同类型序号',
-    dataIndex: 'documentNo',
-    width: 120,
-  },
-  {
-    title: '备注',
-    dataIndex: 'remark',
-    width: 200,
-  },
-  {
-    title: '操作',
-    key: 'action',
-    width: 80,
-    fixed: 'right',
-  },
-];
+  rowConfig: { keyField: 'id' },
+  id: 'bid-document-config',
+};
 
-// 加载数据
-async function loadData() {
-  loading.value = true;
+const [BasicTable, tableApi] = useVbenVxeGrid({ gridOptions } as any);
+
+// 加载投标项目信息（用于顶部信息卡片）
+async function loadSubmissionInfo() {
   try {
-    // 获取投标项目信息
-    const submissionData = await submissionInfo(submissionId.value);
-    projectName.value = submissionData.projectName || '';
-
-    // 解析关联公司
-    if (submissionData.selectedCompanies) {
-      try {
-        const companies = JSON.parse(submissionData.selectedCompanies);
-        companyOptions.value = companies.map((item: any) => ({
-          id: item.id || item.companyId,
-          name: item.name || item.companyName,
-        }));
-      } catch (e) {
-        console.error('解析公司列表失败', e);
-      }
-    }
-
-    // 获取配置列表
-    const configs = await getDocumentConfigList(submissionId.value);
-    configList.value = configs.map((item) => ({
-      id: item.id,
-      bidSubmissionId: item.bidSubmissionId,
-      companyId: item.companyId!,
-      companyName: item.companyName!,
-      documentType: item.documentType!,
-      documentNo: item.documentNo!,
-      remark: item.remark,
-    }));
-  } catch (error) {
-    console.error('加载数据失败', error);
-    message.error('加载数据失败');
-  } finally {
-    loading.value = false;
+    const data = await submissionInfo(submissionId.value);
+    submissionData.value = data || {};
+  } catch {
+    message.error('加载项目信息失败');
   }
 }
 
-// 添加配置行
+// 格式化预算金额
+function formatBudget(amount?: number) {
+  if (!amount) return '-';
+  return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// 项目类型
+function getProjectTypeLabel(type?: string) {
+  const typeMap: Record<string, string> = { engineering: '工程', goods: '货物', service: '服务' };
+  return type ? typeMap[type] || type : '-';
+}
+
+function getProjectTypeColor(type?: string) {
+  const colorMap: Record<string, string> = { engineering: 'blue', goods: 'green', service: 'orange' };
+  return type ? colorMap[type] || 'default' : 'default';
+}
+
+// 招标方式
+function getBidMethodLabel(method?: string) {
+  const methodMap: Record<string, string> = {
+    public: '公开招标',
+    invite: '邀请招标',
+    competitive: '竞争性谈判',
+    inquiry: '询价采购',
+    single: '单一来源',
+  };
+  return method ? methodMap[method] || method : '-';
+}
+
+// 抽屉引用
+const documentConfigDrawerRef = ref<InstanceType<typeof DocumentConfigDrawer>>();
+
 function handleAdd() {
-  if (companyOptions.value.length === 0) {
-    message.warning('该投标项目没有关联公司');
-    return;
-  }
-
-  configList.value.push({
-    companyId: companyOptions.value[0].id,
-    companyName: companyOptions.value[0].name,
-    documentType: 'commercial',
-    documentNo: 1,
-  });
+  documentConfigDrawerRef.value?.drawerApi.open();
 }
 
-// 删除配置行
-function handleDelete(index: number) {
-  configList.value.splice(index, 1);
-}
-
-// 公司变更
-function handleCompanyChange(index: number, companyId: number) {
-  const company = companyOptions.value.find((c) => c.id === companyId);
-  if (company) {
-    configList.value[index].companyName = company.name;
-  }
-}
-
-// 保存配置
-async function handleSave() {
-  if (configList.value.length === 0) {
-    message.warning('请至少添加一个配置');
-    return;
-  }
-
-  // 校验数据
-  for (let i = 0; i < configList.value.length; i++) {
-    const config = configList.value[i];
-    if (!config.companyId || !config.documentType || !config.documentNo) {
-      message.error(`第 ${i + 1} 行数据不完整`);
-      return;
-    }
-  }
-
-  saving.value = true;
+async function handleDrawerSuccess(data: any) {
   try {
-    await batchSaveConfigs(submissionId.value, configList.value);
-    message.success('保存成功');
-    await loadData();
-  } catch (error) {
-    console.error('保存失败', error);
-    message.error('保存失败');
-  } finally {
-    saving.value = false;
+    // 计算下一个可用的序号
+    const existingConfigs = allConfigs.value.filter(
+      (c) => c.companyId === data.companyId && c.documentType === data.documentType
+    );
+    const maxNo = existingConfigs.length > 0
+      ? Math.max(...existingConfigs.map((c) => c.documentNo || 0))
+      : 0;
+    const nextNo = maxNo + 1;
+
+    await addConfig({
+      bidSubmissionId: submissionId.value as any,
+      companyId: data.companyId,
+      companyName: data.companyName,
+      documentType: data.documentType,
+      documentNo: nextNo,
+      remark: data.remark,
+    });
+    message.success('添加成功');
+    tableApi.query();
+  } catch {
+    message.error('添加失败');
   }
 }
 
-// 开始生成
-function handleStartGenerate() {
-  if (configList.value.length === 0) {
-    message.warning('请先配置文档');
+async function handleDelete(row: BizDocumentConfig) {
+  if (!row.id) return;
+  await deleteConfig(row.id);
+  message.success('删除成功');
+  tableApi.query();
+}
+
+function handleStartGenerate(row: BizDocumentConfig) {
+  if (!row.id) {
+    message.warning('文档配置ID不存在');
     return;
   }
-
-  Modal.confirm({
-    title: '确认开始生成',
-    content: `确定要开始生成"${projectName.value}"的标书吗？`,
-    async onOk() {
-      // 先保存配置
-      await handleSave();
-      // 跳转到生成页面
-      router.push(`/bid/submission/generate/${submissionId.value}`);
-    },
-  });
+  router.push(`/bid/submission/generate/${submissionId.value}/${row.id}`);
 }
 
-// 返回列表
 function handleBack() {
   router.push('/bid/submission');
 }
 
 onMounted(() => {
-  loadData();
+  loadSubmissionInfo();
 });
 </script>
 
 <template>
   <Page :auto-content-height="true">
     <div class="flex h-full flex-col gap-4">
-      <!-- 头部信息 -->
-      <Card :loading="loading">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-lg font-bold mb-2">{{ projectName }}</h2>
-            <div class="text-sm text-gray-500">
-              配置该投标项目需要生成的标书文档
+
+      <!-- 顶部基本信息卡片 -->
+      <div class="header-card">
+        <div class="header-title-row">
+          <span class="header-project-name">{{ submissionData?.projectName || '投标项目配置' }}</span>
+          <Button @click="handleBack">返回列表</Button>
+        </div>
+        <div class="header-metrics-row">
+          <div class="header-metric">
+            <div class="header-metric-label">招标单位</div>
+            <div class="header-metric-value">{{ submissionData?.bidOrg || '-' }}</div>
+          </div>
+          <div class="header-metric">
+            <div class="header-metric-label">项目类型</div>
+            <div class="header-metric-value">
+              <Tag v-if="submissionData?.projectType" :color="getProjectTypeColor(submissionData.projectType)">
+                {{ getProjectTypeLabel(submissionData.projectType) }}
+              </Tag>
+              <span v-else>-</span>
             </div>
           </div>
-          <Space>
-            <Button @click="handleBack">返回列表</Button>
-            <Button type="primary" :loading="saving" @click="handleSave">
-              保存配置
-            </Button>
-            <Button type="primary" @click="handleStartGenerate">
-              开始生成
-            </Button>
-          </Space>
+          <div class="header-metric">
+            <div class="header-metric-label">预算金额</div>
+            <div class="header-metric-value">
+              <span class="text-orange-500">{{ formatBudget(submissionData?.budgetAmount) }}</span>
+            </div>
+          </div>
+          <div class="header-metric">
+            <div class="header-metric-label">项目地区</div>
+            <div class="header-metric-value">{{ submissionData?.projectRegion || '-' }}</div>
+          </div>
+          <div class="header-metric">
+            <div class="header-metric-label">招标方式</div>
+            <div class="header-metric-value">{{ getBidMethodLabel(submissionData?.bidMethod) }}</div>
+          </div>
+          <div class="header-metric">
+            <div class="header-metric-label">关联公司数</div>
+            <div class="header-metric-value">{{ companyCount }}</div>
+          </div>
         </div>
-      </Card>
+      </div>
 
-      <!-- 配置表格 -->
-      <Card title="文档配置" :loading="loading">
-        <template #extra>
+      <!-- 数据总览卡片 -->
+      <div class="overview-card">
+        <div class="overview-stats">
+          <div class="stat-item">
+            <div class="stat-label">技术标</div>
+            <div class="stat-value">{{ documentStats.technical }}</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-label">商务标</div>
+            <div class="stat-value">{{ documentStats.commercial }}</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-label">整份标书</div>
+            <div class="stat-value">{{ documentStats.complete }}</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item stat-item-total">
+            <div class="stat-label">总数</div>
+            <div class="stat-value stat-value-total">{{ documentStats.total }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 配置卡片：标题栏 + 表格 -->
+      <div class="config-card flex-1 overflow-hidden flex flex-col">
+        <!-- 卡片头 -->
+        <div class="config-card-head">
+          <span class="card-title">
+            <FileTextOutlined class="card-title-icon" />
+            标书配置
+          </span>
           <Button type="primary" size="small" @click="handleAdd">
             <PlusOutlined />
             添加配置
           </Button>
-        </template>
-
-        <Table
-          v-if="configList.length > 0"
-          :columns="columns"
-          :data-source="configList"
-          :pagination="false"
-          :scroll="{ x: 800 }"
-          row-key="index"
-        >
-          <template #bodyCell="{ column, record, index }">
-            <template v-if="column.dataIndex === 'companyName'">
-              <Select
-                v-model:value="record.companyId"
-                style="width: 100%"
-                @change="(val: number) => handleCompanyChange(index, val)"
-              >
-                <Select.Option
-                  v-for="company in companyOptions"
-                  :key="company.id"
-                  :value="company.id"
-                >
-                  {{ company.name }}
-                </Select.Option>
-              </Select>
-            </template>
-
-            <template v-else-if="column.dataIndex === 'documentType'">
-              <Select v-model:value="record.documentType" style="width: 100%">
-                <Select.Option
-                  v-for="type in documentTypeOptions"
-                  :key="type.value"
-                  :value="type.value"
-                >
-                  {{ type.label }}
-                </Select.Option>
-              </Select>
-            </template>
-
-            <template v-else-if="column.dataIndex === 'documentNo'">
-              <InputNumber
-                v-model:value="record.documentNo"
-                :min="1"
-                :max="99"
-                style="width: 100%"
-              />
-            </template>
-
-            <template v-else-if="column.dataIndex === 'remark'">
-              <a-input
-                v-model:value="record.remark"
-                placeholder="备注"
-                allow-clear
-              />
-            </template>
-
-            <template v-else-if="column.key === 'action'">
-              <Button
-                type="link"
-                danger
-                size="small"
-                @click="handleDelete(index)"
-              >
-                <DeleteOutlined />
-              </Button>
-            </template>
-          </template>
-        </Table>
-
-        <Empty v-else description="暂无配置，请点击上方"添加配置"按钮" />
-      </Card>
-
-      <!-- 说明 -->
-      <Card title="配置说明">
-        <div class="text-sm text-gray-600 space-y-2">
-          <p>1. 每一行配置代表一个需要生成的标书文档</p>
-          <p>2. 同类型序号：如果同一公司需要生成多份相同类型的标书，可以通过序号区分（如商务标1、商务标2）</p>
-          <p>3. 配置保存后，点击"开始生成"按钮即可开始生成标书</p>
-          <p>4. 示例：公司A需要生成2份商务标和1份整本标书，则需要添加3行配置</p>
         </div>
-      </Card>
+        <!-- 表格区域 -->
+        <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
+          <BasicTable class="h-full">
+            <template #documentType="{ row }">
+              <Tag :color="documentTypeColors[row.documentType]">
+                {{ documentTypeMap[row.documentType] || row.documentType }}
+              </Tag>
+            </template>
+
+            <template #action="{ row }">
+              <Space>
+                <ghost-button @click.stop="handleStartGenerate(row)">
+                  开始生成
+                </ghost-button>
+                <Dropdown placement="bottomRight">
+                  <template #overlay>
+                    <Menu>
+                      <MenuItem key="delete">
+                        <Popconfirm
+                          :get-popup-container="getVxePopupContainer"
+                          placement="left"
+                          title="确认删除该配置吗？"
+                          @confirm="handleDelete(row)"
+                        >
+                          <span class="text-red-500">删除</span>
+                        </Popconfirm>
+                      </MenuItem>
+                    </Menu>
+                  </template>
+                  <a-button size="small" type="link">
+                    <EllipsisOutlined />
+                  </a-button>
+                </Dropdown>
+              </Space>
+            </template>
+          </BasicTable>
+        </div>
+      </div>
+
     </div>
+
+    <!-- 添加配置抽屉 -->
+    <DocumentConfigDrawer
+      ref="documentConfigDrawerRef"
+      @success="handleDrawerSuccess"
+    />
   </Page>
 </template>
 
 <style scoped>
-:deep(.ant-card-head) {
-  background-color: #fafafa;
+/* 顶部基本信息卡片 */
+.header-card {
+  background: #fff;
+  padding: 24px 32px;
+  border: 1px solid #d8d8d8;
+  border-radius: 16px;
+  flex-shrink: 0;
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.header-project-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.header-metrics-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  column-gap: 32px;
+  row-gap: 16px;
+  padding: 16px 0 0;
+  border-top: 1px solid #f0f0f0;
+}
+
+.header-metric {
+  padding: 0;
+  min-width: 140px;
+}
+
+.header-metric-label {
+  color: #909399;
+  font-size: 13px;
+  line-height: 20px;
+  margin-bottom: 4px;
+}
+
+.header-metric-value {
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.text-orange-500 {
+  color: #ff7849;
+}
+
+/* 数据总览卡片 */
+.overview-card {
+  background: #fff;
+  border: 1px solid #d8d8d8;
+  border-radius: 16px;
+  padding: 12px 24px;
+  flex-shrink: 0;
+}
+
+.overview-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.stat-label {
+  color: #909399;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.stat-value {
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
+}
+
+.stat-item-total .stat-label {
+  color: rgba(0, 0, 0, 0.88);
+  font-weight: 600;
+}
+
+.stat-value-total {
+  color: #1890ff;
+  font-size: 32px;
+}
+
+.stat-divider {
+  width: 1px;
+  height: 40px;
+  background: #f0f0f0;
+}
+
+/* 配置卡片 */
+.config-card {
+  background: #fff;
+  border: 1px solid #d8d8d8;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.config-card-head {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.card-title-icon {
+  color: hsl(var(--primary));
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+/* 表头背景色 */
+.table-style-wrapper :deep(.vxe-table--header-wrapper),
+.table-style-wrapper :deep(.vxe-header--column) {
+  background-color: var(--list-header-bg) !important;
+}
+
+/* 表头文字颜色 */
+.table-style-wrapper :deep(.vxe-header--column .vxe-cell) {
+  color: var(--list-header-color) !important;
+}
+
+/* 表头上下内边距 */
+.table-style-wrapper :deep(.vxe-header--column) {
+  padding-top: var(--list-header-padding-y) !important;
+  padding-bottom: var(--list-header-padding-y) !important;
+}
+
+/* 单元格上下内边距 */
+.table-style-wrapper :deep(.vxe-body--column) {
+  padding-top: var(--list-cell-padding-y) !important;
+  padding-bottom: var(--list-cell-padding-y) !important;
 }
 </style>

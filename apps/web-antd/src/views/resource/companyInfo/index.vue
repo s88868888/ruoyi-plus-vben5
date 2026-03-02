@@ -189,12 +189,12 @@ const [BasicTable, tableApi] = useVbenVxeGrid({
 
 // 查看详情
 function handleView(record: CompanyListVo) {
-  router.push(`/resource/companyInfo/detail/${record.deptId}`);
+  router.push(`/resource/companyInfo/view/${record.deptId}`);
 }
 
 // 编辑
 function handleEdit(record: CompanyListVo) {
-  router.push(`/resource/companyInfo/detail/${record.deptId}`);
+  router.push(`/resource/companyInfo/edit/${record.deptId}`);
 }
 
 // 删除

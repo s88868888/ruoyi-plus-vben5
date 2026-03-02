@@ -19,6 +19,7 @@ import CommonFilter from '#/components/CommonFilter/index.vue';
 const props = defineProps<{
   deptId?: number;
   deptName?: string;
+  readonly?: boolean;
 }>();
 
 const tablePreference = useListTablePreference();
@@ -107,16 +108,16 @@ const handleFilterQuery = (conditions: any[]) => {
 
 // 表格配置
 const gridOptions: VxeGridProps = {
-  checkboxConfig: {
+  checkboxConfig: props.readonly ? undefined : {
     highlight: true,
     reserve: true,
   },
   customConfig: {
     storage: true,
   },
-  height: 'auto',
+  height: 500,
   columns: [
-    { type: 'checkbox', width: 50 },
+    ...(props.readonly ? [] : [{ type: 'checkbox', width: 50 }]),
     { field: 'name', title: '姓名', minWidth: 100, headerAlign: 'left', align: 'left' },
     {
       field: 'gender',
@@ -136,13 +137,13 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'status' },
     },
     { field: 'createTime', title: '创建时间', minWidth: 120, headerAlign: 'left', align: 'left', formatter: ({ cellValue }: any) => cellValue ? cellValue.split(' ')[0] : '' },
-    {
+    ...(props.readonly ? [] : [{
       field: 'action',
       title: '操作',
       width: 120,
       fixed: 'right',
       slots: { default: 'action' },
-    },
+    }]),
   ],
   keepSource: true,
   pagerConfig: {},
@@ -217,7 +218,7 @@ async function handleSuccess() {
           type="both"
           @handle-query="handleFilterQuery"
         />
-        <Button type="primary" @click="handleAdd">
+        <Button v-if="!readonly" type="primary" @click="handleAdd">
           <PlusOutlined />
           新增人员
         </Button>

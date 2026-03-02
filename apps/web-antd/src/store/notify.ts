@@ -52,6 +52,25 @@ export const useNotifyStore = defineStore(
         if (!message) return;
         console.log(`接收到消息: ${message}`);
 
+        // 尝试解析消息，判断是否为章节生成的进度消息
+        try {
+          const parsedMessage = JSON.parse(message);
+          // 如果是章节生成的进度消息（start或progress类型），不显示通知
+          if (parsedMessage.type === 'start' || parsedMessage.type === 'progress') {
+            console.log('章节生成进度消息，不显示通知');
+            data.value = null;
+            return;
+          }
+          // 如果是章节生成的成功或错误消息，也不显示通知（由页面内部处理）
+          if (parsedMessage.type === 'success' || parsedMessage.type === 'error') {
+            console.log('章节生成结果消息，不显示通知');
+            data.value = null;
+            return;
+          }
+        } catch (e) {
+          // 如果不是JSON格式，说明是普通消息，继续显示通知
+        }
+
         notification.success({
           description: message,
           duration: 3,

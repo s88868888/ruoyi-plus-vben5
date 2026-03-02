@@ -19,6 +19,7 @@ import SectionTitle from './section-title.vue';
 const props = defineProps<{
   deptId?: number;
   deptName?: string;
+  readonly?: boolean;
 }>();
 
 const tablePreference = useListTablePreference();
@@ -80,15 +81,16 @@ function handleFilterQuery(params: Record<string, any>) {
 
 // 表格配置
 const gridOptions: VxeGridProps = {
-  checkboxConfig: {
+  checkboxConfig: props.readonly ? undefined : {
     highlight: true,
     reserve: true,
   },
   customConfig: {
     storage: true,
   },
-  height: 'auto',
+  height: 500,
   columns: [
+    ...(props.readonly ? [] : [{ type: 'checkbox', width: 50 }]),
     { type: 'seq', width: 60, title: '序号' },
     { field: 'financeName', title: '财务信息名称', minWidth: 180, headerAlign: 'left', align: 'left' },
     { field: 'infoType', title: '信息类型', minWidth: 120, headerAlign: 'left', align: 'left' },
@@ -103,13 +105,13 @@ const gridOptions: VxeGridProps = {
     },
     { field: 'createByName', title: '创建人', width: 100, headerAlign: 'left', align: 'left' },
     { field: 'createTime', title: '创建时间', minWidth: 160, headerAlign: 'left', align: 'left' },
-    {
+    ...(props.readonly ? [] : [{
       field: 'action',
       title: '操作',
-      width: 180,
+      width: 120,
       fixed: 'right',
       slots: { default: 'action' },
-    },
+    }]),
   ],
   keepSource: true,
   pagerConfig: {},
@@ -197,7 +199,7 @@ async function handleSuccess() {
     <div class="filter-section">
       <CommonFilter :filter-data="filterData" @query="handleFilterQuery">
         <template #action>
-          <Button type="primary" @click="handleAdd">
+          <Button v-if="!readonly" type="primary" @click="handleAdd">
             <PlusOutlined />
             新增财务信息
           </Button>
