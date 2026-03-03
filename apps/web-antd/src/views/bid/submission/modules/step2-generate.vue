@@ -552,7 +552,7 @@ async function handleTreeDrop(info: any) {
 // 编辑章节
 function editChapterContent(chapter: BizSubmissionChapter) {
   chapterModalMode.value = 'edit';
-  chapterModalForm.value = { chapterTitle: chapter.chapterTitle || '' };
+  chapterModalForm.value = { chapterTitle: chapter.chapterTitle || '', reasonDescription: chapter.reasonDescription || '', parentId: null };
   editingChapter.value = chapter;
   showChapterModal.value = true;
 }
@@ -630,6 +630,7 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
           :tree-data="chapterTree"
           :field-names="{ title: 'chapterTitle', key: 'id', children: 'children' }"
           :expand-action="'click'"
+          :virtual="false"
           draggable
           @select="handleTreeSelect"
           @drop="handleTreeDrop"
@@ -779,10 +780,10 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
             @press-enter="handleChapterModalOk"
           />
         </FormItem>
-        <FormItem label="章节说明">
+        <FormItem label="原因说明">
           <Input.TextArea
             v-model:value="chapterModalForm.reasonDescription"
-            placeholder="请输入章节说明（选填）"
+            placeholder="请输入原因说明（选填）"
             :rows="3"
             :max-length="500"
             show-count
@@ -907,14 +908,20 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
       :deep(.ant-tree) {
         background: transparent;
 
+        // 禁用展开收起动画，防止抖动
+        .ant-tree-list-holder-inner {
+          transition: none !important;
+        }
+
         .ant-tree-treenode {
           padding: 4px 0;
+          transition: none !important;
         }
 
         .ant-tree-node-content-wrapper {
           border-radius: 6px;
           padding: 4px 8px;
-          transition: all 0.2s;
+          transition: background-color 0.2s;
           flex: 1;
           min-width: 0;
 
@@ -981,6 +988,8 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
             gap: 2px;
             flex-shrink: 0;
             margin-left: auto;
+            min-width: 120px;
+            justify-content: flex-end;
 
             .ant-btn {
               padding: 0 4px;

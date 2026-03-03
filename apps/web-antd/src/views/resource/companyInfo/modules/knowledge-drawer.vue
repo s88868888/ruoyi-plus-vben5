@@ -10,6 +10,7 @@ import type { UploadChangeParam, UploadFile } from 'ant-design-vue';
 import { useVbenForm } from '#/adapter/form';
 import { knowledgeInfo, knowledgeUpdate, knowledgeUpload } from '#/api/resource/knowledge';
 import SectionTitle from './section-title.vue';
+import { knowledgeOptions } from './common-options';
 
 const emit = defineEmits<{
   reload: [];
@@ -136,9 +137,12 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'projectType',
       label: '挂标项目类型',
-      component: 'Input',
+      component: 'AutoComplete',
       rules: 'required',
       componentProps: {
+        options: knowledgeOptions.projectType.map(v => ({ value: v })),
+        placeholder: '请输入或选择项目类型',
+        allowClear: true,
         disabled: isViewMode.value,
       },
     },

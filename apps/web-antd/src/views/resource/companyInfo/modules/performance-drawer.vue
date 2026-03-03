@@ -9,6 +9,7 @@ import { useVbenForm } from '#/adapter/form';
 import { performanceInfo, performanceAdd, performanceUpdate } from '#/api/resource/performance';
 import { useEditPageStyle } from '#/preferences/useEditPageStyle';
 import SectionTitle from './section-title.vue';
+import { performanceOptions } from './common-options';
 
 const emit = defineEmits<{
   reload: [];
@@ -96,8 +97,13 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'performanceCategory',
       label: '业绩分类',
-      component: 'Input',
+      component: 'AutoComplete',
       rules: 'required',
+      componentProps: {
+        options: performanceOptions.performanceCategory.map(v => ({ value: v })),
+        placeholder: '请输入或选择业绩分类',
+        allowClear: true,
+      },
     },
     {
       fieldName: 'projectProvince',
@@ -113,7 +119,12 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'projectStatus',
       label: '项目状态',
-      component: 'Input',
+      component: 'AutoComplete',
+      componentProps: {
+        options: performanceOptions.projectStatus.map(v => ({ value: v })),
+        placeholder: '请输入或选择项目状态',
+        allowClear: true,
+      },
     },
     {
       fieldName: 'projectScale',
@@ -123,7 +134,12 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'processType',
       label: '工艺类型',
-      component: 'Input',
+      component: 'AutoComplete',
+      componentProps: {
+        options: performanceOptions.processType.map(v => ({ value: v })),
+        placeholder: '请输入或选择工艺类型',
+        allowClear: true,
+      },
     },
     {
       fieldName: 'projectContent',
@@ -173,8 +189,13 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'ownerUnitNature',
       label: '业主单位性质',
-      component: 'Input',
+      component: 'AutoComplete',
       rules: 'required',
+      componentProps: {
+        options: performanceOptions.ownerUnitNature.map(v => ({ value: v })),
+        placeholder: '请输入或选择业主单位性质',
+        allowClear: true,
+      },
     },
     {
       fieldName: 'ownerUnitContact',

@@ -8,6 +8,7 @@ import { message } from 'ant-design-vue';
 import { useVbenForm } from '#/adapter/form';
 import { qualificationInfo, qualificationAdd, qualificationUpdate } from '#/api/resource/qualification';
 import SectionTitle from './section-title.vue';
+import { qualificationOptions } from './common-options';
 
 const emit = defineEmits<{
   reload: [];
@@ -96,27 +97,43 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'certCategory',
       label: '证书类别',
-      component: 'Input',
+      component: 'AutoComplete',
       rules: 'required',
       componentProps: {
-        maxlength: 80,
-        showCount: true,
+        options: qualificationOptions.certCategory.map(v => ({ value: v })),
+        placeholder: '请输入或选择证书类别',
+        allowClear: true,
+        showSearch: true,
+        filterOption: (input: string, option: any) =>
+          option.value.toLowerCase().includes(input.toLowerCase()),
       },
     },
     {
       fieldName: 'issuingAuthority',
       label: '发证机关',
-      component: 'Input',
+      component: 'AutoComplete',
       rules: 'required',
       componentProps: {
-        maxlength: 80,
-        showCount: true,
+        options: qualificationOptions.issuingAuthority.map(v => ({ value: v })),
+        placeholder: '请输入或选择发证机关',
+        allowClear: true,
+        showSearch: true,
+        filterOption: (input: string, option: any) =>
+          option.value.toLowerCase().includes(input.toLowerCase()),
       },
     },
     {
       fieldName: 'certStatus',
       label: '证书状态',
-      component: 'Input',
+      component: 'AutoComplete',
+      componentProps: {
+        options: qualificationOptions.certStatus.map(v => ({ value: v })),
+        placeholder: '请输入或选择证书状态',
+        allowClear: true,
+        showSearch: true,
+        filterOption: (input: string, option: any) =>
+          option.value.toLowerCase().includes(input.toLowerCase()),
+      },
     },
     // ---- 有效期 ----
     {

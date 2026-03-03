@@ -12,6 +12,7 @@ import {
   patentMedalUpdate,
 } from '#/api/resource/patent-medal';
 import SectionTitle from '../../companyInfo/modules/section-title.vue';
+import { patentMedalOptions } from '../../companyInfo/modules/common-options';
 
 const emit = defineEmits<{
   reload: [];
@@ -81,15 +82,13 @@ const [Form, formApi] = useVbenForm({
     },
     {
       fieldName: 'patentType',
-      component: 'Select',
+      component: 'AutoComplete',
       label: '专利类型',
       rules: 'required',
       componentProps: {
-        options: [
-          { label: '发明专利', value: '1' },
-          { label: '实用新型专利', value: '2' },
-          { label: '外观设计专利', value: '3' },
-        ],
+        options: patentMedalOptions.patentType.map(v => ({ value: v })),
+        placeholder: '请输入或选择专利类型',
+        allowClear: true,
       },
     },
     {
@@ -119,8 +118,13 @@ const [Form, formApi] = useVbenForm({
     },
     {
       fieldName: 'field',
-      component: 'Input',
+      component: 'AutoComplete',
       label: '所属领域',
+      componentProps: {
+        options: patentMedalOptions.field.map(v => ({ value: v })),
+        placeholder: '请输入或选择所属领域',
+        allowClear: true,
+      },
     },
     {
       fieldName: 'status',

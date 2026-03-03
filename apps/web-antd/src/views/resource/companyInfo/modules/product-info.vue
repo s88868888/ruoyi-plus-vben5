@@ -16,11 +16,14 @@ import ProductDrawer from './product-drawer.vue';
 import SectionTitle from './section-title.vue';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   deptId?: number;
   deptName?: string;
   readonly?: boolean;
-}>();
+  autoHeight?: boolean;
+}>(), {
+  autoHeight: false,
+});
 
 const tablePreference = useListTablePreference();
 
@@ -97,7 +100,7 @@ const gridOptions: VxeGridProps = {
   customConfig: {
     storage: true,
   },
-  height: 500,
+  height: props.autoHeight ? 'auto' : 500,
   columns: [
     ...(props.readonly ? [] : [{ type: 'checkbox', width: 50 }]),
     { field: 'productName', title: '产品名称', minWidth: 150, headerAlign: 'left', align: 'left' },

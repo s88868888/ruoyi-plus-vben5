@@ -10,6 +10,7 @@ import { useVbenForm } from '#/adapter/form';
 import { financeInfo, financeAdd, financeUpdate } from '#/api/resource/finance';
 import { ossInfo } from '#/api/system/oss';
 import SectionTitle from './section-title.vue';
+import { financeOptions } from './common-options';
 
 const emit = defineEmits<{
   reload: [];
@@ -132,9 +133,12 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'infoType',
       label: '信息类型',
-      component: 'Input',
+      component: 'AutoComplete',
       rules: 'required',
       componentProps: {
+        options: financeOptions.infoType.map(v => ({ value: v })),
+        placeholder: '请输入或选择信息类型',
+        allowClear: true,
         disabled: isViewMode.value,
       },
     },

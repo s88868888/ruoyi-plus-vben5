@@ -143,42 +143,49 @@ onMounted(() => {
             <PersonnelInfo
               :dept-id="deptId"
               :dept-name="deptName"
+              auto-height
             />
           </TabPane>
           <TabPane key="product" tab="产品信息">
             <ProductInfo
               :dept-id="deptId"
               :dept-name="deptName"
+              auto-height
             />
           </TabPane>
           <TabPane key="qualification" tab="企业资质">
             <QualificationInfo
               :dept-id="deptId"
               :dept-name="deptName"
+              auto-height
             />
           </TabPane>
           <TabPane key="performance" tab="业绩案例">
             <PerformanceInfo
               :dept-id="deptId"
               :dept-name="deptName"
+              auto-height
             />
           </TabPane>
           <TabPane key="patent" tab="专利奖章">
             <PatentMedalInfo
               :dept-id="deptId"
               :dept-name="deptName"
+              auto-height
             />
           </TabPane>
           <TabPane key="finance" tab="财务信息">
             <FinanceInfo
               :dept-id="deptId"
               :dept-name="deptName"
+              auto-height
             />
           </TabPane>
           <TabPane key="knowledge" tab="项目知识">
             <KnowledgeInfo
               :dept-id="deptId"
               :dept-name="deptName"
+              auto-height
             />
           </TabPane>
         </Tabs>
