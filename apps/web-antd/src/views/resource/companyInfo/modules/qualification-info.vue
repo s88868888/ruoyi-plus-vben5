@@ -13,6 +13,7 @@ import { qualificationList, qualificationRemove } from '#/api/resource/qualifica
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import { useListTablePreference } from '#/preferences/userPreference';
 
+import { qualificationCertCategoryOptions, qualificationCertStatusOptions, qualificationIssuingAuthorityOptions } from './common-options';
 import QualificationDrawer from './qualification-drawer.vue';
 import SectionTitle from './section-title.vue';
 
@@ -37,45 +38,55 @@ const tableCssVars = computed(() => ({
 // 筛选条件配置
 const filterData = ref([
   {
-    field: 'certNumber',
-    label: '证书编号',
-    type: 'a-input',
-    value: '',
-    isCommon: true,
-  },
-  {
     field: 'certName',
     label: '证书名称',
     type: 'a-input',
-    value: '',
+    data: '',
     isCommon: true,
   },
   {
     field: 'certCategory',
     label: '证书类别',
-    type: 'a-input',
-    value: '',
+    type: 'a-select',
+    data: '',
     isCommon: true,
+    options: qualificationCertCategoryOptions,
+  },
+  {
+    field: 'certNumber',
+    label: '证书编号',
+    type: 'a-input',
+    data: '',
+    isCommon: false,
   },
   {
     field: 'certStatus',
     label: '证书状态',
-    type: 'a-input',
-    value: '',
-    isCommon: true,
+    type: 'a-select',
+    data: '',
+    isCommon: false,
+    options: qualificationCertStatusOptions,
+  },
+  {
+    field: 'issuingAuthority',
+    label: '发证机关',
+    type: 'a-select',
+    data: '',
+    isCommon: false,
+    options: qualificationIssuingAuthorityOptions,
   },
   {
     field: 'validStartDate',
     label: '有效期开始时间',
     type: 'a-date-picker-start-end',
-    value: { start: '', end: '' },
+    data: [],
     isCommon: false,
   },
   {
     field: 'validEndDate',
     label: '有效期结束时间',
     type: 'a-date-picker-start-end',
-    value: { start: '', end: '' },
+    data: [],
     isCommon: false,
   },
 ]);
@@ -83,26 +94,21 @@ const filterData = ref([
 // 搜索参数
 const searchParams = ref<Record<string, any>>({});
 
+// 日期范围字段映射
+const dateRangeMapping: Record<string, string> = {
+  validStartDateStart: 'params[beginValidStartDate]',
+  validStartDateEnd: 'params[endValidStartDate]',
+  validEndDateStart: 'params[beginValidEndDate]',
+  validEndDateEnd: 'params[endValidEndDate]',
+};
+
 // 处理筛选查询
-function handleFilterQuery(params: Record<string, any>) {
-  const processedParams: Record<string, any> = {};
-
-  Object.keys(params).forEach((key) => {
-    const value = params[key];
-    if (value === undefined || value === null || value === '') return;
-
-    if (key === 'validStartDate' && value.start && value.end) {
-      processedParams['params[beginValidStartDate]'] = value.start;
-      processedParams['params[endValidStartDate]'] = value.end;
-    } else if (key === 'validEndDate' && value.start && value.end) {
-      processedParams['params[beginValidEndDate]'] = value.start;
-      processedParams['params[endValidEndDate]'] = value.end;
-    } else {
-      processedParams[key] = value;
-    }
+function handleFilterQuery(conditions: any[]) {
+  const queryParams: Record<string, any> = {};
+  conditions.forEach(({ key, value }) => {
+    queryParams[dateRangeMapping[key] || key] = value;
   });
-
-  searchParams.value = processedParams;
+  searchParams.value = queryParams;
   tableApi.query();
 }
 
@@ -202,14 +208,17 @@ async function handleSuccess() {
 <template>
   <div class="qualification-info flex flex-col gap-4 h-full overflow-hidden">
     <div class="filter-section">
-      <CommonFilter :filter-data="filterData" @query="handleFilterQuery">
-        <template #action>
-          <Button v-if="!readonly" type="primary" @click="handleAdd">
-            <PlusOutlined />
-            新增资质
-          </Button>
-        </template>
-      </CommonFilter>
+      <div class="flex items-center justify-between">
+        <CommonFilter
+          :filter-data="filterData"
+          type="both"
+          @handle-query="handleFilterQuery"
+        />
+        <Button v-if="!readonly" type="primary" @click="handleAdd">
+          <PlusOutlined />
+          新增资质
+        </Button>
+      </div>
     </div>
 
     <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">

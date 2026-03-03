@@ -44,6 +44,7 @@
     "@vben/types": "workspace:*",
     "@vben/utils": "workspace:*",
     "@vueuse/core": "catalog:",
+    "aieditor": "^1.4.2",
     "ant-design-vue": "catalog:",
     "cropperjs": "catalog:",
     "dayjs": "catalog:",

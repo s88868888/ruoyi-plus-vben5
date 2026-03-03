@@ -13,6 +13,7 @@ import { performanceList, performanceRemove } from '#/api/resource/performance';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import { useListTablePreference } from '#/preferences/userPreference';
 
+import { performanceCategoryOptions, performanceProcessTypeOptions } from './common-options';
 import PerformanceDrawer from './performance-drawer.vue';
 import SectionTitle from './section-title.vue';
 
@@ -40,119 +41,107 @@ const filterData = ref([
     field: 'name',
     label: '名称',
     type: 'a-input',
-    value: '',
+    data: '',
     isCommon: true,
   },
   {
     field: 'performanceCategory',
     label: '业绩分类',
     type: 'a-select',
-    value: '',
-    isCommon: false,
-    options: [],
+    data: '',
+    isCommon: true,
+    options: performanceCategoryOptions,
   },
   {
-    field: 'bidDate',
-    label: '中标日期',
-    type: 'a-date-picker-start-end',
-    value: { start: '', end: '' },
+    field: 'processType',
+    label: '工艺类型',
+    type: 'a-select',
+    data: '',
     isCommon: false,
-  },
-  {
-    field: 'signingDate',
-    label: '签约日期',
-    type: 'a-date-picker-start-end',
-    value: { start: '', end: '' },
-    isCommon: false,
-  },
-  {
-    field: 'startDate',
-    label: '开工日期',
-    type: 'a-date-picker-start-end',
-    value: { start: '', end: '' },
-    isCommon: false,
-  },
-  {
-    field: 'completionDate',
-    label: '竣工日期',
-    type: 'a-date-picker-start-end',
-    value: { start: '', end: '' },
-    isCommon: false,
-  },
-  {
-    field: 'contractAmount',
-    label: '合同金额（元）',
-    type: 'a-input-range',
-    value: { start: '', end: '' },
-    isCommon: false,
+    options: performanceProcessTypeOptions,
   },
   {
     field: 'projectManager',
     label: '项目负责人',
     type: 'a-input',
-    value: '',
+    data: '',
     isCommon: false,
   },
   {
     field: 'ownerUnitName',
     label: '业主单位名称',
     type: 'a-input',
-    value: '',
+    data: '',
     isCommon: false,
   },
   {
     field: 'projectLocation',
     label: '项目所在地',
     type: 'a-input',
-    value: '',
+    data: '',
     isCommon: false,
   },
   {
-    field: 'processType',
-    label: '工艺类型',
-    type: 'a-select',
-    value: '',
+    field: 'contractAmount',
+    label: '合同金额（元）',
+    type: 'a-input-range',
+    data: { start: undefined, end: undefined },
     isCommon: false,
-    options: [],
+  },
+  {
+    field: 'bidDate',
+    label: '中标日期',
+    type: 'a-date-picker-start-end',
+    data: [],
+    isCommon: false,
+  },
+  {
+    field: 'signingDate',
+    label: '签约日期',
+    type: 'a-date-picker-start-end',
+    data: [],
+    isCommon: false,
+  },
+  {
+    field: 'startDate',
+    label: '开工日期',
+    type: 'a-date-picker-start-end',
+    data: [],
+    isCommon: false,
+  },
+  {
+    field: 'completionDate',
+    label: '竣工日期',
+    type: 'a-date-picker-start-end',
+    data: [],
+    isCommon: false,
   },
 ]);
 
 // 搜索参数
 const searchParams = ref<Record<string, any>>({});
 
+// 字段映射
+const fieldMapping: Record<string, string> = {
+  bidDateStart: 'params[beginBidDate]',
+  bidDateEnd: 'params[endBidDate]',
+  signingDateStart: 'params[beginSigningDate]',
+  signingDateEnd: 'params[endSigningDate]',
+  startDateStart: 'params[beginStartDate]',
+  startDateEnd: 'params[endStartDate]',
+  completionDateStart: 'params[beginCompletionDate]',
+  completionDateEnd: 'params[endCompletionDate]',
+  contractAmountStart: 'params[minContractAmount]',
+  contractAmountEnd: 'params[maxContractAmount]',
+};
+
 // 处理筛选查询
-function handleFilterQuery(params: Record<string, any>) {
-  const processedParams: Record<string, any> = {};
-
-  Object.keys(params).forEach((key) => {
-    const value = params[key];
-    if (value === undefined || value === null || value === '') return;
-
-    if (key === 'bidDate' && value.start && value.end) {
-      processedParams['params[beginBidDate]'] = value.start;
-      processedParams['params[endBidDate]'] = value.end;
-    } else if (key === 'signingDate' && value.start && value.end) {
-      processedParams['params[beginSigningDate]'] = value.start;
-      processedParams['params[endSigningDate]'] = value.end;
-    } else if (key === 'startDate' && value.start && value.end) {
-      processedParams['params[beginStartDate]'] = value.start;
-      processedParams['params[endStartDate]'] = value.end;
-    } else if (key === 'completionDate' && value.start && value.end) {
-      processedParams['params[beginCompletionDate]'] = value.start;
-      processedParams['params[endCompletionDate]'] = value.end;
-    } else if (key === 'contractAmount' && (value.start || value.end)) {
-      if (value.start) {
-        processedParams['params[minContractAmount]'] = value.start;
-      }
-      if (value.end) {
-        processedParams['params[maxContractAmount]'] = value.end;
-      }
-    } else {
-      processedParams[key] = value;
-    }
+function handleFilterQuery(conditions: any[]) {
+  const queryParams: Record<string, any> = {};
+  conditions.forEach(({ key, value }) => {
+    queryParams[fieldMapping[key] || key] = value;
   });
-
-  searchParams.value = processedParams;
+  searchParams.value = queryParams;
   tableApi.query();
 }
 
@@ -258,14 +247,17 @@ async function handleSuccess() {
 <template>
   <div class="performance-info flex flex-col gap-4 h-full overflow-hidden">
     <div class="filter-section">
-      <CommonFilter :filter-data="filterData" @query="handleFilterQuery">
-        <template #action>
-          <Button v-if="!readonly" type="primary" @click="handleAdd">
-            <PlusOutlined />
-            新增案例
-          </Button>
-        </template>
-      </CommonFilter>
+      <div class="flex items-center justify-between">
+        <CommonFilter
+          :filter-data="filterData"
+          type="both"
+          @handle-query="handleFilterQuery"
+        />
+        <Button v-if="!readonly" type="primary" @click="handleAdd">
+          <PlusOutlined />
+          新增案例
+        </Button>
+      </div>
     </div>
 
     <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">

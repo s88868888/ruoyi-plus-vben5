@@ -13,6 +13,7 @@ import { knowledgeList, knowledgeRemove } from '#/api/resource/knowledge';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import { useListTablePreference } from '#/preferences/userPreference';
 
+import { knowledgeProjectTypeOptions, dataPermissionTypeOptions } from './common-options';
 import KnowledgeDrawer from './knowledge-drawer.vue';
 import SectionTitle from './section-title.vue';
 
@@ -40,21 +41,30 @@ const filterData = ref([
     field: 'knowledgeName',
     label: '知识名称',
     type: 'a-input',
-    value: '',
+    data: '',
     isCommon: true,
   },
   {
     field: 'projectType',
     label: '挂标项目类型',
-    type: 'a-input',
-    value: '',
+    type: 'a-select',
+    data: '',
+    isCommon: true,
+    options: knowledgeProjectTypeOptions,
+  },
+  {
+    field: 'dataPermissionType',
+    label: '数据权限',
+    type: 'a-select',
+    data: '',
     isCommon: false,
+    options: dataPermissionTypeOptions,
   },
   {
     field: 'description',
     label: '描述',
     type: 'a-input',
-    value: '',
+    data: '',
     isCommon: false,
   },
 ]);
@@ -63,8 +73,12 @@ const filterData = ref([
 const searchParams = ref<Record<string, any>>({});
 
 // 处理筛选查询
-function handleFilterQuery(params: Record<string, any>) {
-  searchParams.value = params;
+function handleFilterQuery(conditions: any[]) {
+  const queryParams: Record<string, any> = {};
+  conditions.forEach(({ key, value }) => {
+    queryParams[key] = value;
+  });
+  searchParams.value = queryParams;
   tableApi.query();
 }
 
@@ -192,14 +206,17 @@ async function handleSuccess() {
 <template>
   <div class="knowledge-info flex flex-col gap-4 h-full overflow-hidden">
     <div class="filter-section">
-      <CommonFilter :filter-data="filterData" @query="handleFilterQuery">
-        <template #action>
-          <Button v-if="!readonly" type="primary" @click="handleAdd">
-            <PlusOutlined />
-            新增
-          </Button>
-        </template>
-      </CommonFilter>
+      <div class="flex items-center justify-between">
+        <CommonFilter
+          :filter-data="filterData"
+          type="both"
+          @handle-query="handleFilterQuery"
+        />
+        <Button v-if="!readonly" type="primary" @click="handleAdd">
+          <PlusOutlined />
+          新增
+        </Button>
+      </div>
     </div>
 
     <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">

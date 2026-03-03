@@ -144,3 +144,11 @@ export async function clearChapters(params: {
 export async function updateChapterSort(items: { id: number; parentId: number; sortOrder: number; chapterLevel: number; chapterNo: string }[]) {
   return requestClient.put('/bid/submission/chapter/sort', items);
 }
+
+/**
+ * AI 辅助写作（由 AiEditor 内部直接调用 SSE 接口，此方法供手动调用场景使用）
+ */
+export async function aiAssist(prompt: string) {
+  return requestClient.post<string>('/bid/submission/chapter/ai/assist', { prompt });
+}
+

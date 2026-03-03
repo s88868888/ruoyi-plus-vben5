@@ -24,45 +24,6 @@
       </div>
     </div>
 
-    <!-- 工具栏 -->
-    <div class="editor-toolbar">
-      <ASpace>
-        <AButton size="small" @click="handleBold">
-          <BoldOutlined />
-        </AButton>
-        <AButton size="small" @click="handleItalic">
-          <ItalicOutlined />
-        </AButton>
-        <AButton size="small" @click="handleUnderline">
-          <UnderlineOutlined />
-        </AButton>
-        <ADivider type="vertical" />
-        <AButton size="small" @click="handleOrderedList">
-          <OrderedListOutlined />
-        </AButton>
-        <AButton size="small" @click="handleUnorderedList">
-          <UnorderedListOutlined />
-        </AButton>
-      </ASpace>
-
-      <ASpace>
-        <AButton size="small">
-          <PaperClipOutlined />
-          附件
-          <ABadge :count="attachmentCount" />
-        </AButton>
-        <AButton size="small">
-          <BookOutlined />
-          知识库
-        </AButton>
-        <AButton size="small" danger>
-          <WarningOutlined />
-          预警
-          <ABadge :count="warningCount" />
-        </AButton>
-      </ASpace>
-    </div>
-
     <!-- 主内容区 -->
     <div class="editor-content">
       <!-- 左侧目录树 -->
@@ -73,7 +34,12 @@
             <AButton size="small" type="link" @click="handleAddChapter">
               <PlusOutlined />
             </AButton>
-            <AButton size="small" type="link" @click="handleGenerateAll">
+            <AButton
+              size="small"
+              type="primary"
+              :loading="generating"
+              @click="handleGenerateAll"
+            >
               <ThunderboltOutlined />
               一键生成
             </AButton>
@@ -81,74 +47,72 @@
         </div>
 
         <div class="tree-content">
-          <ATree
-            :tree-data="chapterTree"
-            :selected-keys="selectedKeys"
-            :field-names="{ title: 'title', key: 'id', children: 'children' }"
-            @select="handleChapterSelect"
-          >
-            <template #title="{ title, chapterNo, score, generationStatus }">
-              <div class="chapter-node">
-                <span class="chapter-title">
-                  {{ chapterNo }}. {{ title }}
-                  <ATag v-if="score" color="orange" size="small">
-                    {{ score }}分
-                  </ATag>
-                </span>
-                <div class="chapter-actions">
-                  <ATooltip title="生成状态">
-                    <LoadingOutlined
-                      v-if="generationStatus === 'generating'"
-                      spin
-                      style="color: #1890ff"
-                    />
-                    <CheckCircleOutlined
-                      v-else-if="generationStatus === 'completed'"
-                      style="color: #52c41a"
-                    />
-                    <ClockCircleOutlined
-                      v-else
-                      style="color: #d9d9d9"
-                    />
-                  </ATooltip>
-                  <ADropdown>
-                    <MoreOutlined />
-                    <template #overlay>
-                      <AMenu>
-                        <AMenuItem @click="handleRegenerateChapter">
-                          <RedoOutlined />
-                          重新生成
-                        </AMenuItem>
-                        <AMenuItem @click="handleDeleteChapter">
-                          <DeleteOutlined />
-                          删除章节
-                        </AMenuItem>
-                      </AMenu>
-                    </template>
-                  </ADropdown>
+          <ASpin :spinning="treeLoading">
+            <ATree
+              :tree-data="chapterTree"
+              :selected-keys="selectedKeys"
+              :field-names="{ title: 'chapterTitle', key: 'id', children: 'children' }"
+              @select="handleChapterSelect"
+            >
+              <template #title="{ chapterTitle, chapterNo, chapterType, generationStatus }">
+                <div class="chapter-node">
+                  <span class="chapter-title">
+                    {{ chapterNo }}. {{ chapterTitle }}
+                    <ATag v-if="chapterType === 'template'" color="blue" size="small">模板</ATag>
+                  </span>
+                  <div class="chapter-actions">
+                    <ATooltip title="生成状态">
+                      <LoadingOutlined
+                        v-if="generationStatus === 'generating'"
+                        spin
+                        style="color: #1890ff"
+                      />
+                      <CheckCircleOutlined
+                        v-else-if="generationStatus === 'completed'"
+                        style="color: #52c41a"
+                      />
+                      <ClockCircleOutlined
+                        v-else
+                        style="color: #d9d9d9"
+                      />
+                    </ATooltip>
+                    <ADropdown>
+                      <MoreOutlined />
+                      <template #overlay>
+                        <AMenu>
+                          <AMenuItem @click="handleRegenerateChapter">
+                            <RedoOutlined />
+                            重新生成
+                          </AMenuItem>
+                          <AMenuItem @click="handleDeleteChapter">
+                            <DeleteOutlined />
+                            删除章节
+                          </AMenuItem>
+                        </AMenu>
+                      </template>
+                    </ADropdown>
+                  </div>
                 </div>
-              </div>
-            </template>
-          </ATree>
+              </template>
+            </ATree>
+          </ASpin>
         </div>
       </div>
 
       <!-- 右侧编辑区 -->
       <div class="chapter-editor-panel">
-        <ASpin :spinning="loading">
+        <ASpin :spinning="chapterLoading">
           <div v-if="currentChapter" class="editor-main">
             <!-- 章节标题 -->
             <div class="chapter-header">
               <h2>
-                {{ currentChapter.chapterNo }}. {{ currentChapter.title }}
-                <ATag v-if="currentChapter.score" color="orange">
-                  {{ currentChapter.score }}分
-                </ATag>
+                {{ currentChapter.chapterNo }}. {{ currentChapter.chapterTitle }}
               </h2>
               <ASpace>
                 <AButton
                   v-if="currentChapter.chapterType === 'template'"
                   size="small"
+                  :loading="chapterLoading"
                   @click="handleFillTemplate"
                 >
                   <ThunderboltOutlined />
@@ -158,6 +122,7 @@
                   v-else
                   size="small"
                   type="primary"
+                  :loading="chapterLoading"
                   @click="handleGenerateChapter"
                 >
                   <ThunderboltOutlined />
@@ -182,12 +147,12 @@
               />
             </div>
 
-            <!-- 富文本编辑器 -->
+            <!-- AiEditor 富文本编辑器 -->
             <div class="editor-area">
-              <ATextarea
-                v-model:value="currentChapter.content"
-                :rows="20"
-                placeholder="请输入章节内容，或点击"AI生成"按钮自动生成..."
+              <AiEditorComp
+                v-model="currentChapter.chapterContent"
+                :height="560"
+                placeholder="选择左侧章节查看内容，或点击生成按钮自动生成..."
                 @change="handleContentChange"
               />
             </div>
@@ -222,199 +187,130 @@
     <AModal
       v-model:open="progressModalOpen"
       title="标书生成进度"
-      width="700px"
+      width="600px"
       :footer="null"
+      :mask-closable="false"
     >
       <AProgress :percent="overallProgress" :status="progressStatus" />
       <div class="progress-info">
         <ASpace>
-          <ATag color="blue">总计: {{ totalChapters }}</ATag>
+          <ATag color="blue">总章节: {{ totalChapters }}</ATag>
           <ATag color="success">已完成: {{ completedChapters }}</ATag>
-          <ATag v-if="failedChapters" color="error">
-            失败: {{ failedChapters }}
-          </ATag>
+          <ATag v-if="failedChapters > 0" color="error">失败: {{ failedChapters }}</ATag>
         </ASpace>
       </div>
 
       <ADivider />
 
-      <AList :data-source="chapterProgress" size="small">
-        <template #renderItem="{ item }">
-          <AListItem>
-            <AListItemMeta>
-              <template #title>
-                {{ item.chapterNo }}. {{ item.title }}
-              </template>
-              <template #description>
-                <AProgress
-                  :percent="item.progress"
-                  :status="getProgressStatus(item.status)"
-                  size="small"
-                />
-              </template>
-            </AListItemMeta>
-            <template #actions>
-              <ATag :color="getStatusColor(item.status)">
-                {{ getStatusText(item.status) }}
-              </ATag>
-            </template>
-          </AListItem>
-        </template>
-      </AList>
+      <ATimeline style="max-height: 300px; overflow-y: auto; padding: 8px">
+        <ATimelineItem
+          v-for="(log, idx) in recentLogs"
+          :key="idx"
+          :color="log.color"
+        >
+          {{ log.message }}
+        </ATimelineItem>
+      </ATimeline>
     </AModal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+
 import { message } from 'ant-design-vue';
 import {
-  LeftOutlined,
-  RightOutlined,
-  BoldOutlined,
-  ItalicOutlined,
-  UnderlineOutlined,
-  OrderedListOutlined,
-  UnorderedListOutlined,
-  PaperClipOutlined,
-  BookOutlined,
-  WarningOutlined,
-  PlusOutlined,
-  ThunderboltOutlined,
-  LoadingOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
-  MoreOutlined,
-  RedoOutlined,
   DeleteOutlined,
-  SaveOutlined,
   InfoCircleOutlined,
+  LeftOutlined,
+  LoadingOutlined,
+  MoreOutlined,
+  PlusOutlined,
+  RedoOutlined,
+  RightOutlined,
+  SaveOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons-vue';
 import dayjs from 'dayjs';
 
+import AiEditorComp from '#/components/ai-editor/index.vue';
+import {
+  deleteChapter,
+  fillTemplate,
+  generateChapter,
+  getChapterInfo,
+  getChapterTree,
+  regenerateChapter,
+  saveChapterContent,
+  type BizSubmissionChapter,
+} from '#/api/bid/chapter/index';
+
 const route = useRoute();
-const submissionId = ref(Number(route.params.id));
-const documentId = ref(Number(route.params.documentId));
+const router = useRouter();
+const submissionId = Number(route.params.id);
+const documentId = route.params.documentId ? Number(route.params.documentId) : undefined;
 
 // 数据
-const loading = ref(false);
-const chapterTree = ref<any[]>([]);
+const treeLoading = ref(false);
+const chapterLoading = ref(false);
+const chapterTree = ref<BizSubmissionChapter[]>([]);
 const selectedKeys = ref<number[]>([]);
-const currentChapter = ref<any>(null);
-const attachmentCount = ref(3);
-const warningCount = ref(3);
+const currentChapter = ref<BizSubmissionChapter | null>(null);
+const contentChanged = ref(false);
 
-// 进度相关
+// 进度
+const generating = ref(false);
 const progressModalOpen = ref(false);
 const overallProgress = ref(0);
 const totalChapters = ref(0);
 const completedChapters = ref(0);
 const failedChapters = ref(0);
-const chapterProgress = ref<any[]>([]);
+const recentLogs = ref<{ message: string; color: string }[]>([]);
+
 const progressStatus = computed(() => {
   if (failedChapters.value > 0) return 'exception';
-  if (completedChapters.value === totalChapters.value) return 'success';
+  if (overallProgress.value >= 100) return 'success';
   return 'active';
 });
+
+// SSE 进度监听
+let eventSource: EventSource | null = null;
 
 onMounted(() => {
   loadChapterTree();
 });
 
-// 加载章节树
+onUnmounted(() => {
+  closeSSE();
+});
+
+// ─── 章节树 ────────────────────────────────────────────────────────────────
+
 async function loadChapterTree() {
-  loading.value = true;
+  treeLoading.value = true;
   try {
-    // TODO: 调用API加载章节树
-    // const res = await submissionChapterTree({ documentId: documentId.value });
-    // chapterTree.value = res;
+    const params: any = {};
+    if (submissionId) params.submissionId = String(submissionId);
+    if (documentId) params.documentId = String(documentId);
 
-    // 模拟数据
-    chapterTree.value = [
-      {
-        id: 1,
-        chapterNo: '一',
-        title: '投标函',
-        chapterType: 'template',
-        generationStatus: 'completed',
-        children: [],
-      },
-      {
-        id: 2,
-        chapterNo: '二',
-        title: '法定代表人身份证明',
-        chapterType: 'template',
-        generationStatus: 'completed',
-        children: [],
-      },
-      {
-        id: 3,
-        chapterNo: '三',
-        title: '技术方案',
-        score: 30,
-        chapterType: 'generate',
-        generationStatus: 'completed',
-        children: [
-          {
-            id: 31,
-            chapterNo: '3.1',
-            title: '项目理解',
-            score: 10,
-            chapterType: 'generate',
-            generationStatus: 'completed',
-          },
-          {
-            id: 32,
-            chapterNo: '3.2',
-            title: '技术架构',
-            score: 12,
-            chapterType: 'generate',
-            generationStatus: 'completed',
-          },
-          {
-            id: 33,
-            chapterNo: '3.3',
-            title: '实施方案',
-            score: 8,
-            chapterType: 'generate',
-            generationStatus: 'generating',
-          },
-        ],
-      },
-      {
-        id: 4,
-        chapterNo: '四',
-        title: '项目团队',
-        score: 20,
-        chapterType: 'generate',
-        generationStatus: 'pending',
-        children: [],
-      },
-      {
-        id: 5,
-        chapterNo: '五',
-        title: '项目案例',
-        score: 25,
-        chapterType: 'generate',
-        generationStatus: 'pending',
-        children: [],
-      },
-    ];
+    const res = await getChapterTree(params);
+    chapterTree.value = res as BizSubmissionChapter[];
 
-    // 默认选中第一个章节
     if (chapterTree.value.length > 0) {
-      selectedKeys.value = [chapterTree.value[0].id];
-      loadChapterContent(chapterTree.value[0].id);
+      const firstId = chapterTree.value[0].id!;
+      selectedKeys.value = [firstId];
+      await loadChapterContent(firstId);
     }
   } catch (error) {
     console.error('加载章节树失败:', error);
   } finally {
-    loading.value = false;
+    treeLoading.value = false;
   }
 }
 
-// 选择章节
 function handleChapterSelect(keys: number[]) {
   if (keys.length > 0) {
     selectedKeys.value = keys;
@@ -422,169 +318,235 @@ function handleChapterSelect(keys: number[]) {
   }
 }
 
-// 加载章节内容
 async function loadChapterContent(chapterId: number) {
-  loading.value = true;
+  chapterLoading.value = true;
   try {
-    // TODO: 调用API加载章节内容
-    // const res = await submissionChapterInfo(chapterId);
-    // currentChapter.value = res;
-
-    // 模拟数据
-    currentChapter.value = {
-      id: chapterId,
-      chapterNo: '3.3',
-      title: '实施方案',
-      score: 8,
-      chapterType: 'generate',
-      generationStatus: 'completed',
-      content: '项目实施分为需求分析、系统设计、开发测试、部署上线四个阶段...',
-      reasonDescription:
-        '根据招标文件第3.2条要求，投标人需提供详细的项目实施方案。本章节将详细阐述项目实施的各个阶段和关键节点，以满足评分标准中"实施方案"8分的要求。',
-      generationEndTime: new Date(),
-      aiTokensUsed: 2500,
-    };
+    const res = await getChapterInfo(String(chapterId));
+    currentChapter.value = res as BizSubmissionChapter;
+    contentChanged.value = false;
   } catch (error) {
     console.error('加载章节内容失败:', error);
   } finally {
-    loading.value = false;
+    chapterLoading.value = false;
   }
 }
 
-// AI生成章节
+// ─── 章节操作 ───────────────────────────────────────────────────────────────
+
 async function handleGenerateChapter() {
-  if (!currentChapter.value) return;
-
-  loading.value = true;
+  if (!currentChapter.value?.id) return;
+  chapterLoading.value = true;
   try {
-    // TODO: 调用API生成章节
-    // await submissionChapterGenerate(currentChapter.value.id);
-    message.success('章节生成中，请稍候...');
-
-    // 刷新章节内容
-    setTimeout(() => {
-      loadChapterContent(currentChapter.value.id);
-    }, 2000);
-  } catch (error) {
-    console.error('生成章节失败:', error);
-    message.error('生成失败');
+    await generateChapter(String(currentChapter.value.id));
+    message.success('章节生成成功');
+    await loadChapterContent(currentChapter.value.id);
+    await loadChapterTree();
+  } catch {
+    message.error('章节生成失败');
   } finally {
-    loading.value = false;
+    chapterLoading.value = false;
   }
 }
 
-// 填充模板
 async function handleFillTemplate() {
-  if (!currentChapter.value) return;
-
-  loading.value = true;
+  if (!currentChapter.value?.id) return;
+  chapterLoading.value = true;
   try {
-    // TODO: 调用API填充模板
+    await fillTemplate(String(currentChapter.value.id));
     message.success('模板填充成功');
-    loadChapterContent(currentChapter.value.id);
-  } catch (error) {
-    console.error('填充模板失败:', error);
+    await loadChapterContent(currentChapter.value.id);
+  } catch {
     message.error('填充失败');
   } finally {
-    loading.value = false;
+    chapterLoading.value = false;
   }
 }
 
-// 保存章节
 async function handleSaveChapter() {
-  if (!currentChapter.value) return;
-
+  if (!currentChapter.value?.id) return;
   try {
-    // TODO: 调用API保存章节
+    await saveChapterContent(
+      String(currentChapter.value.id),
+      currentChapter.value.chapterContent ?? '',
+    );
     message.success('保存成功');
-  } catch (error) {
-    console.error('保存章节失败:', error);
+    contentChanged.value = false;
+  } catch {
     message.error('保存失败');
   }
 }
 
-// 重新生成章节
-function handleRegenerateChapter() {
-  message.info('重新生成功能开发中');
+async function handleRegenerateChapter() {
+  if (!currentChapter.value?.id) return;
+  chapterLoading.value = true;
+  try {
+    await regenerateChapter(String(currentChapter.value.id));
+    message.success('重新生成成功');
+    await loadChapterContent(currentChapter.value.id);
+    await loadChapterTree();
+  } catch {
+    message.error('重新生成失败');
+  } finally {
+    chapterLoading.value = false;
+  }
 }
 
-// 删除章节
-function handleDeleteChapter() {
-  message.info('删除章节功能开发中');
+async function handleDeleteChapter() {
+  if (!currentChapter.value?.id) return;
+  try {
+    await deleteChapter(String(currentChapter.value.id));
+    message.success('删除成功');
+    currentChapter.value = null;
+    await loadChapterTree();
+  } catch {
+    message.error('删除失败');
+  }
 }
 
-// 一键生成
-function handleGenerateAll() {
+function handleContentChange(val: string) {
+  if (currentChapter.value) {
+    currentChapter.value.chapterContent = val;
+    contentChanged.value = true;
+  }
+}
+
+// ─── 一键生成（SSE 进度） ──────────────────────────────────────────────────
+
+async function handleGenerateAll() {
+  generating.value = true;
   progressModalOpen.value = true;
-  // TODO: 调用API一键生成所有章节
+  overallProgress.value = 0;
+  completedChapters.value = 0;
+  failedChapters.value = 0;
+  recentLogs.value = [];
+
+  // 启动 SSE 监听
+  startSSE(submissionId);
+
+  try {
+    // 调用后端触发生成（假设 submission 的 step2/generateContent 接口）
+    const { requestClient } = await import('#/api/request');
+    await requestClient.post(`/bid/submission/${submissionId}/step2/generateContent`);
+    message.success('已触发生成，请关注进度...');
+  } catch (error) {
+    console.error('触发生成失败:', error);
+    message.error('触发生成失败');
+    generating.value = false;
+    closeSSE();
+  }
 }
 
-// 内容变化
-function handleContentChange() {
-  // 标记为已修改
-}
+function startSSE(id: number) {
+  closeSSE();
+  const url = `/resource/bid/submission/generation/progress/stream/${id}`;
+  eventSource = new EventSource(url);
 
-// 格式化日期
-function formatDate(date: Date) {
-  return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
-}
+  eventSource.addEventListener('progress', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      overallProgress.value = data.overallProgress ?? overallProgress.value;
 
-// 获取状态颜色
-function getStatusColor(status: string) {
-  const colorMap: Record<string, string> = {
-    pending: 'default',
-    generating: 'processing',
-    completed: 'success',
-    failed: 'error',
+      if (data.chapterStatus === 'completed') completedChapters.value++;
+      if (data.chapterStatus === 'failed') failedChapters.value++;
+
+      recentLogs.value.unshift({
+        message: `${data.chapterTitle ?? ''} - ${getStatusText(data.chapterStatus)}`,
+        color: data.chapterStatus === 'failed' ? 'red' : 'green',
+      });
+      if (recentLogs.value.length > 20) recentLogs.value.pop();
+
+      // 刷新章节树状态
+      loadChapterTree();
+    } catch {
+      // ignore parse errors
+    }
+  });
+
+  eventSource.addEventListener('complete', () => {
+    overallProgress.value = 100;
+    generating.value = false;
+    message.success('标书生成完成！');
+    closeSSE();
+    loadChapterTree();
+  });
+
+  eventSource.addEventListener('error', (e: any) => {
+    try {
+      const data = JSON.parse(e.data);
+      message.error('生成失败：' + (data.error ?? '未知错误'));
+    } catch {
+      // ignore
+    }
+    generating.value = false;
+    closeSSE();
+  });
+
+  eventSource.onerror = () => {
+    // 连接断开后降级为轮询
+    closeSSE();
+    if (generating.value) {
+      setTimeout(() => pollProgress(id), 5000);
+    }
   };
-  return colorMap[status] || 'default';
 }
 
-// 获取状态文本
+function closeSSE() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+}
+
+async function pollProgress(id: number) {
+  if (!generating.value) return;
+  try {
+    const { requestClient } = await import('#/api/request');
+    const res: any = await requestClient.get(`/bid/submission/${id}/progress`);
+    overallProgress.value = res.overallProgress ?? 0;
+    if (res.submissionStatus === 'completed' || res.submissionStatus === 'failed') {
+      generating.value = false;
+      if (res.submissionStatus === 'completed') message.success('标书生成完成！');
+      else message.error('生成失败');
+      await loadChapterTree();
+    } else {
+      setTimeout(() => pollProgress(id), 3000);
+    }
+  } catch {
+    setTimeout(() => pollProgress(id), 5000);
+  }
+}
+
+// ─── 工具方法 ──────────────────────────────────────────────────────────────
+
+function formatDate(date?: string | Date) {
+  if (!date) return '';
+  return dayjs(date).format('YYYY-MM-DD HH:mm');
+}
+
 function getStatusText(status: string) {
-  const textMap: Record<string, string> = {
+  const map: Record<string, string> = {
     pending: '待生成',
     generating: '生成中',
     completed: '已完成',
     failed: '失败',
   };
-  return textMap[status] || '未知';
+  return map[status] ?? status;
 }
 
-// 获取进度状态
-function getProgressStatus(status: string) {
-  if (status === 'completed') return 'success';
-  if (status === 'failed') return 'exception';
-  return 'active';
-}
+// ─── 导航 ──────────────────────────────────────────────────────────────────
 
-// 工具栏操作
-function handleBold() {
-  message.info('加粗功能');
-}
-function handleItalic() {
-  message.info('斜体功能');
-}
-function handleUnderline() {
-  message.info('下划线功能');
-}
-function handleOrderedList() {
-  message.info('有序列表功能');
-}
-function handleUnorderedList() {
-  message.info('无序列表功能');
-}
-
-// 导航操作
 function handleBack() {
-  message.info('上一步');
+  router.back();
 }
+
 function handleNext() {
   message.info('下一步');
 }
+
 function handleReturn() {
-  message.info('返回项目');
+  router.push({ name: 'BidSubmissionList' });
 }
+
 function handleAddChapter() {
   message.info('添加章节功能开发中');
 }
@@ -609,15 +571,6 @@ function handleAddChapter() {
       display: flex;
       gap: 8px;
     }
-  }
-
-  .editor-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 24px;
-    background: #fff;
-    border-bottom: 1px solid #e8e8e8;
   }
 
   .editor-content {
@@ -657,6 +610,9 @@ function handleAddChapter() {
             display: flex;
             align-items: center;
             gap: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
 
           .chapter-actions {
@@ -664,6 +620,7 @@ function handleAddChapter() {
             gap: 8px;
             opacity: 0;
             transition: opacity 0.2s;
+            flex-shrink: 0;
           }
 
           &:hover .chapter-actions {
@@ -701,11 +658,6 @@ function handleAddChapter() {
 
         .editor-area {
           margin-bottom: 16px;
-
-          :deep(.ant-input) {
-            font-family: 'Microsoft YaHei', sans-serif;
-            line-height: 1.8;
-          }
         }
 
         .chapter-info {

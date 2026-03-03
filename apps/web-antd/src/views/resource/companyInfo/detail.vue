@@ -97,7 +97,7 @@ function handleSaveSuccess() {
 }
 
 onMounted(() => {
-  const id = route.params.deptId;
+  const id = route.params.id;
   if (id) {
     deptId.value = id as string;
     loadData();

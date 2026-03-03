@@ -13,6 +13,7 @@ import { patentMedalList, patentMedalRemove } from '#/api/resource/patent-medal'
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import { useListTablePreference } from '#/preferences/userPreference';
 
+import { patentFieldOptions, patentTypeList, patentStatusOptions } from './common-options';
 import PatentMedalDrawer from '../../patent-medal/modules/patent-medal-drawer.vue';
 import SectionTitle from './section-title.vue';
 
@@ -40,44 +41,52 @@ const filterData = ref([
     field: 'patentName',
     label: '专利名称',
     type: 'a-input',
-    value: '',
+    data: '',
     isCommon: true,
   },
   {
     field: 'patentType',
     label: '专利类型',
     type: 'a-select',
-    value: '',
-    isCommon: false,
-    options: [
-      { label: '发明专利', value: '1' },
-      { label: '实用新型专利', value: '2' },
-      { label: '外观设计专利', value: '3' },
-    ],
+    data: '',
+    isCommon: true,
+    options: patentTypeList,
   },
   {
     field: 'status',
     label: '状态',
     type: 'a-select',
-    value: '',
+    data: '',
     isCommon: false,
-    options: [
-      { label: '有效', value: '0' },
-      { label: '无效', value: '1' },
-    ],
+    options: patentStatusOptions,
+  },
+  {
+    field: 'field',
+    label: '领域',
+    type: 'a-select',
+    data: '',
+    isCommon: false,
+    options: patentFieldOptions,
   },
   {
     field: 'patentNumber',
     label: '专利号',
     type: 'a-input',
-    value: '',
+    data: '',
+    isCommon: false,
+  },
+  {
+    field: 'patentee',
+    label: '专利权人',
+    type: 'a-input',
+    data: '',
     isCommon: false,
   },
   {
     field: 'authorizationDate',
     label: '授权公告日',
     type: 'a-date-picker-start-end',
-    value: { start: '', end: '' },
+    data: [],
     isCommon: false,
   },
 ]);
@@ -85,23 +94,19 @@ const filterData = ref([
 // 搜索参数
 const searchParams = ref<Record<string, any>>({});
 
+// 字段映射
+const fieldMapping: Record<string, string> = {
+  authorizationDateStart: 'params[beginAuthorizationDate]',
+  authorizationDateEnd: 'params[endAuthorizationDate]',
+};
+
 // 处理筛选查询
-function handleFilterQuery(params: Record<string, any>) {
-  const processedParams: Record<string, any> = {};
-
-  Object.keys(params).forEach((key) => {
-    const value = params[key];
-    if (value === undefined || value === null || value === '') return;
-
-    if (key === 'authorizationDate' && value.start && value.end) {
-      processedParams['params[beginAuthorizationDate]'] = value.start;
-      processedParams['params[endAuthorizationDate]'] = value.end;
-    } else {
-      processedParams[key] = value;
-    }
+function handleFilterQuery(conditions: any[]) {
+  const queryParams: Record<string, any> = {};
+  conditions.forEach(({ key, value }) => {
+    queryParams[fieldMapping[key] || key] = value;
   });
-
-  searchParams.value = processedParams;
+  searchParams.value = queryParams;
   tableApi.query();
 }
 
@@ -220,14 +225,17 @@ async function handleSuccess() {
 <template>
   <div class="patent-medal-info flex flex-col gap-4 h-full overflow-hidden">
     <div class="filter-section">
-      <CommonFilter :filter-data="filterData" @query="handleFilterQuery">
-        <template #action>
-          <Button v-if="!readonly" type="primary" @click="handleAdd">
-            <PlusOutlined />
-            新增专利
-          </Button>
-        </template>
-      </CommonFilter>
+      <div class="flex items-center justify-between">
+        <CommonFilter
+          :filter-data="filterData"
+          type="both"
+          @handle-query="handleFilterQuery"
+        />
+        <Button v-if="!readonly" type="primary" @click="handleAdd">
+          <PlusOutlined />
+          新增专利
+        </Button>
+      </div>
     </div>
 
     <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">

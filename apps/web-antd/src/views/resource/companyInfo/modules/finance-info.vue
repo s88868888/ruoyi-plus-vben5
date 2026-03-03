@@ -13,6 +13,7 @@ import { financeList, financeRemove } from '#/api/resource/finance';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import { useListTablePreference } from '#/preferences/userPreference';
 
+import { financeInfoTypeOptions } from './common-options';
 import FinanceDrawer from './finance-drawer.vue';
 import SectionTitle from './section-title.vue';
 
@@ -40,21 +41,22 @@ const filterData = ref([
     field: 'financeName',
     label: '财务信息名称',
     type: 'a-input',
-    value: '',
+    data: '',
     isCommon: true,
   },
   {
     field: 'infoType',
     label: '信息类型',
-    type: 'a-input',
-    value: '',
-    isCommon: false,
+    type: 'a-select',
+    data: '',
+    isCommon: true,
+    options: financeInfoTypeOptions,
   },
   {
     field: 'financeDate',
     label: '时间范围',
     type: 'a-date-picker-start-end',
-    value: { start: '', end: '' },
+    data: [],
     isCommon: false,
   },
 ]);
@@ -62,23 +64,19 @@ const filterData = ref([
 // 搜索参数
 const searchParams = ref<Record<string, any>>({});
 
+// 字段映射
+const fieldMapping: Record<string, string> = {
+  financeDateStart: 'params[beginFinanceDate]',
+  financeDateEnd: 'params[endFinanceDate]',
+};
+
 // 处理筛选查询
-function handleFilterQuery(params: Record<string, any>) {
-  const processedParams: Record<string, any> = {};
-
-  Object.keys(params).forEach((key) => {
-    const value = params[key];
-    if (value === undefined || value === null || value === '') return;
-
-    if (key === 'financeDate' && value.start && value.end) {
-      processedParams['params[beginFinanceDate]'] = value.start;
-      processedParams['params[endFinanceDate]'] = value.end;
-    } else {
-      processedParams[key] = value;
-    }
+function handleFilterQuery(conditions: any[]) {
+  const queryParams: Record<string, any> = {};
+  conditions.forEach(({ key, value }) => {
+    queryParams[fieldMapping[key] || key] = value;
   });
-
-  searchParams.value = processedParams;
+  searchParams.value = queryParams;
   tableApi.query();
 }
 
@@ -200,14 +198,17 @@ async function handleSuccess() {
 <template>
   <div class="finance-info flex flex-col gap-4 h-full overflow-hidden">
     <div class="filter-section">
-      <CommonFilter :filter-data="filterData" @query="handleFilterQuery">
-        <template #action>
-          <Button v-if="!readonly" type="primary" @click="handleAdd">
-            <PlusOutlined />
-            新增财务信息
-          </Button>
-        </template>
-      </CommonFilter>
+      <div class="flex items-center justify-between">
+        <CommonFilter
+          :filter-data="filterData"
+          type="both"
+          @handle-query="handleFilterQuery"
+        />
+        <Button v-if="!readonly" type="primary" @click="handleAdd">
+          <PlusOutlined />
+          新增财务信息
+        </Button>
+      </div>
     </div>
 
     <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
