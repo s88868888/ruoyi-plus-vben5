@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { h, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Button, message, Progress, Tree, Dropdown, Menu, MenuItem, Modal, Input, Form, FormItem, TreeSelect, Tooltip, Popconfirm } from 'ant-design-vue';
+import { h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { Button, message, Progress, Tree, Dropdown, Menu, MenuItem, Modal, Input, Form, FormItem, TreeSelect, Tooltip, Popconfirm, Badge, Spin } from 'ant-design-vue';
 import {
   FileTextOutlined,
   ThunderboltOutlined,
@@ -12,11 +12,21 @@ import {
   PlusOutlined,
   CaretRightOutlined,
   DeleteOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
+  LoadingOutlined,
+  ClockCircleOutlined,
+  SaveOutlined,
 } from '@ant-design/icons-vue';
 import {
   getChapterTree,
+  getChapterInfo,
   generateChapterStructure,
   regenerateChapterStructure,
+  generateChapter,
+  regenerateChapter,
+  generateAllChapters,
+  saveChapterContent,
   updateChapterSort,
   addChapter,
   deleteChapter,
@@ -25,6 +35,7 @@ import {
 } from '#/api/bid/chapter';
 import { submissionInfo } from '#/api/bid/submission';
 import { useSseMessage } from '#/utils/message';
+import AiEditorComp from '#/components/ai-editor/index.vue';
 
 interface Props {
   submissionId: string;
@@ -61,6 +72,20 @@ const selectedKeys = ref<string[]>([]);
 
 // 当前选中的章节
 const currentChapter = ref<BizSubmissionChapter | null>(null);
+
+// 章节内容编辑相关
+const chapterContentValue = ref('');
+const contentSaving = ref(false);
+const contentModified = ref(false);
+const contentBodyRef = ref<HTMLElement>();
+const editorHeight = ref(500);
+
+// 批量生成相关
+const batchGenerating = ref(false);
+const batchProgress = ref(0);
+const batchMessage = ref('');
+const batchTotal = ref(0);
+const batchCurrent = ref(0);
 
 // 新建/编辑章节弹窗（共用）
 const showChapterModal = ref(false);
@@ -109,6 +134,10 @@ function stopPolling() {
 }
 
 onMounted(async () => {
+  // 计算编辑器高度
+  calcEditorHeight();
+  window.addEventListener('resize', calcEditorHeight);
+
   // 先检查后端状态，判断是否有正在进行的生成任务（刷新页面后恢复）
   try {
     const info = await submissionInfo(props.submissionId);
@@ -134,10 +163,14 @@ onMounted(async () => {
       if (!message) return;
       try {
         const parsedMessage = JSON.parse(message);
-        // 只处理章节生成相关的消息
+        // 处理章节结构生成相关的消息
         if (parsedMessage.type === 'start' || parsedMessage.type === 'progress' ||
             parsedMessage.type === 'success' || parsedMessage.type === 'error') {
           handleSseMessage(parsedMessage);
+        }
+        // 处理章节内容生成相关的消息
+        if (parsedMessage.type?.startsWith('chapter_') || parsedMessage.type?.startsWith('batch_')) {
+          handleChapterContentSseMessage(parsedMessage);
         }
       } catch (e) {
         // 忽略非 JSON 消息
@@ -148,7 +181,17 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopPolling();
+  window.removeEventListener('resize', calcEditorHeight);
 });
+
+// 计算编辑器高度：content-body 的高度减去内边距
+function calcEditorHeight() {
+  nextTick(() => {
+    if (contentBodyRef.value) {
+      editorHeight.value = contentBodyRef.value.clientHeight - 48; // 上下 padding 各 24px
+    }
+  });
+}
 
 // 处理SSE消息
 function handleSseMessage(data: any) {
@@ -331,10 +374,24 @@ function handleChapterModalCancel() {
 }
 
 // 树节点选择
-function handleTreeSelect(keys: string[], info: any) {
+async function handleTreeSelect(keys: string[], info: any) {
   if (keys.length > 0) {
     selectedKeys.value = keys;
     currentChapter.value = info.node;
+    chapterContentValue.value = info.node.chapterContent || '';
+    contentModified.value = false;
+    // 如果有 id，获取最新数据（确保内容是最新的）
+    if (info.node.id) {
+      try {
+        const detail = await getChapterInfo(String(info.node.id));
+        if (detail) {
+          currentChapter.value = { ...info.node, ...detail };
+          chapterContentValue.value = detail.chapterContent || '';
+        }
+      } catch (e) {
+        // 使用树节点数据即可
+      }
+    }
   }
 }
 
@@ -573,9 +630,190 @@ async function handleDeleteChapter(chapter: BizSubmissionChapter) {
 }
 
 // 生成章节内容
-function generateChapterContent(chapter: BizSubmissionChapter) {
-  message.info(`开始生成章节: ${chapter.chapterTitle}`);
-  // TODO: 调用后端接口生成章节内容
+async function generateChapterContent(chapter: BizSubmissionChapter) {
+  updateChapterStatusInTree(chapter.id!, 'generating');
+  try {
+    await generateChapter(String(chapter.id));
+    // SSE 会推送进度，无需等待
+  } catch (e) {
+    message.error('生成失败');
+    updateChapterStatusInTree(chapter.id!, 'failed');
+  }
+}
+
+// 重新生成章节内容
+async function handleRegenerateContent() {
+  if (!currentChapter.value) return;
+  Modal.confirm({
+    title: '确认重新生成',
+    content: '重新生成将清空当前章节内容，确定继续吗？',
+    okText: '确定',
+    cancelText: '取消',
+    async onOk() {
+      const chapter = currentChapter.value!;
+      updateChapterStatusInTree(chapter.id!, 'generating');
+      chapterContentValue.value = '';
+      contentModified.value = false;
+      try {
+        await regenerateChapter(String(chapter.id));
+      } catch (e) {
+        message.error('重新生成失败');
+        updateChapterStatusInTree(chapter.id!, 'failed');
+      }
+    },
+  });
+}
+
+// 一键生成全部章节内容
+async function handleGenerateAll() {
+  if (!props.documentConfigId) {
+    message.warning('缺少文档配置信息');
+    return;
+  }
+  Modal.confirm({
+    title: '一键生成全部章节内容',
+    content: '将对所有未生成内容的叶子章节调用AI生成内容，耗时较长，确定继续吗？',
+    okText: '开始生成',
+    cancelText: '取消',
+    async onOk() {
+      batchGenerating.value = true;
+      batchProgress.value = 0;
+      batchMessage.value = '正在启动批量生成...';
+      try {
+        await generateAllChapters({
+          submissionId: props.submissionId,
+          documentConfigId: props.documentConfigId!,
+        });
+      } catch (e) {
+        message.error('批量生成启动失败');
+        batchGenerating.value = false;
+      }
+    },
+  });
+}
+
+// 保存章节内容
+async function handleSaveContent() {
+  if (!currentChapter.value) return;
+  contentSaving.value = true;
+  try {
+    await saveChapterContent(String(currentChapter.value.id), chapterContentValue.value);
+    currentChapter.value.chapterContent = chapterContentValue.value;
+    contentModified.value = false;
+    message.success('保存成功');
+  } catch (e) {
+    message.error('保存失败');
+  } finally {
+    contentSaving.value = false;
+  }
+}
+
+// 编辑器内容变更
+function handleEditorChange(html: string) {
+  chapterContentValue.value = html;
+  contentModified.value = true;
+}
+
+// 判断是否为叶子章节（无子节点 = 需要生成内容的章节）
+function isLeafChapter(chapter: BizSubmissionChapter | null): boolean {
+  if (!chapter) return false;
+  return !chapter.children || chapter.children.length === 0;
+}
+
+// 处理章节内容 SSE 消息
+function handleChapterContentSseMessage(data: any) {
+  const { type, chapterId, message: msg, progress, total, current } = data;
+
+  switch (type) {
+    case 'chapter_start':
+      updateChapterStatusInTree(chapterId, 'generating');
+      break;
+    case 'chapter_success':
+      updateChapterStatusInTree(chapterId, 'completed');
+      // 如果是当前选中章节，刷新内容
+      if (currentChapter.value?.id === chapterId) {
+        refreshCurrentChapter();
+      }
+      break;
+    case 'chapter_error':
+      updateChapterStatusInTree(chapterId, 'failed');
+      if (currentChapter.value?.id === chapterId) {
+        message.error(msg || '章节生成失败');
+      }
+      break;
+    case 'batch_start':
+      batchGenerating.value = true;
+      batchTotal.value = total || 0;
+      batchCurrent.value = 0;
+      batchProgress.value = 0;
+      batchMessage.value = msg || '开始批量生成...';
+      break;
+    case 'batch_progress':
+      batchCurrent.value = current || 0;
+      batchTotal.value = total || 0;
+      batchProgress.value = progress || 0;
+      batchMessage.value = msg || '';
+      if (chapterId) {
+        updateChapterStatusInTree(chapterId, 'generating');
+      }
+      break;
+    case 'batch_chapter_success':
+      batchCurrent.value = current || 0;
+      batchProgress.value = progress || 0;
+      if (chapterId) {
+        updateChapterStatusInTree(chapterId, 'completed');
+        if (currentChapter.value?.id === chapterId) {
+          refreshCurrentChapter();
+        }
+      }
+      break;
+    case 'batch_success':
+      batchGenerating.value = false;
+      batchProgress.value = 100;
+      batchMessage.value = msg || '全部生成完成';
+      message.success('全部章节生成完成');
+      loadChapterTree();
+      break;
+    case 'batch_error':
+      batchGenerating.value = false;
+      batchMessage.value = msg || '批量生成失败';
+      message.error(msg || '批量生成失败');
+      break;
+  }
+}
+
+// 在树中更新章节状态
+function updateChapterStatusInTree(chapterId: number, status: string) {
+  function updateInList(list: BizSubmissionChapter[]): boolean {
+    for (const item of list) {
+      if (item.id === chapterId) {
+        item.generationStatus = status;
+        return true;
+      }
+      if (item.children?.length && updateInList(item.children)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  updateInList(chapterTree.value);
+  // 强制触发响应式更新
+  chapterTree.value = [...chapterTree.value];
+}
+
+// 刷新当前选中章节的内容
+async function refreshCurrentChapter() {
+  if (!currentChapter.value?.id) return;
+  try {
+    const info = await getChapterInfo(String(currentChapter.value.id));
+    if (info) {
+      currentChapter.value = { ...currentChapter.value, ...info };
+      chapterContentValue.value = info.chapterContent || '';
+      contentModified.value = false;
+    }
+  } catch (e) {
+    // 忽略刷新错误
+  }
 }
 
 </script>
@@ -587,6 +825,9 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
       <div class="sidebar-header">
         <span class="sidebar-title">章节目录</span>
         <div class="sidebar-actions">
+          <Tooltip title="一键生成全部内容">
+            <Button type="text" size="small" :icon="h(ThunderboltOutlined)" @click="handleGenerateAll" :disabled="batchGenerating" />
+          </Tooltip>
           <Button type="text" size="small" :icon="h(PlusOutlined)" @click="handleAddChapter" title="新建章节" />
           <Dropdown placement="bottomRight">
             <Button type="text" size="small" :icon="h(EllipsisOutlined)" />
@@ -594,7 +835,7 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
               <Menu>
                 <MenuItem key="regenerate" @click="handleRegenerate">
                   <ReloadOutlined />
-                  重新生成
+                  重新生成结构
                 </MenuItem>
                 <MenuItem key="clear" class="menu-item-danger" @click="handleClearChapters">
                   <DeleteOutlined />
@@ -607,6 +848,18 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
       </div>
 
       <div class="sidebar-content">
+        <!-- 批量生成进度条 -->
+        <div v-if="batchGenerating" class="batch-progress">
+          <div class="batch-progress-info">
+            <LoadingOutlined spin />
+            <span>{{ batchMessage }}</span>
+          </div>
+          <Progress :percent="batchProgress" :show-info="true" size="small" />
+          <div v-if="batchTotal > 0" class="batch-progress-detail">
+            {{ batchCurrent }} / {{ batchTotal }} 章节
+          </div>
+        </div>
+
         <div v-if="loading" class="loading-state">
           <span>加载中...</span>
         </div>
@@ -643,16 +896,23 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
               <span class="tree-node-title">
                 <span class="chapter-no">{{ node.chapterNo }}</span>
                 {{ node.chapterTitle }}
+                <span v-if="isLeafChapter(node)" class="chapter-status-icon">
+                  <CheckCircleFilled v-if="node.generationStatus === 'completed'" style="color: #52c41a; font-size: 12px;" />
+                  <LoadingOutlined v-else-if="node.generationStatus === 'generating'" spin style="color: #1677ff; font-size: 12px;" />
+                  <CloseCircleFilled v-else-if="node.generationStatus === 'failed'" style="color: #ff4d4f; font-size: 12px;" />
+                  <ClockCircleOutlined v-else style="color: #d9d9d9; font-size: 12px;" />
+                </span>
               </span>
               <div class="tree-node-actions" @click.stop>
-                <Button
-                  v-if="node.generationStatus === 'pending' || !node.generationStatus"
-                  type="text"
-                  size="small"
-                  :icon="h(SyncOutlined)"
-                  title="生成状态"
-                  @click="generateChapterContent(node)"
-                />
+                <Tooltip title="生成内容">
+                  <Button
+                    v-if="isLeafChapter(node) && node.generationStatus !== 'generating'"
+                    type="text"
+                    size="small"
+                    :icon="h(ThunderboltOutlined)"
+                    @click="generateChapterContent(node)"
+                  />
+                </Tooltip>
                 <Tooltip
                   v-if="node.reasonDescription"
                   :title="node.reasonDescription"
@@ -711,39 +971,96 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
           </div>
         </div>
         <div class="header-actions">
+          <span v-if="contentModified" class="modified-hint">* 内容已修改</span>
+          <Button :loading="contentSaving" :disabled="!contentModified" @click="handleSaveContent" v-if="isLeafChapter(currentChapter) && (currentChapter?.chapterContent || chapterContentValue)">
+            <template #icon><SaveOutlined /></template>
+            保存
+          </Button>
+          <Button @click="handleRegenerateContent" v-if="isLeafChapter(currentChapter) && (currentChapter?.chapterContent || chapterContentValue)">
+            <template #icon><ReloadOutlined /></template>
+            重新生成
+          </Button>
           <Button @click="handleBack">返回</Button>
           <Button type="primary" @click="handleNext">下一步</Button>
         </div>
       </div>
 
-      <div class="content-body">
+      <div ref="contentBodyRef" class="content-body">
         <div v-if="currentChapter" class="chapter-detail">
-          <div class="chapter-meta">
-            <span>章节编号: {{ currentChapter.chapterNo }}</span>
-            <span>层级: {{ currentChapter.chapterLevel }}</span>
-            <span>状态: {{ currentChapter.generationStatus || '待生成' }}</span>
-          </div>
-
-          <!-- 显示生成说明 -->
-          <div v-if="currentChapter.reasonDescription" class="chapter-reason">
-            <div class="reason-title">生成说明</div>
-            <div class="reason-content">{{ currentChapter.reasonDescription }}</div>
-          </div>
-
-          <div class="chapter-content">
-            <div v-if="currentChapter.chapterContent" class="content-preview">
-              {{ currentChapter.chapterContent }}
+          <!-- 父级章节（目录节点）：不生成内容 -->
+          <template v-if="!isLeafChapter(currentChapter)">
+            <div class="content-empty">
+              <FileTextOutlined style="font-size: 48px; color: #d9d9d9; margin-bottom: 16px;" />
+              <p>该章节为目录节点，请选择子章节查看内容</p>
             </div>
+          </template>
+
+          <!-- 叶子章节：可生成/查看/编辑内容 -->
+          <template v-else>
+            <!-- 章节元信息和生成说明：仅在未生成内容时显示 -->
+            <template v-if="!currentChapter.chapterContent && !chapterContentValue">
+              <div class="chapter-meta">
+                <span>章节编号: {{ currentChapter.chapterNo }}</span>
+                <span>层级: {{ currentChapter.chapterLevel }}</span>
+                <span>
+                  状态:
+                  <CheckCircleFilled v-if="currentChapter.generationStatus === 'completed'" style="color: #52c41a" />
+                  <LoadingOutlined v-else-if="currentChapter.generationStatus === 'generating'" spin style="color: #1677ff" />
+                  <CloseCircleFilled v-else-if="currentChapter.generationStatus === 'failed'" style="color: #ff4d4f" />
+                  <ClockCircleOutlined v-else style="color: #d9d9d9" />
+                  {{ currentChapter.generationStatus === 'completed' ? '已完成' : currentChapter.generationStatus === 'generating' ? '生成中' : currentChapter.generationStatus === 'failed' ? '失败' : '待生成' }}
+                </span>
+              </div>
+
+              <div v-if="currentChapter.reasonDescription" class="chapter-reason">
+                <div class="reason-title">生成说明</div>
+                <div class="reason-content">{{ currentChapter.reasonDescription }}</div>
+              </div>
+            </template>
+
+            <!-- 错误信息 -->
+            <div v-if="currentChapter.generationStatus === 'failed' && currentChapter.errorMessage" class="chapter-error">
+              <CloseCircleFilled style="color: #ff4d4f" />
+              <span>{{ currentChapter.errorMessage }}</span>
+              <Button type="link" size="small" @click="generateChapterContent(currentChapter)">重新生成</Button>
+            </div>
+
+            <!-- 生成中状态 -->
+            <div v-if="currentChapter.generationStatus === 'generating'" class="chapter-generating">
+              <Spin>
+                <template #indicator>
+                  <LoadingOutlined style="font-size: 24px" spin />
+                </template>
+              </Spin>
+              <p>AI 正在生成章节内容，请稍候...</p>
+            </div>
+
+            <!-- 已有内容：AiEditor -->
+            <div v-else-if="currentChapter.chapterContent || chapterContentValue" class="chapter-content">
+              <AiEditorComp
+                :key="currentChapter.id"
+                v-model="chapterContentValue"
+                :height="editorHeight"
+                placeholder="章节内容..."
+                @change="handleEditorChange"
+              />
+            </div>
+
+            <!-- 无内容：生成按钮 -->
             <div v-else class="content-empty">
+              <FileTextOutlined style="font-size: 48px; color: #d9d9d9; margin-bottom: 16px;" />
               <p>该章节内容尚未生成</p>
-              <Button type="primary">生成此章节</Button>
+              <Button type="primary" @click="generateChapterContent(currentChapter)">
+                <ThunderboltOutlined />
+                生成此章节
+              </Button>
             </div>
-          </div>
+          </template>
         </div>
         <div v-else class="welcome-state">
           <FileTextOutlined class="welcome-icon" />
           <p class="welcome-text">请从左侧选择章节查看内容</p>
-          <p class="welcome-hint">或使用 AI 一键生成章节结构</p>
+          <p class="welcome-hint">或点击左上角闪电图标一键生成全部章节</p>
         </div>
       </div>
     </div>
@@ -836,6 +1153,31 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
       overflow-y: scroll;
       scrollbar-gutter: stable;
       padding: 12px;
+
+      .batch-progress {
+        padding: 12px;
+        background: #f0f7ff;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        border: 1px solid hsl(var(--primary) / 0.2);
+
+        .batch-progress-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+          font-size: 13px;
+          color: hsl(var(--primary));
+          font-weight: 500;
+        }
+
+        .batch-progress-detail {
+          font-size: 12px;
+          color: #999;
+          margin-top: 4px;
+          text-align: right;
+        }
+      }
 
       .loading-state {
         display: flex;
@@ -981,6 +1323,12 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
               font-weight: 600;
               flex-shrink: 0;
             }
+
+            .chapter-status-icon {
+              flex-shrink: 0;
+              display: inline-flex;
+              align-items: center;
+            }
           }
 
           .tree-node-actions {
@@ -1065,72 +1413,98 @@ function generateChapterContent(chapter: BizSubmissionChapter) {
       .header-actions {
         display: flex;
         gap: 8px;
+        align-items: center;
+
+        .modified-hint {
+          color: #faad14;
+          font-size: 13px;
+          margin-right: 4px;
+        }
       }
     }
 
     .content-body {
       flex: 1;
-      overflow-y: auto;
+      overflow: hidden;
       padding: 24px;
 
       .chapter-detail {
         .chapter-meta {
           display: flex;
           gap: 24px;
-          padding: 16px;
+          padding: 12px 16px;
           background: #fafafa;
           border-radius: 8px;
-          margin-bottom: 24px;
-          font-size: 14px;
+          margin-bottom: 16px;
+          font-size: 13px;
           color: #666;
+          align-items: center;
         }
 
         .chapter-reason {
-          margin-bottom: 24px;
-          padding: 16px;
+          margin-bottom: 16px;
+          padding: 12px 16px;
           background: #f0f7ff;
           border-left: 4px solid hsl(var(--primary));
           border-radius: 4px;
 
           .reason-title {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             color: hsl(var(--primary));
-            margin-bottom: 8px;
+            margin-bottom: 4px;
           }
 
           .reason-content {
-            font-size: 14px;
-            line-height: 1.8;
+            font-size: 13px;
+            line-height: 1.6;
             color: rgba(0, 0, 0, 0.88);
           }
         }
 
-        .chapter-content {
-          .content-preview {
-            padding: 20px;
-            background: #fafafa;
-            border-radius: 8px;
-            line-height: 1.8;
+        .chapter-error {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 16px;
+          background: #fff2f0;
+          border: 1px solid #ffccc7;
+          border-radius: 8px;
+          margin-bottom: 16px;
+          font-size: 13px;
+          color: #ff4d4f;
+        }
+
+        .chapter-generating {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 80px 20px;
+          text-align: center;
+
+          p {
+            margin-top: 16px;
+            color: #666;
             font-size: 14px;
-            color: rgba(0, 0, 0, 0.88);
-            white-space: pre-wrap;
-            word-break: break-word;
           }
+        }
 
-          .content-empty {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 80px 20px;
-            text-align: center;
+        .chapter-content {
+        }
 
-            p {
-              color: #999;
-              margin-bottom: 16px;
-              font-size: 14px;
-            }
+        .content-empty {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 80px 20px;
+          text-align: center;
+
+          p {
+            color: #999;
+            margin-bottom: 16px;
+            font-size: 14px;
           }
         }
       }

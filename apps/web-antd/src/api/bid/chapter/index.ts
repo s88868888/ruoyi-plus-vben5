@@ -152,3 +152,13 @@ export async function aiAssist(prompt: string) {
   return requestClient.post<string>('/bid/submission/chapter/ai/assist', { prompt });
 }
 
+/**
+ * 一键生成所有章节内容
+ */
+export async function generateAllChapters(params: {
+  submissionId: string;
+  documentConfigId: string;
+}) {
+  return requestClient.post<void>('/bid/submission/chapter/generate-all', null, { params });
+}
+

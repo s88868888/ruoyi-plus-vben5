@@ -1,11 +1,11 @@
 <template>
-  <div ref="divRef" :style="{ height: `${height}px`, border: '1px solid #d9d9d9', borderRadius: '6px' }" />
+  <div ref="divRef" :style="containerStyle" />
 </template>
 
 <script setup lang="ts">
 import { AiEditor } from 'aieditor';
 import 'aieditor/dist/style.css';
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { useAccessStore } from '@vben/stores';
 
@@ -14,6 +14,17 @@ const props = defineProps<{
   height?: number;
   placeholder?: string;
 }>();
+
+const containerStyle = computed(() => {
+  const base: Record<string, string> = {
+    border: '1px solid #d9d9d9',
+    borderRadius: '6px',
+  };
+  if (props.height) {
+    base.height = `${props.height}px`;
+  }
+  return base;
+});
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
