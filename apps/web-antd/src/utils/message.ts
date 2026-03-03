@@ -8,6 +8,9 @@ const { apiURL, clientId, sseEnable, websocketEnable } = useAppConfig(
   import.meta.env.PROD,
 );
 
+// SSE 单例：全局只创建一个连接，所有地方共享同一个 data ref
+let sseInstance: ReturnType<typeof useEventSource> | null = null;
+
 export function useSseMessage() {
   /**
    * 未开启 不监听
@@ -16,12 +19,17 @@ export function useSseMessage() {
     console.warn('当前未开启sse.');
     return;
   }
+
+  if (sseInstance) {
+    return sseInstance;
+  }
+
   const accessStore = useAccessStore();
   const token = accessStore.accessToken;
 
   const sseAddr = `${apiURL}/resource/sse?clientid=${clientId}&Authorization=Bearer ${token}`;
 
-  const sseReturnData = useEventSource(sseAddr, [], {
+  sseInstance = useEventSource(sseAddr, [], {
     autoReconnect: {
       delay: 1000,
       onFailed() {
@@ -31,7 +39,7 @@ export function useSseMessage() {
     },
   });
 
-  return sseReturnData;
+  return sseInstance;
 }
 
 function isUrl(path?: string) {

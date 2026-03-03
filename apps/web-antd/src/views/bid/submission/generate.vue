@@ -78,17 +78,6 @@ const documentTypeMap: Record<string, string> = {
   <div class="generate-page">
     <!-- 顶部 -->
     <div class="page-header">
-      <div class="project-info">
-        <h2>{{ submissionData?.projectName }}</h2>
-        <div class="project-meta">
-          <span v-if="submissionData?.bidOrg" class="project-org">{{ submissionData?.bidOrg }}</span>
-          <span v-if="currentDocumentConfig" class="document-info">
-            {{ currentDocumentConfig.companyName }} -
-            {{ documentTypeMap[currentDocumentConfig.documentType || ''] }}
-            (第{{ currentDocumentConfig.documentNo }}份)
-          </span>
-        </div>
-      </div>
       <div class="steps-wrap">
         <Steps
           :current="currentStep"
@@ -107,6 +96,8 @@ const documentTypeMap: Record<string, string> = {
         v-if="currentStep === 0"
         :submission-id="submissionId"
         :document-config-id="documentConfigId"
+        :submission-data="submissionData"
+        :document-config="currentDocumentConfig"
         @structure-generated="handleStructureGenerated"
         @next="handleNext"
         @back="handleBack"
@@ -131,8 +122,8 @@ const documentTypeMap: Record<string, string> = {
 
   .page-header {
     display: flex;
-    flex-direction: column;
-    padding: 12px 16px 8px;
+    justify-content: center;
+    padding: 8px 16px;
     background: #fff;
     border-bottom: 1px solid #f0f0f0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -140,40 +131,10 @@ const documentTypeMap: Record<string, string> = {
     margin: 10px 16px 0 16px;
     border-radius: 8px;
 
-    .project-info {
-
-      h2 {
-        margin: 0 0 4px;
-        font-size: 16px;
-        font-weight: 600;
-        color: #1a1a1a;
-      }
-
-      .project-meta {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .project-org {
-        color: #999;
-        font-size: 13px;
-      }
-
-      .document-info {
-        color: #1890ff;
-        font-size: 13px;
-        font-weight: 500;
-        padding: 2px 8px;
-        background: #e6f4ff;
-        border-radius: 4px;
-      }
-    }
-
     .steps-wrap {
       display: flex;
       justify-content: center;
-
+      padding: 10px 0px;
       padding-bottom: 4px;
 
       .steps-bar {
@@ -211,8 +172,8 @@ const documentTypeMap: Record<string, string> = {
 
         // 当前步骤使用主题色
         :deep(.ant-steps-item-process .ant-steps-item-icon) {
-          background: #1890ff;
-          border-color: #1890ff;
+          background: hsl(var(--primary));
+          border-color: hsl(var(--primary));
         }
 
         :deep(.ant-steps-item-finish .ant-steps-item-icon) {

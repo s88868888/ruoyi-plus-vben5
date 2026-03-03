@@ -116,6 +116,7 @@ export async function addChapter(params: {
   parentId: string;
   chapterTitle: string;
   chapterType: string;
+  reasonDescription?: string;
 }) {
   return requestClient.postWithMsg('/bid/submission/chapter', null, { params });
 }
@@ -125,4 +126,21 @@ export async function addChapter(params: {
  */
 export async function deleteChapter(id: string) {
   return requestClient.deleteWithMsg(`/bid/submission/chapter/${id}`);
+}
+
+/**
+ * 清空文档下所有章节
+ */
+export async function clearChapters(params: {
+  submissionId: string;
+  documentId: string;
+}) {
+  return requestClient.deleteWithMsg('/bid/submission/chapter/clear', { params });
+}
+
+/**
+ * 批量更新章节排序
+ */
+export async function updateChapterSort(items: { id: number; parentId: number; sortOrder: number; chapterLevel: number; chapterNo: string }[]) {
+  return requestClient.put('/bid/submission/chapter/sort', items);
 }
