@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { BizBidProject } from '#/api/bid/project';
+import type { BizDocumentConfig } from '#/api/bid/documentConfig';
 import type { AnchorNavItem } from '#/components/anchor-nav';
+import type { BizBidSubmission } from '#/api/bid/submission';
 
 import { computed, onMounted, ref, onUnmounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import { MarkdownPreviewer } from '@vben/common-ui';
-import { Card, Empty, Space, Spin, Tag, Button } from 'ant-design-vue';
+import { Card, Empty, Spin, Tag, Button, Space } from 'ant-design-vue';
 import {
   DownloadOutlined,
   ExpandOutlined,
@@ -16,10 +18,13 @@ import {
   TeamOutlined,
   CheckCircleOutlined,
   TrophyOutlined,
+  RocketOutlined,
 } from '@ant-design/icons-vue';
 
 import { AnchorNav } from '#/components/anchor-nav';
 import { bidProjectInfo } from '#/api/bid/project';
+import { getDocumentConfigList } from '#/api/bid/documentConfig';
+import { submissionList } from '#/api/bid/submission';
 import { useDetailPagePreference } from '#/preferences/userPreference';
 import {
   formatCnyAmount,
@@ -30,6 +35,7 @@ import {
 } from './utils/format';
 
 const route = useRoute();
+const router = useRouter();
 
 // 项目详情数据，从 query 参数读取初始 loading 状态
 const projectDetail = ref<BizBidProject>({
@@ -49,6 +55,7 @@ const layoutPreference = useDetailPagePreference();
 // 锚点导航项配置
 const anchorNavItems = ref<AnchorNavItem[]>([
   { key: 'basic-info', title: '基本信息' },
+  { key: 'submission-progress', title: '投标进度' },
   { key: 'bid-info', title: '招标信息' },
   { key: 'contact-info', title: '联系信息' },
   { key: 'match-analysis', title: '契合度分析' },
@@ -165,6 +172,122 @@ const remainingDaysDisplay = computed(() =>
 const aiAnalysisContent = ref('');
 const scoringCriteriaContent = ref('');
 const matchAnalysisContent = ref('');
+
+// 投标进度（基于标书配置汇总展示）
+const submissions = ref<BizBidSubmission[]>([]);
+const submissionsLoading = ref(false);
+const progressConfigs = ref<BizDocumentConfig[]>([]);
+
+
+const workflowStageLabels: Record<string, string> = {
+  pending_config: '待配置',
+  configured: '已配置',
+  structure_generated: '结构已生成',
+  generating: '生成中',
+  completed: '已完成',
+  failed: '失败',
+};
+
+const workflowStageColors: Record<string, string> = {
+  pending_config: 'default',
+  configured: 'blue',
+  structure_generated: 'cyan',
+  generating: 'processing',
+  completed: 'success',
+  failed: 'error',
+};
+
+const documentTypeLabels: Record<string, string> = {
+  commercial: '商务标',
+  technical: '技术标',
+  complete: '整本标书',
+};
+
+const configStatusLabels: Record<string, string> = {
+  pending: '待生成',
+  generating: '生成中',
+  completed: '已完成',
+  failed: '失败',
+};
+
+const configsBySubmission = computed<Record<string, BizDocumentConfig[]>>(() => {
+  const map: Record<string, BizDocumentConfig[]> = {};
+  for (const cfg of progressConfigs.value) {
+    const key = String(cfg.bidSubmissionId ?? '');
+    if (!key) continue;
+    if (!map[key]) map[key] = [];
+    map[key].push(cfg);
+  }
+  return map;
+});
+
+function getSubmissionConfigs(sub: BizBidSubmission) {
+  return configsBySubmission.value[String(sub.id)] || [];
+}
+
+function getDisplayWorkflowStage(sub: BizBidSubmission) {
+  const configs = getSubmissionConfigs(sub);
+  if (configs.length === 0) {
+    return sub.workflowStage || 'pending_config';
+  }
+  const statuses = configs.map((cfg) => cfg.generationStatus || 'pending');
+  if (statuses.some((s) => s === 'generating')) return 'generating';
+  if (statuses.every((s) => s === 'completed')) return 'completed';
+  if (statuses.some((s) => s === 'failed')) return 'failed';
+  return 'configured';
+}
+
+function canConfigSubmission(sub: BizBidSubmission) {
+  const stage = getDisplayWorkflowStage(sub);
+  return stage === 'pending_config' || stage === 'configured';
+}
+
+function getChapterCountText(cfg: BizDocumentConfig) {
+  const total = cfg.totalChapters ?? 0;
+  const done = cfg.completedChapters ?? 0;
+  return `${done} / ${total}`;
+}
+
+function getConfigProgress(cfg: BizDocumentConfig) {
+  if (cfg.generationStatus === 'completed') return 100;
+  const total = cfg.totalChapters ?? 0;
+  const done = cfg.completedChapters ?? 0;
+  if (total > 0) {
+    return Math.min(100, Math.floor((done / total) * 100));
+  }
+  return cfg.generationProgress ?? 0;
+}
+
+
+async function loadSubmissions() {
+  const projectId = route.params.id as string;
+  if (!projectId) return;
+  submissionsLoading.value = true;
+  try {
+    const res = await submissionList({ bidProjectId: projectId as any, pageNum: 1, pageSize: 100 });
+    const list = (res as any).rows || [];
+    submissions.value = list;
+
+    const configList = await Promise.all(
+      list.map((sub: BizBidSubmission) => getDocumentConfigList(sub.id as any).catch(() => [] as BizDocumentConfig[])),
+    );
+    progressConfigs.value = configList.flat();
+  } catch {
+    submissions.value = [];
+    progressConfigs.value = [];
+  } finally {
+    submissionsLoading.value = false;
+  }
+}
+
+
+function handleGoConfig(sub: BizBidSubmission) {
+  router.push(`/bid/submission/config/${sub.id}`);
+}
+
+function handleViewSubmission(sub: BizBidSubmission) {
+  router.push(`/bid/submission/detail/${sub.id}`);
+}
 
 // AI 分析全屏
 const isFullscreen = ref(false);
@@ -363,6 +486,7 @@ function stopAutoRefresh() {
 
 onMounted(async () => {
   await loadProjectDetail();
+  loadSubmissions();
   if (
     projectDetail.value.aiAnalysisStatus === 'analyzing' ||
     projectDetail.value.scoringCriteriaStatus === 'extracting' ||
@@ -470,6 +594,76 @@ async function handleVisibilityChange() {
 
       <!-- 内容卡片 -->
       <div class="cards-wrapper">
+          <!-- 卡片1：投标进度 -->
+          <Card id="submission-progress" class="mb-4 detail-card" :style="cardRadiusStyle">
+            <template #title>
+              <span class="card-title">
+                <RocketOutlined class="card-title-icon" />
+                投标进度
+              </span>
+            </template>
+            <Spin :spinning="submissionsLoading">
+              <div v-if="submissions.length === 0 && !submissionsLoading" class="py-8 text-center text-gray-400">
+                暂无投标项目
+              </div>
+              <div v-else class="submission-list">
+                <div v-for="sub in submissions" :key="sub.id" class="submission-section">
+                  <!-- 投标项目行：名称 + 阶段 + 操作 -->
+                  <div class="submission-header">
+                    <span class="submission-name">{{ sub.projectName || '-' }}</span>
+                    <Tag :color="workflowStageColors[getDisplayWorkflowStage(sub)] || 'default'">
+                      {{ workflowStageLabels[getDisplayWorkflowStage(sub)] || '待配置' }}
+                    </Tag>
+                    <span class="submission-actions">
+                      <Button
+                        v-if="canConfigSubmission(sub)"
+                        type="link"
+                        size="small"
+                        @click="handleGoConfig(sub)"
+                      >
+                        配置
+                      </Button>
+                      <Button type="link" size="small" @click="handleViewSubmission(sub)">查看</Button>
+                    </span>
+                  </div>
+                  <!-- 标书配置 table -->
+                  <table
+                    v-if="getSubmissionConfigs(sub).length > 0"
+                    class="config-table"
+                  >
+                    <thead>
+                      <tr>
+                        <th>公司名称</th>
+                        <th>标书类型</th>
+                        <th>生成进度</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="cfg in getSubmissionConfigs(sub)"
+                        :key="cfg.id"
+                      >
+                        <td>{{ cfg.companyName || '-' }}</td>
+                        <td>
+                          <Tag :color="cfg.documentType === 'commercial' ? 'blue' : cfg.documentType === 'technical' ? 'green' : 'orange'">
+                            {{ documentTypeLabels[cfg.documentType || ''] || cfg.documentType }}
+                          </Tag>
+                        </td>
+                        <td>
+                          <Tag :color="cfg.generationStatus === 'completed' ? 'success' : cfg.generationStatus === 'generating' ? 'processing' : cfg.generationStatus === 'failed' ? 'error' : 'default'">
+                            {{ configStatusLabels[cfg.generationStatus || 'pending'] || '待生成' }}
+                          </Tag>
+                          <span v-if="getConfigProgress(cfg) > 0" class="config-progress">{{ getConfigProgress(cfg) }}%</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-else class="submission-no-config">暂无标书配置</div>
+                </div>
+              </div>
+            </Spin>
+          </Card>
+
           <!-- 卡片2：招标信息 -->
           <Card id="bid-info" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
@@ -603,7 +797,7 @@ async function handleVisibilityChange() {
           </Card>
 
           <!-- 卡片6：AI 分析 -->
-          <Card id="ai-analysis" class="detail-card" :style="cardRadiusStyle" :class="{ 'ai-fullscreen-card': isFullscreen }">
+          <Card id="ai-analysis" class="detail-card mb-4" :style="cardRadiusStyle" :class="{ 'ai-fullscreen-card': isFullscreen }">
             <template #title>
               <span class="card-title">
                 <RobotOutlined class="card-title-icon" />
@@ -882,6 +1076,83 @@ async function handleVisibilityChange() {
   width: 100%;
 }
 
+/* ========== 投标进度 ========== */
+.submission-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.submission-section {
+  /* 多个投标项目之间分隔 */
+}
+
+.submission-section + .submission-section {
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.submission-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.submission-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.submission-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.submission-no-config {
+  color: #909399;
+  font-size: 13px;
+  padding: 4px 0 2px;
+}
+
+/* 标书配置 table */
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.config-table th {
+  background: #fafafa;
+  color: #909399;
+  font-weight: 500;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.config-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f5f5f5;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.config-progress {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.config-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.config-table tbody tr:hover td {
+  background: #f5f7fa;
+}
+
 /* ========== 响应式 ========== */
 @media (max-width: 1200px) {
   .field-grid {
@@ -897,6 +1168,16 @@ async function handleVisibilityChange() {
 
   .field-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .submission-header {
+    flex-wrap: wrap;
+  }
+
+  .submission-actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 </style>

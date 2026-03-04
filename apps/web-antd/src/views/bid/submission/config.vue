@@ -7,8 +7,8 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
 import { getVxePopupContainer } from '@vben/utils';
-import { Button, message, Popconfirm, Space, Tag, Dropdown, Menu, MenuItem } from 'ant-design-vue';
-import { FileTextOutlined, PlusOutlined, EllipsisOutlined } from '@ant-design/icons-vue';
+import { Button, message, Popconfirm, Space, Tag, Dropdown, Menu, MenuItem, Progress, Tooltip } from 'ant-design-vue';
+import { FileTextOutlined, PlusOutlined, EllipsisOutlined, CheckCircleOutlined, LoadingOutlined, CloseCircleOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { addConfig, deleteConfig, getDocumentConfigList } from '#/api/bid/documentConfig';
@@ -34,11 +34,15 @@ const tableCssVars = computed(() => ({
 const allConfigs = ref<BizDocumentConfig[]>([]);
 
 const documentStats = computed(() => {
-  const stats = { technical: 0, commercial: 0, complete: 0, total: 0 };
+  const stats = { technical: 0, commercial: 0, complete: 0, total: 0, generated: 0, generating: 0, pending: 0 };
   allConfigs.value.forEach((config) => {
     if (config.documentType === 'technical') stats.technical++;
     else if (config.documentType === 'commercial') stats.commercial++;
     else if (config.documentType === 'complete') stats.complete++;
+
+    if (config.generationStatus === 'completed') stats.generated++;
+    else if (config.generationStatus === 'generating') stats.generating++;
+    else stats.pending++;
   });
   stats.total = stats.technical + stats.commercial + stats.complete;
   return stats;
@@ -101,9 +105,15 @@ const gridOptions: VxeGridProps = {
       formatter: ({ cellValue }: any) => cellValue || '-',
     },
     {
+      field: 'generationStatus',
+      title: '生成状态',
+      width: 180,
+      slots: { default: 'generationStatus' },
+    },
+    {
       field: 'action',
       title: '操作',
-      width: 120,
+      width: 140,
       fixed: 'right',
       slots: { default: 'action' },
     },
@@ -292,6 +302,21 @@ onMounted(() => {
             <div class="stat-label">总数</div>
             <div class="stat-value stat-value-total">{{ documentStats.total }}</div>
           </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-label">已生成</div>
+            <div class="stat-value" style="color: #52c41a">{{ documentStats.generated }}</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-label">生成中</div>
+            <div class="stat-value" style="color: #1890ff">{{ documentStats.generating }}</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-label">待生成</div>
+            <div class="stat-value" style="color: #909399">{{ documentStats.pending }}</div>
+          </div>
         </div>
       </div>
 
@@ -317,10 +342,48 @@ onMounted(() => {
               </Tag>
             </template>
 
+            <template #generationStatus="{ row }">
+              <div class="gen-status-cell">
+                <template v-if="row.generationStatus === 'completed'">
+                  <Tag color="success">
+                    <CheckCircleOutlined />
+                    已完成
+                  </Tag>
+                  <span v-if="row.totalChapters" class="gen-chapters">
+                    {{ row.completedChapters }}/{{ row.totalChapters }} 章
+                  </span>
+                </template>
+                <template v-else-if="row.generationStatus === 'generating'">
+                  <Tag color="processing">
+                    <LoadingOutlined />
+                    生成中
+                  </Tag>
+                  <Progress
+                    v-if="row.generationProgress !== undefined"
+                    :percent="row.generationProgress"
+                    size="small"
+                    :show-info="false"
+                    style="width: 80px; display: inline-block; margin-left: 4px"
+                  />
+                </template>
+                <template v-else-if="row.generationStatus === 'failed'">
+                  <Tooltip :title="row.errorMessage || '生成失败'">
+                    <Tag color="error">
+                      <CloseCircleOutlined />
+                      失败
+                    </Tag>
+                  </Tooltip>
+                </template>
+                <template v-else>
+                  <Tag color="default">待生成</Tag>
+                </template>
+              </div>
+            </template>
+
             <template #action="{ row }">
               <Space>
                 <ghost-button @click.stop="handleStartGenerate(row)">
-                  开始生成
+                  {{ row.generationStatus === 'completed' ? '查看' : '开始生成' }}
                 </ghost-button>
                 <Dropdown placement="bottomRight">
                   <template #overlay>
@@ -514,5 +577,18 @@ onMounted(() => {
 .table-style-wrapper :deep(.vxe-body--column) {
   padding-top: var(--list-cell-padding-y) !important;
   padding-bottom: var(--list-cell-padding-y) !important;
+}
+
+/* 生成状态单元格 */
+.gen-status-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.gen-chapters {
+  color: #909399;
+  font-size: 12px;
 }
 </style>

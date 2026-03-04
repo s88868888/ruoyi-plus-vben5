@@ -55,15 +55,17 @@ export const useNotifyStore = defineStore(
         // 尝试解析消息，判断是否为章节生成的进度消息
         try {
           const parsedMessage = JSON.parse(message);
-          // 如果是章节生成的进度消息（start或progress类型），不显示通知
-          // 但不要置空 data.value，让其他监听者也能收到消息
-          if (parsedMessage.type === 'start' || parsedMessage.type === 'progress') {
-            console.log('章节生成进度消息，不显示通知');
+          const msgType: string = parsedMessage.type || '';
+          // 章节生成相关的所有进度消息（batch_* / chapter_* / start / progress）不显示通知
+          // 让其他监听者（step2-generate.vue）处理这些消息
+          if (
+            msgType === 'start' || msgType === 'progress' ||
+            msgType.startsWith('batch_') || msgType.startsWith('chapter_')
+          ) {
             return;
           }
           // 如果是章节生成的成功消息，显示卡片通知
-          if (parsedMessage.type === 'success') {
-            console.log('章节生成成功消息，显示通知');
+          if (msgType === 'success') {
             notification.success({
               description: parsedMessage.message || '操作成功',
               duration: 3,
@@ -82,8 +84,7 @@ export const useNotifyStore = defineStore(
             return;
           }
           // 如果是章节生成的错误消息，显示错误通知
-          if (parsedMessage.type === 'error') {
-            console.log('章节生成错误消息，显示通知');
+          if (msgType === 'error') {
             notification.error({
               description: parsedMessage.message || '操作失败',
               duration: 3,
@@ -99,8 +100,6 @@ export const useNotifyStore = defineStore(
               userId: userId.value,
             });
 
-            // 需要手动置空 vue3在值相同时不会触发watch
-            data.value = null;
             return;
           }
         } catch (e) {

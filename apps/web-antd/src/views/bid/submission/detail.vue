@@ -27,6 +27,21 @@
               {{ getStatusText(detailData?.submissionStatus) }}
             </ATag>
           </ADescriptionsItem>
+          <!-- 工作流阶段 Steps -->
+          <ADescriptionsItem label="工作流阶段" :span="2">
+            <ASteps
+              :current="getWorkflowStepIndex(detailData?.workflowStage)"
+              :status="detailData?.workflowStage === 'failed' ? 'error' : 'process'"
+              size="small"
+              :items="[
+                { title: '待配置' },
+                { title: '已配置' },
+                { title: '结构已生成' },
+                { title: '内容生成中' },
+                { title: '已完成' },
+              ]"
+            />
+          </ADescriptionsItem>
           <ADescriptionsItem label="生成进度" :span="2">
             <AProgress
               :percent="detailData?.generationProgress || 0"
@@ -327,6 +342,17 @@ function handleRetry(record: any) {
 // 返回
 function handleBack() {
   router.back();
+}
+
+// 获取工作流阶段步骤索引
+function getWorkflowStepIndex(stage?: string) {
+  const stages = ['pending_config', 'configured', 'structure_generated', 'generating', 'completed'];
+  if (stage === 'failed') {
+    // failed 时显示在当前停留的步骤上（用 generating 或 completed 之前的步骤）
+    return 3;
+  }
+  const idx = stages.indexOf(stage || 'pending_config');
+  return idx >= 0 ? idx : 0;
 }
 
 // 获取状态颜色

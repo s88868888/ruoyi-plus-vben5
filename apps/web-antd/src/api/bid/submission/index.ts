@@ -16,6 +16,7 @@ export interface BizBidSubmission {
   bidMethod?: string;
   projectDesc?: string;
   submissionStatus?: string;
+  workflowStage?: string;
   generationProgress?: number;
   selectedCompanies?: string;
   generationConfig?: string;
@@ -33,10 +34,15 @@ export interface BizBidSubmission {
 }
 
 /**
+ * 投标项目 VO（别名，detail.vue 中使用）
+ */
+export type BizBidSubmissionVO = BizBidSubmission;
+
+/**
  * 投标项目查询参数
  */
 export interface BizBidSubmissionQuery extends BasePageQuery {
-  bidProjectId?: number;
+  bidProjectId?: number | string;
   projectName?: string;
   submissionStatus?: string;
 }
@@ -119,7 +125,7 @@ export const startSubmissionGeneration = submissionGenerate;
 /**
  * 取消生成
  */
-export async function cancelSubmissionGeneration(id: number) {
+export async function cancelSubmissionGeneration(id: string | number) {
   return requestClient.postWithMsg(`/bid/submission/${id}/cancel`);
 }
 
@@ -131,8 +137,41 @@ export async function regenerateSubmission(id: number) {
 }
 
 /**
+ * 重新生成（别名）
+ */
+export const submissionRegenerate = regenerateSubmission;
+
+/**
+ * 取消生成（别名）
+ */
+export const submissionCancel = cancelSubmissionGeneration;
+
+/**
  * 获取生成进度
  */
 export async function getSubmissionProgress(id: number) {
   return requestClient.get(`/bid/submission/${id}/progress`);
+}
+
+/**
+ * 招标文件附件信息
+ */
+export interface BidProjectAttachment {
+  id?: number;
+  bidProjectId?: number;
+  attachmentName?: string;
+  attachmentType?: string;
+  filePath?: string;
+  fileSize?: number;
+  fileFormat?: string;
+  parseStatus?: string;
+  remark?: string;
+  createTime?: string;
+}
+
+/**
+ * 获取投标项目关联的招标文件附件列表
+ */
+export async function getSubmissionAttachments(submissionId: string | number) {
+  return requestClient.get<BidProjectAttachment[]>(`/bid/submission/${submissionId}/attachments`);
 }

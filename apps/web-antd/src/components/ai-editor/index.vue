@@ -17,7 +17,7 @@ const props = defineProps<{
 
 const containerStyle = computed(() => {
   const base: Record<string, string> = {
-    border: '1px solid #d9d9d9',
+    // border: '1px solid #d9d9d9',
     borderRadius: '6px',
   };
   if (props.height) {

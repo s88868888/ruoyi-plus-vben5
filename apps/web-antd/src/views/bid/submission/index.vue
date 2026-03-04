@@ -5,16 +5,15 @@ import type { BizBidSubmission } from '#/api/bid/submission';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { Page, useVbenDrawer } from '@vben/common-ui';
+import { Page } from '@vben/common-ui';
 import { getVxePopupContainer } from '@vben/utils';
-import { Button, Dropdown, Menu, MenuItem, Modal, Popconfirm, Progress, Space, Tag, message } from 'ant-design-vue';
+import { Button, Dropdown, Menu, MenuItem, Modal, Popconfirm, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
   cancelSubmissionGeneration,
   regenerateSubmission,
-  startSubmissionGeneration,
   submissionList,
   submissionRemove,
 } from '#/api/bid/submission';
@@ -91,6 +90,25 @@ const statusLabels: Record<string, string> = {
   generating: '生成中',
   completed: '已完成',
   failed: '失败',
+};
+
+// 工作流阶段标签
+const workflowStageLabels: Record<string, string> = {
+  pending_config: '待配置',
+  configured: '已配置',
+  structure_generated: '结构已生成',
+  generating: '生成中',
+  completed: '已完成',
+  failed: '失败',
+};
+
+const workflowStageColors: Record<string, string> = {
+  pending_config: 'default',
+  configured: 'blue',
+  structure_generated: 'cyan',
+  generating: 'processing',
+  completed: 'success',
+  failed: 'error',
 };
 
 // 项目类型配置
@@ -174,12 +192,6 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'selectedCompanies' },
     },
     {
-      field: 'generationProgress',
-      title: '生成进度',
-      width: 140,
-      slots: { default: 'generationProgress' },
-    },
-    {
       field: 'createTime',
       title: '创建时间',
       width: 155,
@@ -237,12 +249,6 @@ function handleView(record: BizBidSubmission) {
 // 配置文档
 function handleConfig(record: BizBidSubmission) {
   router.push(`/bid/submission/config/${record.id}`);
-}
-
-// 开始生成
-function handleGenerate(record: BizBidSubmission) {
-  // 跳转到生成页面
-  router.push(`/bid/submission/generate/${record.id}`);
 }
 
 // 查看进度
@@ -321,8 +327,8 @@ function handleProgressModalClose() {
           </template>
 
           <template #submissionStatus="{ row }">
-            <Tag :color="statusColors[row.submissionStatus]">
-              {{ statusLabels[row.submissionStatus] || row.submissionStatus }}
+            <Tag :color="workflowStageColors[row.workflowStage] || statusColors[row.submissionStatus]">
+              {{ workflowStageLabels[row.workflowStage] || statusLabels[row.submissionStatus] || row.submissionStatus }}
             </Tag>
           </template>
 
@@ -353,14 +359,6 @@ function handleProgressModalClose() {
               </Space>
             </template>
             <span v-else class="text-gray-400">未关联</span>
-          </template>
-
-          <template #generationProgress="{ row }">
-            <Progress
-              :percent="row.generationProgress || 0"
-              :status="row.submissionStatus === 'failed' ? 'exception' : row.submissionStatus === 'completed' ? 'success' : 'active'"
-              size="small"
-            />
           </template>
 
           <template #action="{ row }">

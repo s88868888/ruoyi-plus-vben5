@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Button, message, Progress, Tree, Dropdown, Menu, MenuItem, Modal, Input, Form, FormItem, TreeSelect, Tooltip, Popconfirm, Badge, Spin } from 'ant-design-vue';
+import { Button, message, Progress, Tree, Dropdown, Menu, MenuItem, Modal, Input, Form, FormItem, TreeSelect, Tooltip, Popconfirm, Badge, Spin, Popover } from 'ant-design-vue';
 import {
   FileTextOutlined,
   ThunderboltOutlined,
@@ -17,6 +17,8 @@ import {
   LoadingOutlined,
   ClockCircleOutlined,
   SaveOutlined,
+  PaperClipOutlined,
+  EyeOutlined,
 } from '@ant-design/icons-vue';
 import {
   getChapterTree,
@@ -33,9 +35,10 @@ import {
   clearChapters,
   type BizSubmissionChapter
 } from '#/api/bid/chapter';
-import { submissionInfo } from '#/api/bid/submission';
+import { submissionInfo, getSubmissionAttachments, type BidProjectAttachment } from '#/api/bid/submission';
 import { useSseMessage } from '#/utils/message';
 import AiEditorComp from '#/components/ai-editor/index.vue';
+import FloatingPreview from '#/components/floating-preview/index.vue';
 
 interface Props {
   submissionId: string;
@@ -98,8 +101,21 @@ const chapterModalForm = ref({
 });
 const editingChapter = ref<BizSubmissionChapter | null>(null);
 
+// 附件信息相关
+const attachmentList = ref<BidProjectAttachment[]>([]);
+const attachmentLoading = ref(false);
+const attachmentPopoverOpen = ref(false);
+
+// 悬浮预览相关
+const previewVisible = ref(false);
+const previewFileUrl = ref('');
+const previewFileName = ref('');
+const previewFileFormat = ref('');
+
 // 轮询定时器（刷新页面后恢复生成中状态用）
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+// 批量生成轮询（刷新后检测 generating 章节状态）
+let batchPollTimer: ReturnType<typeof setInterval> | null = null;
 
 function startPolling() {
   if (pollTimer) return;
@@ -133,6 +149,74 @@ function stopPolling() {
   }
 }
 
+// 递归判断是否有章节正在生成或等待生成
+function hasGeneratingChapters(list: BizSubmissionChapter[]): boolean {
+  for (const item of list) {
+    // 只检查 generating 状态，不包括 pending（pending 表示未开始，不应触发批量生成进度）
+    if (item.generationStatus === 'generating') return true;
+    if (item.children?.length && hasGeneratingChapters(item.children)) return true;
+  }
+  return false;
+}
+
+// 从章节树中统计叶子章节的完成/总数
+function countLeafChapterProgress(list: BizSubmissionChapter[]): { total: number; completed: number } {
+  let total = 0;
+  let completed = 0;
+  function walk(items: BizSubmissionChapter[]) {
+    for (const item of items) {
+      if (item.children?.length) {
+        walk(item.children);
+      } else {
+        total++;
+        if (item.generationStatus === 'completed') completed++;
+      }
+    }
+  }
+  walk(list);
+  return { total, completed };
+}
+
+// 静默刷新章节树（不显示 loading，避免闪烁）
+async function silentRefreshTree() {
+  try {
+    const res = await getChapterTree({
+      submissionId: props.submissionId,
+      documentId: props.documentConfigId
+    });
+    chapterTree.value = res || [];
+  } catch (e) {
+    // 忽略
+  }
+}
+
+// 批量生成轮询（每3秒刷新树状态并计算进度）
+function startBatchPolling() {
+  if (batchPollTimer) return;
+  batchPollTimer = setInterval(async () => {
+    await silentRefreshTree();
+    const { total, completed } = countLeafChapterProgress(chapterTree.value);
+    batchTotal.value = total;
+    batchCurrent.value = completed;
+    batchProgress.value = total > 0 ? Math.round((completed / total) * 100) : 0;
+    batchMessage.value = `正在生成章节内容 (${completed}/${total})...`;
+    if (!hasGeneratingChapters(chapterTree.value)) {
+      stopBatchPolling();
+      batchGenerating.value = false;
+      batchProgress.value = 100;
+      batchMessage.value = '';
+      message.success('全部章节生成完成');
+    }
+  }, 3000);
+}
+
+function stopBatchPolling() {
+  if (batchPollTimer) {
+    clearInterval(batchPollTimer);
+    batchPollTimer = null;
+  }
+}
+
 onMounted(async () => {
   // 计算编辑器高度
   calcEditorHeight();
@@ -149,7 +233,17 @@ onMounted(async () => {
       generatingMessage.value = '正在生成章节结构，请稍候...';
       startPolling();
     } else {
-      loadChapterTree();
+      await loadChapterTree();
+      // 检测是否有批量内容生成任务在进行（刷新页面后恢复进度条）
+      if (hasGeneratingChapters(chapterTree.value)) {
+        batchGenerating.value = true;
+        const { total, completed } = countLeafChapterProgress(chapterTree.value);
+        batchTotal.value = total;
+        batchCurrent.value = completed;
+        batchProgress.value = total > 0 ? Math.round((completed / total) * 100) : 0;
+        batchMessage.value = `正在生成章节内容 (${completed}/${total})...`;
+        startBatchPolling();
+      }
     }
   } catch (e) {
     loadChapterTree();
@@ -181,6 +275,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopPolling();
+  stopBatchPolling();
   window.removeEventListener('resize', calcEditorHeight);
 });
 
@@ -380,8 +475,9 @@ async function handleTreeSelect(keys: string[], info: any) {
     currentChapter.value = info.node;
     chapterContentValue.value = info.node.chapterContent || '';
     contentModified.value = false;
-    // 如果有 id，获取最新数据（确保内容是最新的）
-    if (info.node.id) {
+    // 只有叶子章节（无子节点）才查询内容详情
+    const isParent = info.node.children && info.node.children.length > 0;
+    if (!isParent && info.node.id) {
       try {
         const detail = await getChapterInfo(String(info.node.id));
         if (detail) {
@@ -396,7 +492,7 @@ async function handleTreeSelect(keys: string[], info: any) {
 }
 
 // 下一步
-function handleNext() {
+async function handleNext() {
   if (chapterTree.value.length === 0) {
     message.warning('请先生成章节结构');
     return;
@@ -768,6 +864,7 @@ function handleChapterContentSseMessage(data: any) {
       }
       break;
     case 'batch_success':
+      stopBatchPolling();
       batchGenerating.value = false;
       batchProgress.value = 100;
       batchMessage.value = msg || '全部生成完成';
@@ -775,6 +872,7 @@ function handleChapterContentSseMessage(data: any) {
       loadChapterTree();
       break;
     case 'batch_error':
+      stopBatchPolling();
       batchGenerating.value = false;
       batchMessage.value = msg || '批量生成失败';
       message.error(msg || '批量生成失败');
@@ -816,6 +914,61 @@ async function refreshCurrentChapter() {
   }
 }
 
+// 加载附件列表
+async function loadAttachments() {
+  if (attachmentList.value.length > 0) return; // 已加载过就不重复请求
+  attachmentLoading.value = true;
+  try {
+    const list = await getSubmissionAttachments(props.submissionId);
+    attachmentList.value = list || [];
+  } catch (e) {
+    message.error('加载附件信息失败');
+  } finally {
+    attachmentLoading.value = false;
+  }
+}
+
+// 附件弹窗打开时加载
+function handleAttachmentPopoverChange(open: boolean) {
+  attachmentPopoverOpen.value = open;
+  if (open) {
+    loadAttachments();
+  }
+}
+
+// 格式化文件大小
+function formatFileSize(bytes?: number): string {
+  if (!bytes) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// 判断是否可预览
+function canPreview(format?: string): boolean {
+  if (!format) return false;
+  return ['pdf', 'docx', 'doc'].includes(format.toLowerCase());
+}
+
+// 预览附件
+function handlePreviewAttachment(attachment: BidProjectAttachment) {
+  if (!attachment.filePath) {
+    message.warning('文件路径不存在');
+    return;
+  }
+  previewFileUrl.value = attachment.filePath;
+  previewFileName.value = attachment.attachmentName || '文件预览';
+  previewFileFormat.value = attachment.fileFormat || '';
+  previewVisible.value = true;
+  attachmentPopoverOpen.value = false; // 关闭气泡弹窗
+}
+
+// 关闭预览
+function handleClosePreview() {
+  previewVisible.value = false;
+}
+
+
 </script>
 
 <template>
@@ -853,6 +1006,7 @@ async function refreshCurrentChapter() {
           <div class="batch-progress-info">
             <LoadingOutlined spin />
             <span>{{ batchMessage }}</span>
+
           </div>
           <Progress :percent="batchProgress" :show-info="true" size="small" />
           <div v-if="batchTotal > 0" class="batch-progress-detail">
@@ -895,7 +1049,7 @@ async function refreshCurrentChapter() {
             <div class="tree-node-wrapper">
               <span class="tree-node-title">
                 <span class="chapter-no">{{ node.chapterNo }}</span>
-                {{ node.chapterTitle }}
+                <span class="chapter-title-text">{{ node.chapterTitle }}</span>
                 <span v-if="isLeafChapter(node)" class="chapter-status-icon">
                   <CheckCircleFilled v-if="node.generationStatus === 'completed'" style="color: #52c41a; font-size: 12px;" />
                   <LoadingOutlined v-else-if="node.generationStatus === 'generating'" spin style="color: #1677ff; font-size: 12px;" />
@@ -904,15 +1058,6 @@ async function refreshCurrentChapter() {
                 </span>
               </span>
               <div class="tree-node-actions" @click.stop>
-                <Tooltip title="生成内容">
-                  <Button
-                    v-if="isLeafChapter(node) && node.generationStatus !== 'generating'"
-                    type="text"
-                    size="small"
-                    :icon="h(ThunderboltOutlined)"
-                    @click="generateChapterContent(node)"
-                  />
-                </Tooltip>
                 <Tooltip
                   v-if="node.reasonDescription"
                   :title="node.reasonDescription"
@@ -930,6 +1075,7 @@ async function refreshCurrentChapter() {
                   size="small"
                   :icon="h(EditOutlined)"
                   title="编辑章节"
+                  :disabled="batchGenerating"
                   @click="editChapterContent(node)"
                 />
                 <Popconfirm
@@ -939,6 +1085,7 @@ async function refreshCurrentChapter() {
                   ok-type="danger"
                   cancel-text="取消"
                   placement="right"
+                  :disabled="batchGenerating"
                   @confirm="handleDeleteChapter(node)"
                 >
                   <Button
@@ -946,6 +1093,7 @@ async function refreshCurrentChapter() {
                     size="small"
                     :icon="h(DeleteOutlined)"
                     class="btn-danger"
+                    :disabled="batchGenerating"
                   />
                 </Popconfirm>
               </div>
@@ -980,6 +1128,55 @@ async function refreshCurrentChapter() {
             <template #icon><ReloadOutlined /></template>
             重新生成
           </Button>
+          <!-- 附件信息按钮 -->
+          <Popover
+            v-model:open="attachmentPopoverOpen"
+            trigger="click"
+            placement="bottomRight"
+            overlay-class-name="attachment-popover"
+            @open-change="handleAttachmentPopoverChange"
+          >
+            <template #content>
+              <div class="attachment-popover-content">
+                <div class="attachment-popover-title">招标文件附件</div>
+                <Spin v-if="attachmentLoading" size="small" style="display: block; text-align: center; padding: 20px 0;" />
+                <div v-else-if="attachmentList.length === 0" class="attachment-empty">暂无附件</div>
+                <div v-else class="attachment-list">
+                  <div
+                    v-for="item in attachmentList"
+                    :key="item.id"
+                    class="attachment-item"
+                  >
+                    <div class="attachment-item-icon">
+                      <FilePdfOutlined v-if="item.fileFormat === 'pdf'" style="color: #ff4d4f; font-size: 20px;" />
+                      <FileWordOutlined v-else-if="item.fileFormat === 'docx' || item.fileFormat === 'doc'" style="color: #1677ff; font-size: 20px;" />
+                      <FileUnknownOutlined v-else style="color: #999; font-size: 20px;" />
+                    </div>
+                    <div class="attachment-item-info">
+                      <div class="attachment-item-name" :title="item.attachmentName">{{ item.attachmentName }}</div>
+                      <div class="attachment-item-meta">
+                        <span>{{ item.fileFormat?.toUpperCase() }}</span>
+                        <span>{{ formatFileSize(item.fileSize) }}</span>
+                      </div>
+                    </div>
+                    <Button
+                      v-if="canPreview(item.fileFormat)"
+                      type="link"
+                      size="small"
+                      @click="handlePreviewAttachment(item)"
+                    >
+                      <template #icon><EyeOutlined /></template>
+                      预览
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <Button>
+              <template #icon><PaperClipOutlined /></template>
+              附件信息
+            </Button>
+          </Popover>
           <Button @click="handleBack">返回</Button>
           <Button type="primary" @click="handleNext">下一步</Button>
         </div>
@@ -1108,6 +1305,15 @@ async function refreshCurrentChapter() {
         </FormItem>
       </Form>
     </Modal>
+
+    <!-- 悬浮文件预览 -->
+    <FloatingPreview
+      :visible="previewVisible"
+      :file-url="previewFileUrl"
+      :file-name="previewFileName"
+      :file-format="previewFileFormat"
+      @close="handleClosePreview"
+    />
   </div>
 </template>
 
@@ -1314,14 +1520,20 @@ async function refreshCurrentChapter() {
             gap: 6px;
             font-size: 14px;
             color: rgba(0, 0, 0, 0.88);
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
+            min-width: 0;
 
             .chapter-no {
               color: hsl(var(--primary));
               font-weight: 600;
               flex-shrink: 0;
+            }
+
+            .chapter-title-text {
+              flex: 1;
+              min-width: 0;
+              overflow: hidden;
+              white-space: nowrap;
+              text-overflow: ellipsis;
             }
 
             .chapter-status-icon {
@@ -1549,5 +1761,85 @@ async function refreshCurrentChapter() {
 }
 .menu-item-danger:hover {
   background: rgba(255, 77, 79, 0.08) !important;
+}
+
+/* 附件弹窗样式 */
+.attachment-popover .ant-popover-inner {
+  padding: 0;
+}
+
+.attachment-popover-content {
+  width: 360px;
+  max-height: 420px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.attachment-popover-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.88);
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.attachment-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+}
+
+.attachment-list {
+  overflow-y: auto;
+  max-height: 360px;
+  padding: 8px 0;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  cursor: default;
+  transition: background 0.2s;
+}
+
+.attachment-item:hover {
+  background: #f5f5f5;
+}
+
+.attachment-item-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fafafa;
+  border-radius: 6px;
+}
+
+.attachment-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-item-name {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.88);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.attachment-item-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #999;
+  line-height: 1.4;
 }
 </style>

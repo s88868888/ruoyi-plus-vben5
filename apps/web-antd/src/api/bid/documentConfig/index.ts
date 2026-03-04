@@ -11,6 +11,12 @@ export interface BizDocumentConfig {
   documentType?: string;
   documentNo?: number;
   status?: string;
+  generationStatus?: string;
+  generationProgress?: number;
+  totalChapters?: number;
+  completedChapters?: number;
+  errorMessage?: string;
+  filePath?: string;
   remark?: string;
   createTime?: string;
   updateTime?: string;
