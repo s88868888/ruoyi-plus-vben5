@@ -4,8 +4,7 @@ import type { BizFinanceInfo } from '#/api/resource/finance';
 
 import { computed, ref } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
-import { getVxePopupContainer } from '@vben/utils';
-import { Button, Dropdown, Menu, MenuItem, Popconfirm, Space, message } from 'ant-design-vue';
+import { Button, Dropdown, Menu, MenuItem, Modal, Space, message } from 'ant-design-vue';
 import { DownloadOutlined, EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -154,16 +153,6 @@ function handleAdd() {
   drawerApi.open();
 }
 
-// 查看
-function handleView(record: BizFinanceInfo) {
-  drawerApi.setData({
-    id: record.id,
-    deptId: props.deptId,
-    mode: 'view',
-  });
-  drawerApi.open();
-}
-
 // 编辑
 function handleEdit(record: BizFinanceInfo) {
   drawerApi.setData({
@@ -174,12 +163,19 @@ function handleEdit(record: BizFinanceInfo) {
   drawerApi.open();
 }
 
-// 删除
-async function handleDelete(record: BizFinanceInfo) {
+function handleDelete(record: BizFinanceInfo) {
   if (!record.id) return;
-  await financeRemove([record.id]);
-  message.success('删除成功');
-  await tableApi.query();
+  Modal.confirm({
+    title: `确认删除财务信息【${record.financeName}】吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await financeRemove([record.id!]);
+      message.success('删除成功');
+      await tableApi.query();
+    },
+  });
 }
 
 // 下载附件
@@ -234,24 +230,14 @@ async function handleSuccess() {
 
         <template #action="{ row }">
           <Space>
-            <ghost-button @click.stop="handleView(row)">
-              查看
-            </ghost-button>
             <ghost-button @click.stop="handleEdit(row)">
               编辑
             </ghost-button>
             <Dropdown placement="bottomRight">
               <template #overlay>
-                <Menu>
+                <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); }">
                   <MenuItem key="delete">
-                    <Popconfirm
-                      :get-popup-container="getVxePopupContainer"
-                      placement="left"
-                      :title="`确认删除财务信息【${row.financeName}】吗？`"
-                      @confirm="handleDelete(row)"
-                    >
-                      <span class="text-red-500">删除</span>
-                    </Popconfirm>
+                    <span class="text-red-500">删除</span>
                   </MenuItem>
                 </Menu>
               </template>

@@ -3,11 +3,10 @@ import type { VxeGridProps } from '#/adapter/vxe-table';
 import type { BizAiPromptTemplate } from '#/api/bid/promptTemplate';
 
 import { computed, ref } from 'vue';
-import { Button, Dropdown, Menu, MenuItem, Popconfirm, Space, Tag, message } from 'ant-design-vue';
+import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { getVxePopupContainer } from '@vben/utils';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { promptTemplateList, promptTemplateRemove } from '#/api/bid/promptTemplate';
@@ -160,15 +159,23 @@ function handleEdit(record: BizAiPromptTemplate) {
 }
 
 // 删除
-async function handleDelete(record: BizAiPromptTemplate) {
+function handleDelete(record: BizAiPromptTemplate) {
   if (!record.id) return;
   if (record.isSystem === '1') {
     message.warning('系统模板不允许删除');
     return;
   }
-  await promptTemplateRemove([record.id]);
-  message.success('删除成功');
-  await tableApi.query();
+  Modal.confirm({
+    title: '确定删除该模板吗？',
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await promptTemplateRemove([record.id!]);
+      message.success('删除成功');
+      await tableApi.query();
+    },
+  });
 }
 
 // 保存成功回调
@@ -222,17 +229,9 @@ async function handleSuccess() {
               <Button type="link" size="small" @click="handleEdit(row)">编辑</Button>
               <Dropdown placement="bottomRight">
                 <template #overlay>
-                  <Menu>
+                  <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); }">
                     <MenuItem key="delete">
-                      <Popconfirm
-                        :get-popup-container="getVxePopupContainer"
-                        placement="left"
-                        title="确定删除该模板吗？"
-                        :disabled="row.isSystem === '1'"
-                        @confirm="handleDelete(row)"
-                      >
-                        <span :class="row.isSystem === '1' ? '' : 'text-red-500'">删除</span>
-                      </Popconfirm>
+                      <span :class="row.isSystem === '1' ? '' : 'text-red-500'">删除</span>
                     </MenuItem>
                   </Menu>
                 </template>

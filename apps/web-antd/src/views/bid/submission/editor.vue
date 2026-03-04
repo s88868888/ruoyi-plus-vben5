@@ -132,6 +132,10 @@
                   <SaveOutlined />
                   保存
                 </AButton>
+                <AButton size="small" @click="imagePickerOpen = true">
+                  <PictureOutlined />
+                  知识库图片
+                </AButton>
               </ASpace>
             </div>
 
@@ -150,8 +154,10 @@
             <!-- AiEditor 富文本编辑器 -->
             <div class="editor-area">
               <AiEditorComp
+                ref="aiEditorRef"
                 v-model="currentChapter.chapterContent"
                 :height="560"
+                :chapter-id="currentChapter?.id"
                 placeholder="选择左侧章节查看内容，或点击生成按钮自动生成..."
                 @change="handleContentChange"
               />
@@ -212,6 +218,12 @@
         </ATimelineItem>
       </ATimeline>
     </AModal>
+
+    <!-- 知识库图片选择弹窗 -->
+    <KnowledgeImagePicker
+      v-model:open="imagePickerOpen"
+      @select="handleInsertKnowledgeImages"
+    />
   </div>
 </template>
 
@@ -228,6 +240,7 @@ import {
   LeftOutlined,
   LoadingOutlined,
   MoreOutlined,
+  PictureOutlined,
   PlusOutlined,
   RedoOutlined,
   RightOutlined,
@@ -237,6 +250,7 @@ import {
 import dayjs from 'dayjs';
 
 import AiEditorComp from '#/components/ai-editor/index.vue';
+import KnowledgeImagePicker from '#/components/knowledge-image-picker/index.vue';
 import {
   deleteChapter,
   fillTemplate,
@@ -260,6 +274,10 @@ const chapterTree = ref<BizSubmissionChapter[]>([]);
 const selectedKeys = ref<number[]>([]);
 const currentChapter = ref<BizSubmissionChapter | null>(null);
 const contentChanged = ref(false);
+
+// 知识库图片选择弹窗
+const imagePickerOpen = ref(false);
+const aiEditorRef = ref<InstanceType<typeof AiEditorComp>>();
 
 // 进度
 const generating = ref(false);
@@ -408,6 +426,16 @@ function handleContentChange(val: string) {
     currentChapter.value.chapterContent = val;
     contentChanged.value = true;
   }
+}
+
+/** 插入知识库图片到编辑器 */
+function handleInsertKnowledgeImages(urls: string[]) {
+  if (!aiEditorRef.value) return;
+  const html = urls.map(url =>
+    `<div class="chapter-image" style="text-align:center;margin:16px 0;"><img src="${url}" alt="知识库图片" style="max-width:80%;border:1px solid #eee;border-radius:4px;" /><p style="color:#666;font-size:12px;margin-top:4px;">图：知识库图片</p></div>`
+  ).join('');
+  aiEditorRef.value.insertHtml(html);
+  contentChanged.value = true;
 }
 
 // ─── 一键生成（SSE 进度） ──────────────────────────────────────────────────

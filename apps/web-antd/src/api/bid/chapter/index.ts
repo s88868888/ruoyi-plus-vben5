@@ -146,6 +146,15 @@ export async function updateChapterSort(items: { id: number; parentId: number; s
 }
 
 /**
+ * 修改章节类型（template/generate）
+ */
+export async function updateChapterType(id: string | number, chapterType: string) {
+  return requestClient.putWithMsg(`/bid/submission/chapter/${id}/type`, null, {
+    params: { chapterType },
+  });
+}
+
+/**
  * AI 辅助写作（由 AiEditor 内部直接调用 SSE 接口，此方法供手动调用场景使用）
  */
 export async function aiAssist(prompt: string) {

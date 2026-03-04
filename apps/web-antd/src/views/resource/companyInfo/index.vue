@@ -4,12 +4,10 @@ import type { CompanyListVo } from '#/api/resource/companyInfo';
 
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Avatar, Button, Dropdown, Menu, MenuItem, Popconfirm, Space, Tag, message } from 'ant-design-vue';
+import { Avatar, Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, message } from 'ant-design-vue';
 import { CloudSyncOutlined, EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { Page } from '@vben/common-ui';
-import { getVxePopupContainer } from '@vben/utils';
-
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { companyList, companyInfoRemove, companyInfoSyncVector } from '#/api/resource/companyInfo';
 import { useListTablePreference } from '#/preferences/userPreference';
@@ -198,14 +196,22 @@ function handleEdit(record: CompanyListVo) {
 }
 
 // 删除
-async function handleDelete(record: CompanyListVo) {
+function handleDelete(record: CompanyListVo) {
   if (!record.companyInfoId) {
     message.warning('该公司暂无企业信息');
     return;
   }
-  await companyInfoRemove([record.companyInfoId]);
-  message.success('删除成功');
-  await tableApi.query();
+  Modal.confirm({
+    title: `确认删除公司【${record.deptName}】的企业信息吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await companyInfoRemove([record.companyInfoId!]);
+      message.success('删除成功');
+      await tableApi.query();
+    },
+  });
 }
 
 // 新增公司（跳转到部门管理）
@@ -304,19 +310,12 @@ function getAvatarColor(name: string) {
             </ghost-button>
             <Dropdown placement="bottomRight">
               <template #overlay>
-                <Menu>
+                <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); }">
                   <MenuItem key="view" @click="handleView(row)">
                     详情
                   </MenuItem>
                   <MenuItem key="delete">
-                    <Popconfirm
-                      :get-popup-container="getVxePopupContainer"
-                      placement="left"
-                      :title="`确认删除公司【${row.deptName}】的企业信息吗？`"
-                      @confirm="handleDelete(row)"
-                    >
-                      <span class="text-red-500">删除</span>
-                    </Popconfirm>
+                    <span class="text-red-500">删除</span>
                   </MenuItem>
                 </Menu>
               </template>

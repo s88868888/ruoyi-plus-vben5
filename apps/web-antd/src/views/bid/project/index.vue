@@ -6,8 +6,8 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { getVxePopupContainer } from '@vben/utils';
-import { Button, Dropdown, Menu, MenuItem, Modal, Popconfirm, Progress, Space, Tag, message } from 'ant-design-vue';
+
+import { Button, Dropdown, Menu, MenuItem, Modal, Progress, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -430,11 +430,19 @@ function handleView(record: BizBidProject) {
 }
 
 // 删除
-async function handleDelete(record: BizBidProject) {
+function handleDelete(record: BizBidProject) {
   if (!record.id) return;
-  await bidProjectRemove([record.id]);
-  message.success('删除成功');
-  await tableApi.query();
+  Modal.confirm({
+    title: `确认删除项目【${record.projectName}】吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await bidProjectRemove([record.id!]);
+      message.success('删除成功');
+      await tableApi.query();
+    },
+  });
 }
 
 // 保存成功回调
@@ -539,7 +547,7 @@ async function handleSuccess() {
             </ghost-button>
             <Dropdown placement="bottomRight">
               <template #overlay>
-                <Menu>
+                <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); }">
                   <MenuItem key="toSubmission" @click="handleCreateSubmission(row)">
                     转为投标
                   </MenuItem>
@@ -547,14 +555,7 @@ async function handleSuccess() {
                     查看
                   </MenuItem>
                   <MenuItem key="delete">
-                    <Popconfirm
-                      :get-popup-container="getVxePopupContainer"
-                      placement="left"
-                      :title="`确认删除项目【${row.projectName}】吗？`"
-                      @confirm="handleDelete(row)"
-                    >
-                      <span class="text-red-500">删除</span>
-                    </Popconfirm>
+                    <span class="text-red-500">删除</span>
                   </MenuItem>
                 </Menu>
               </template>

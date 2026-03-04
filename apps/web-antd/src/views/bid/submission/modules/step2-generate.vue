@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Button, message, Progress, Tree, Dropdown, Menu, MenuItem, Modal, Input, Form, FormItem, TreeSelect, Tooltip, Popconfirm, Badge, Spin, Popover } from 'ant-design-vue';
+import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { Button, message, Progress, Tree, Dropdown, Menu, MenuItem, Modal, Input, Form, FormItem, TreeSelect, Tooltip, Popconfirm, Badge, Spin, Popover, Tag } from 'ant-design-vue';
 import {
   FileTextOutlined,
   ThunderboltOutlined,
@@ -19,6 +19,7 @@ import {
   SaveOutlined,
   PaperClipOutlined,
   EyeOutlined,
+  PictureOutlined,
 } from '@ant-design/icons-vue';
 import {
   getChapterTree,
@@ -33,12 +34,14 @@ import {
   addChapter,
   deleteChapter,
   clearChapters,
+  updateChapterType,
   type BizSubmissionChapter
 } from '#/api/bid/chapter';
 import { submissionInfo, getSubmissionAttachments, type BidProjectAttachment } from '#/api/bid/submission';
 import { useSseMessage } from '#/utils/message';
 import AiEditorComp from '#/components/ai-editor/index.vue';
 import FloatingPreview from '#/components/floating-preview/index.vue';
+import KnowledgeImagePicker from '#/components/knowledge-image-picker/index.vue';
 
 interface Props {
   submissionId: string;
@@ -48,6 +51,7 @@ interface Props {
     bidOrg?: string;
   };
   documentConfig?: {
+    companyId?: number;
     companyName?: string;
     documentType?: string;
     documentNo?: string | number;
@@ -56,6 +60,9 @@ interface Props {
 
 const props = defineProps<Props>();
 const emit = defineEmits(['structure-generated', 'next', 'back']);
+
+// 当前文档配置对应的公司ID（用于知识库图片筛选）
+const currentDocumentCompanyId = computed(() => props.documentConfig?.companyId);
 
 const documentTypeMap: Record<string, string> = {
   commercial: '商务标',
@@ -111,6 +118,19 @@ const previewVisible = ref(false);
 const previewFileUrl = ref('');
 const previewFileName = ref('');
 const previewFileFormat = ref('');
+
+// 知识库图片选择弹窗
+const knowledgePickerOpen = ref(false);
+const editorRef = ref<InstanceType<typeof AiEditorComp>>();
+
+/** 插入知识库图片到编辑器 */
+function handleInsertKnowledgeImages(urls: string[]) {
+  if (!editorRef.value) return;
+  const html = urls.map(url => `<p><img src="${url}" style="max-width: 100%;" /></p>`).join('');
+  editorRef.value.insertHtml(html);
+  // 标记内容已修改
+  contentModified.value = true;
+}
 
 // 轮询定时器（刷新页面后恢复生成中状态用）
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -710,6 +730,19 @@ function editChapterContent(chapter: BizSubmissionChapter) {
   showChapterModal.value = true;
 }
 
+// 切换章节类型（template ↔ generate）
+async function handleToggleChapterType(chapter: BizSubmissionChapter) {
+  const newType = chapter.chapterType === 'template' ? 'generate' : 'template';
+  const label = newType === 'template' ? '规定格式' : 'AI生成';
+  try {
+    await updateChapterType(String(chapter.id), newType);
+    message.success(`章节类型已切换为: ${label}`);
+    loadChapterTree();
+  } catch (e) {
+    message.error('切换章节类型失败');
+  }
+}
+
 // 删除章节
 async function handleDeleteChapter(chapter: BizSubmissionChapter) {
   try {
@@ -1050,6 +1083,7 @@ function handleClosePreview() {
               <span class="tree-node-title">
                 <span class="chapter-no">{{ node.chapterNo }}</span>
                 <span class="chapter-title-text">{{ node.chapterTitle }}</span>
+                <Tag v-if="node.chapterType === 'template'" color="blue" class="chapter-type-tag">规定格式</Tag>
                 <span v-if="isLeafChapter(node)" class="chapter-status-icon">
                   <CheckCircleFilled v-if="node.generationStatus === 'completed'" style="color: #52c41a; font-size: 12px;" />
                   <LoadingOutlined v-else-if="node.generationStatus === 'generating'" spin style="color: #1677ff; font-size: 12px;" />
@@ -1070,6 +1104,14 @@ function handleClosePreview() {
                     :icon="h(InfoCircleOutlined)"
                   />
                 </Tooltip>
+                <Button
+                  type="text"
+                  size="small"
+                  :icon="h(SyncOutlined)"
+                  :title="node.chapterType === 'template' ? '切换为AI生成' : '切换为规定格式'"
+                  :disabled="batchGenerating"
+                  @click="handleToggleChapterType(node)"
+                />
                 <Button
                   type="text"
                   size="small"
@@ -1127,6 +1169,10 @@ function handleClosePreview() {
           <Button @click="handleRegenerateContent" v-if="isLeafChapter(currentChapter) && (currentChapter?.chapterContent || chapterContentValue)">
             <template #icon><ReloadOutlined /></template>
             重新生成
+          </Button>
+          <Button @click="knowledgePickerOpen = true" v-if="isLeafChapter(currentChapter) && (currentChapter?.chapterContent || chapterContentValue)">
+            <template #icon><PictureOutlined /></template>
+            知识库图片
           </Button>
           <!-- 附件信息按钮 -->
           <Popover
@@ -1235,9 +1281,11 @@ function handleClosePreview() {
             <!-- 已有内容：AiEditor -->
             <div v-else-if="currentChapter.chapterContent || chapterContentValue" class="chapter-content">
               <AiEditorComp
+                ref="editorRef"
                 :key="currentChapter.id"
                 v-model="chapterContentValue"
                 :height="editorHeight"
+                :chapter-id="currentChapter?.id"
                 placeholder="章节内容..."
                 @change="handleEditorChange"
               />
@@ -1313,6 +1361,13 @@ function handleClosePreview() {
       :file-name="previewFileName"
       :file-format="previewFileFormat"
       @close="handleClosePreview"
+    />
+
+    <!-- 知识库图片选择弹窗 -->
+    <KnowledgeImagePicker
+      v-model:open="knowledgePickerOpen"
+      :company-id="currentDocumentCompanyId"
+      @select="handleInsertKnowledgeImages"
     />
   </div>
 </template>
@@ -1540,6 +1595,15 @@ function handleClosePreview() {
               flex-shrink: 0;
               display: inline-flex;
               align-items: center;
+            }
+
+            .chapter-type-tag {
+              flex-shrink: 0;
+              font-size: 11px;
+              line-height: 18px;
+              padding: 0 5px;
+              margin: 0;
+              border-radius: 3px;
             }
           }
 

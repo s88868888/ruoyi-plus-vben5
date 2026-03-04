@@ -6,8 +6,8 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
-import { getVxePopupContainer } from '@vben/utils';
-import { Button, message, Popconfirm, Space, Tag, Dropdown, Menu, MenuItem, Progress, Tooltip } from 'ant-design-vue';
+
+import { Button, message, Modal, Space, Tag, Dropdown, Menu, MenuItem, Progress, Tooltip } from 'ant-design-vue';
 import { FileTextOutlined, PlusOutlined, EllipsisOutlined, CheckCircleOutlined, LoadingOutlined, CloseCircleOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -211,11 +211,19 @@ async function handleDrawerSuccess(data: any) {
   }
 }
 
-async function handleDelete(row: BizDocumentConfig) {
+function handleDelete(row: BizDocumentConfig) {
   if (!row.id) return;
-  await deleteConfig(row.id);
-  message.success('删除成功');
-  tableApi.query();
+  Modal.confirm({
+    title: '确认删除该配置吗？',
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await deleteConfig(row.id!);
+      message.success('删除成功');
+      tableApi.query();
+    },
+  });
 }
 
 function handleStartGenerate(row: BizDocumentConfig) {
@@ -387,16 +395,9 @@ onMounted(() => {
                 </ghost-button>
                 <Dropdown placement="bottomRight">
                   <template #overlay>
-                    <Menu>
+                    <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); }">
                       <MenuItem key="delete">
-                        <Popconfirm
-                          :get-popup-container="getVxePopupContainer"
-                          placement="left"
-                          title="确认删除该配置吗？"
-                          @confirm="handleDelete(row)"
-                        >
-                          <span class="text-red-500">删除</span>
-                        </Popconfirm>
+                        <span class="text-red-500">删除</span>
                       </MenuItem>
                     </Menu>
                   </template>
