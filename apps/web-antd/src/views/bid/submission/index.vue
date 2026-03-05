@@ -330,7 +330,10 @@ function handleProgressModalClose() {
       <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
         <BasicTable class="h-full" table-title="投标项目列表">
           <template #projectName="{ row }">
-            <span class="font-medium">{{ row.projectName }}</span>
+            <span
+              class="font-medium cursor-pointer text-blue-500 hover:underline"
+              @click="handleView(row)"
+            >{{ row.projectName }}</span>
           </template>
 
           <template #submissionStatus="{ row }">

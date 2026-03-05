@@ -44,6 +44,7 @@ onMounted(() => {
 
   aiEditor = new AiEditor({
     element: divRef.value,
+    toolbarExcludeKeys:["ai"],
     placeholder: props.placeholder ?? '请输入内容...',
     content: props.modelValue ?? '',
     onChange: (editor) => {
@@ -160,24 +161,17 @@ watch(
 </script>
 
 <style scoped>
-:deep(.aie-container .aie-bubble-menu) {
-  background-color: #fff !important;
-  border-color: #e9e9e9 !important;
-  color: #333 !important;
-}
 
-:deep(.aie-container .aie-bubble-menu-item svg) {
-  fill: #333 !important;
-}
+
 
 /* AI菜单气泡（无 theme 的 tippy）- 去掉黑色背景 */
 :deep(.aie-container .tippy-box:not([data-theme])),
 :deep(.aie-container .tippy-box:not([data-theme]) .tippy-content) {
-  background-color: #fff !important;
+  background-color:transparent !important;
   color: #333 !important;
 }
 
-:deep(.aie-container .tippy-box:not([data-theme])[data-placement^='top'] .tippy-arrow:before) {
+/* :deep(.aie-container .tippy-box:not([data-theme])[data-placement^='top'] .tippy-arrow:before) {
   border-top-color: #fff !important;
 }
 
@@ -187,15 +181,11 @@ watch(
 
 :deep(.aie-container .tippy-box:not([data-theme])[data-placement^='left'] .tippy-arrow:before) {
   border-left-color: #fff !important;
-}
+} */
 
-:deep(.aie-container .tippy-box:not([data-theme])[data-placement^='right'] .tippy-arrow:before) {
+/* :deep(.aie-container .tippy-box:not([data-theme])[data-placement^='right'] .tippy-arrow:before) {
   border-right-color: #fff !important;
-}
+} */
 
-/* AI菜单文字乱码修复 - 补字体兜底 */
-:deep(.aie-container .ai-command-container-item),
-:deep(.aie-container .aie-ai-panel-footer p) {
-  font-family: PingFang SC, Microsoft YaHei, Hiragino Sans GB, Arial, sans-serif !important;
-}
+
 </style>

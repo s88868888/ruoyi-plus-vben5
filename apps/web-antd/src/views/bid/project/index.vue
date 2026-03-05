@@ -485,7 +485,10 @@ async function handleSuccess() {
         >
         <template #projectName="{ row }">
           <div class="flex flex-col">
-            <span class="font-bold">{{ row.projectName }}</span>
+            <span
+              class="font-bold cursor-pointer text-blue-500 hover:underline"
+              @click="handleView(row)"
+            >{{ row.projectName }}</span>
             <span
               v-if="row.projectDesc"
               class="text-xs text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap"

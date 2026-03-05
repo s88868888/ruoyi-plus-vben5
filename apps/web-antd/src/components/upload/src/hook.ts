@@ -322,8 +322,12 @@ export function useUpload(
   watch(
     () => bindValue.value,
     async (value) => {
-      if (value.length === 0) {
-        // 清空绑定值时，同时清空innerFileList，避免外部使用时还能读取到
+      // 空值/null/undefined 统一清空
+      if (
+        value === null ||
+        value === undefined ||
+        value.length === 0
+      ) {
         innerFileList.value = [];
         return;
       }
@@ -335,41 +339,58 @@ export function useUpload(
         return;
       }
 
-      const resp = await ossInfo(value);
-      function transformFile(info: OssFile) {
-        const cb = { type: 'info', response: info } as const;
-
-        const fileitem: UploadFile = {
-          uid: info.ossId,
-          name: transformFilename(cb),
-          fileName: transformFilename(cb),
-          url: info.url,
-          thumbUrl: transformThumbUrl(cb),
-          status: 'done',
-        };
-        return fileitem;
-      }
-      const transformOptions = resp.map((item) => transformFile(item));
-      innerFileList.value = transformOptions;
-      // 单文件 丢弃策略
-      if (props.maxCount === 1 && resp.length === 0 && !props.keepMissingId) {
-        bindValue.value = '';
+      // 校验值是否为合法 OSS ID（纯数字），过滤非法值避免后端报错
+      const values = Array.isArray(value) ? value : [value];
+      const validValues = values.filter((v) => /^\d+$/.test(v));
+      if (validValues.length === 0) {
+        innerFileList.value = [];
         return;
       }
-      // 多文件
-      // 单文件查到了也会走这里的逻辑 filter会报错 需要maxCount判断处理
-      if (
-        resp.length !== value.length &&
-        !props.keepMissingId &&
-        props.maxCount !== 1
-      ) {
-        // 给默认值
-        if (!Array.isArray(bindValue.value)) {
-          bindValue.value = [];
+
+      try {
+        const resp = await ossInfo(validValues.join(','));
+        function transformFile(info: OssFile) {
+          const cb = { type: 'info', response: info } as const;
+
+          const fileitem: UploadFile = {
+            uid: info.ossId,
+            name: transformFilename(cb),
+            fileName: transformFilename(cb),
+            url: info.url,
+            thumbUrl: transformThumbUrl(cb),
+            status: 'done',
+          };
+          return fileitem;
         }
-        bindValue.value = bindValue.value.filter((ossId) =>
-          resp.map((res) => res.ossId).includes(ossId),
-        );
+        const transformOptions = resp.map((item) => transformFile(item));
+        innerFileList.value = transformOptions;
+        // 单文件 丢弃策略
+        if (
+          props.maxCount === 1 &&
+          resp.length === 0 &&
+          !props.keepMissingId
+        ) {
+          bindValue.value = '';
+          return;
+        }
+        // 多文件
+        // 单文件查到了也会走这里的逻辑 filter会报错 需要maxCount判断处理
+        if (
+          resp.length !== value.length &&
+          !props.keepMissingId &&
+          props.maxCount !== 1
+        ) {
+          // 给默认值
+          if (!Array.isArray(bindValue.value)) {
+            bindValue.value = [];
+          }
+          bindValue.value = bindValue.value.filter((ossId) =>
+            resp.map((res) => res.ossId).includes(ossId),
+          );
+        }
+      } catch (error) {
+        console.error('ossInfo failed:', error);
+        innerFileList.value = [];
       }
     },
     { immediate: true },

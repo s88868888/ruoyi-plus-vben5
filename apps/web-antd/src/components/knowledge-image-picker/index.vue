@@ -6,12 +6,22 @@ import { qualificationList, type BizQualification } from '#/api/resource/qualifi
 import { performanceList, type BizPerformance } from '#/api/resource/performance';
 import { patentMedalList, type BizPatentMedal } from '#/api/resource/patent-medal/index';
 import { financeList, type BizFinanceInfo } from '#/api/resource/finance';
+import { ossInfo } from '#/api/system/oss';
 
 interface ImageItem {
   url: string;
   label: string;
   category: string;
 }
+
+// 待解析的条目（值可能是 OSS ID 或 URL）
+interface RawItem {
+  value: string;
+  label: string;
+  category: string;
+}
+
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
 
 const props = defineProps<{
   open: boolean;
@@ -41,6 +51,74 @@ watch(() => props.open, async (val) => {
   }
 });
 
+/** 判断值是否为直接 URL */
+function isDirectUrl(val: string): boolean {
+  return val.startsWith('http://') || val.startsWith('https://');
+}
+
+/** 判断值是否为 OSS ID（纯数字） */
+function isOssId(val: string): boolean {
+  return /^\d+$/.test(val);
+}
+
+/** 判断 URL 是否为图片 */
+function isImageUrl(url: string): boolean {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    return IMAGE_EXTS.some(ext => pathname.endsWith(ext));
+  } catch {
+    // 非标准 URL，按扩展名兜底判断
+    const lower = url.toLowerCase();
+    return IMAGE_EXTS.some(ext => lower.endsWith(ext));
+  }
+}
+
+/** 将原始值列表（可能含 OSS ID）解析为图片 URL 列表 */
+async function resolveRawItems(rawItems: RawItem[]): Promise<ImageItem[]> {
+  if (rawItems.length === 0) return [];
+
+  const result: ImageItem[] = [];
+  const ossIdItems: { ossId: string; label: string; category: string }[] = [];
+
+  // 先分流：直接 URL vs OSS ID
+  for (const item of rawItems) {
+    if (isDirectUrl(item.value)) {
+      if (isImageUrl(item.value)) {
+        result.push({ url: item.value, label: item.label, category: item.category });
+      }
+    } else if (isOssId(item.value)) {
+      // 纯数字才当作 OSS ID
+      ossIdItems.push({ ossId: item.value, label: item.label, category: item.category });
+    }
+    // 其他值（如普通文本）直接忽略
+  }
+
+  // 批量解析 OSS ID -> URL
+  if (ossIdItems.length > 0) {
+    try {
+      const allIds = ossIdItems.map(i => i.ossId).join(',');
+      const ossFiles = await ossInfo(allIds);
+      const urlMap = new Map<string, { url: string; suffix: string }>();
+      for (const f of ossFiles) {
+        urlMap.set(String(f.ossId), { url: f.url, suffix: (f.fileSuffix || '').toLowerCase() });
+      }
+      for (const item of ossIdItems) {
+        const file = urlMap.get(item.ossId);
+        if (file && IMAGE_EXTS.includes(file.suffix)) {
+          result.push({ url: file.url, label: item.label, category: item.category });
+        }
+      }
+    } catch { /* OSS 解析失败则跳过 */ }
+  }
+
+  return result;
+}
+
+/** 分割逗号分隔的值（可能是 URL 也可能是 OSS ID） */
+function splitValues(str: string): string[] {
+  return str.split(',').map(u => u.trim()).filter(Boolean);
+}
+
 async function loadAllImages() {
   loading.value = true;
   try {
@@ -58,120 +136,106 @@ async function loadAllImages() {
 
 /** 加载人员及其证书图片 */
 async function loadPersonnelImages() {
-  const items: ImageItem[] = [];
+  const rawItems: RawItem[] = [];
   try {
     const res = await personnelList({ pageNum: 1, pageSize: 200, deptId: props.companyId });
     const list: BizPersonnel[] = res?.rows || [];
     for (const p of list) {
-      if (p.photo) items.push({ url: p.photo, label: `${p.name} - 照片`, category: '人员照片' });
-      if (p.idCardFront) items.push({ url: p.idCardFront, label: `${p.name} - 身份证正面`, category: '身份证' });
-      if (p.idCardBack) items.push({ url: p.idCardBack, label: `${p.name} - 身份证背面`, category: '身份证' });
-      // 加载该人员的证书
+      if (p.photo) rawItems.push({ value: p.photo, label: `${p.name} - 照片`, category: '人员照片' });
+      if (p.idCardFront) rawItems.push({ value: p.idCardFront, label: `${p.name} - 身份证正面`, category: '身份证' });
+      if (p.idCardBack) rawItems.push({ value: p.idCardBack, label: `${p.name} - 身份证背面`, category: '身份证' });
       if (p.id) {
         try {
           const certs: PersonnelCertificate[] = await certificateList(p.id) || [];
           for (const cert of certs) {
             if (cert.certificateImage) {
-              items.push({ url: cert.certificateImage, label: `${p.name} - ${cert.certificateName || '证书'}`, category: '人员证书' });
+              rawItems.push({ value: cert.certificateImage, label: `${p.name} - ${cert.certificateName || '证书'}`, category: '人员证书' });
             }
           }
-        } catch (e) { /* ignore */ }
+        } catch { /* ignore */ }
       }
     }
-  } catch (e) { /* ignore */ }
-  personnelImages.value = items;
+  } catch { /* ignore */ }
+  personnelImages.value = await resolveRawItems(rawItems);
 }
 
 /** 加载企业资质图片 */
 async function loadQualificationImages() {
-  const items: ImageItem[] = [];
+  const rawItems: RawItem[] = [];
   try {
     const res = await qualificationList({ pageNum: 1, pageSize: 200, deptId: props.companyId });
     const list: BizQualification[] = res?.rows || [];
     for (const q of list) {
       if (q.certImages) {
-        // certImages 可能是逗号分隔的多张图
-        const urls = q.certImages.split(',').map(u => u.trim()).filter(Boolean);
-        urls.forEach((url, idx) => {
-          items.push({ url, label: `${q.certName || '资质证书'}${urls.length > 1 ? ` (${idx + 1})` : ''}`, category: '企业资质' });
+        const values = splitValues(q.certImages);
+        values.forEach((val, idx) => {
+          rawItems.push({ value: val, label: `${q.certName || '资质证书'}${values.length > 1 ? ` (${idx + 1})` : ''}`, category: '企业资质' });
         });
       }
     }
-  } catch (e) { /* ignore */ }
-  qualificationImages.value = items;
+  } catch { /* ignore */ }
+  qualificationImages.value = await resolveRawItems(rawItems);
 }
 
 /** 加载业绩案例附件图片 */
 async function loadPerformanceImages() {
-  const items: ImageItem[] = [];
+  const rawItems: RawItem[] = [];
   try {
     const res = await performanceList({ pageNum: 1, pageSize: 200, deptId: props.companyId });
     const list: BizPerformance[] = res?.rows || [];
     for (const p of list) {
       const name = p.name || '业绩项目';
-      // 合同图片（逗号分隔）
       if (p.contractImages) {
-        splitUrls(p.contractImages).forEach((url, idx, arr) => {
-          items.push({ url, label: `${name} - 合同${arr.length > 1 ? ` (${idx + 1})` : ''}`, category: '业绩合同' });
+        splitValues(p.contractImages).forEach((val, idx, arr) => {
+          rawItems.push({ value: val, label: `${name} - 合同${arr.length > 1 ? ` (${idx + 1})` : ''}`, category: '业绩合同' });
         });
       }
-      // 中标通知书
       if (p.bidNoticeAttachment) {
-        splitUrls(p.bidNoticeAttachment).forEach((url, idx, arr) => {
-          items.push({ url, label: `${name} - 中标通知书${arr.length > 1 ? ` (${idx + 1})` : ''}`, category: '中标通知' });
+        splitValues(p.bidNoticeAttachment).forEach((val, idx, arr) => {
+          rawItems.push({ value: val, label: `${name} - 中标通知书${arr.length > 1 ? ` (${idx + 1})` : ''}`, category: '中标通知' });
         });
       }
-      // 验收报告
       if (p.acceptanceAttachment) {
-        splitUrls(p.acceptanceAttachment).forEach((url, idx, arr) => {
-          items.push({ url, label: `${name} - 验收报告${arr.length > 1 ? ` (${idx + 1})` : ''}`, category: '验收报告' });
+        splitValues(p.acceptanceAttachment).forEach((val, idx, arr) => {
+          rawItems.push({ value: val, label: `${name} - 验收报告${arr.length > 1 ? ` (${idx + 1})` : ''}`, category: '验收报告' });
         });
       }
     }
-  } catch (e) { /* ignore */ }
-  performanceImages.value = items;
+  } catch { /* ignore */ }
+  performanceImages.value = await resolveRawItems(rawItems);
 }
 
 /** 加载专利奖章图片 */
 async function loadPatentImages() {
-  const items: ImageItem[] = [];
+  const rawItems: RawItem[] = [];
   try {
     const res = await patentMedalList({ pageNum: 1, pageSize: 200, deptId: props.companyId });
     const list: BizPatentMedal[] = res?.rows || [];
     for (const p of list) {
       const name = p.patentName || '专利';
-      if (p.patentImage) {
-        items.push({ url: p.patentImage, label: `${name} - 专利图`, category: '专利图' });
-      }
-      if (p.certificateImage) {
-        items.push({ url: p.certificateImage, label: `${name} - 证书`, category: '专利证书' });
-      }
+      if (p.patentImage) rawItems.push({ value: p.patentImage, label: `${name} - 专利图`, category: '专利图' });
+      if (p.certificateImage) rawItems.push({ value: p.certificateImage, label: `${name} - 证书`, category: '专利证书' });
     }
-  } catch (e) { /* ignore */ }
-  patentImages.value = items;
+  } catch { /* ignore */ }
+  patentImages.value = await resolveRawItems(rawItems);
 }
 
-/** 加载财务信息附件 */
+/** 加载财务信息附件（仅图片） */
 async function loadFinanceImages() {
-  const items: ImageItem[] = [];
+  const rawItems: RawItem[] = [];
   try {
     const res = await financeList({ pageNum: 1, pageSize: 200, deptId: props.companyId });
     const list: BizFinanceInfo[] = res?.rows || [];
     for (const f of list) {
       if (f.attachmentUrl) {
-        splitUrls(f.attachmentUrl).forEach((url, idx, arr) => {
+        splitValues(f.attachmentUrl).forEach((val, idx, arr) => {
           const name = f.financeName || '财务信息';
-          items.push({ url, label: `${name}${arr.length > 1 ? ` (${idx + 1})` : ''}`, category: '财务信息' });
+          rawItems.push({ value: val, label: `${name}${arr.length > 1 ? ` (${idx + 1})` : ''}`, category: '财务信息' });
         });
       }
     }
-  } catch (e) { /* ignore */ }
-  financeImages.value = items;
-}
-
-/** 分割逗号分隔的URL */
-function splitUrls(urlStr: string): string[] {
-  return urlStr.split(',').map(u => u.trim()).filter(Boolean);
+  } catch { /* ignore */ }
+  financeImages.value = await resolveRawItems(rawItems);
 }
 
 function toggleSelect(url: string) {
@@ -207,7 +271,8 @@ const fallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQwIiBoZWlnaHQ
   <Modal
     :open="props.open"
     title="插入知识库图片"
-    width="800px"
+    :width="640"
+    wrap-class-name="knowledge-image-picker-modal"
     ok-text="插入选中图片"
     cancel-text="取消"
     @ok="handleOk"
@@ -378,5 +443,12 @@ const fallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQwIiBoZWlnaHQ
 
 .image-empty {
   padding: 40px 0;
+}
+</style>
+
+<style>
+.knowledge-image-picker-modal .ant-modal {
+  max-width: 800px !important;
+  width: 800px !important;
 }
 </style>

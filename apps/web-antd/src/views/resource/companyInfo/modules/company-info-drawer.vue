@@ -2,7 +2,9 @@
 import type { BizCompanyInfo } from '#/api/resource/companyInfo';
 
 import { ref, computed } from 'vue';
-import { useVbenDrawer, useVbenForm } from '@vben/common-ui';
+import { useVbenDrawer } from '@vben/common-ui';
+
+import { useVbenForm } from '#/adapter/form';
 
 import { IconifyIcon } from '@vben/icons';
 

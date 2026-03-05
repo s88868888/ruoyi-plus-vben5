@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Button, message, Progress, Tree, Dropdown, Menu, MenuItem, Modal, Input, Form, FormItem, TreeSelect, Tooltip, Popconfirm, Badge, Spin, Popover, Tag } from 'ant-design-vue';
+import { Button, message, Progress, Tree, Dropdown, Menu, MenuItem, Modal, Input, Form, FormItem, TreeSelect, Tooltip, Popconfirm, Badge, Spin, Popover, Tag, Select, SelectOption } from 'ant-design-vue';
 import {
   FileTextOutlined,
   ThunderboltOutlined,
@@ -8,7 +8,7 @@ import {
   EllipsisOutlined,
   InfoCircleOutlined,
   EditOutlined,
-  SyncOutlined,
+  SafetyCertificateOutlined,
   PlusOutlined,
   CaretRightOutlined,
   DeleteOutlined,
@@ -105,6 +105,7 @@ const chapterModalForm = ref({
   chapterTitle: '',
   reasonDescription: '',
   parentId: null as number | null,  // null 表示根级别
+  chapterType: 'generate' as 'template' | 'generate',
 });
 const editingChapter = ref<BizSubmissionChapter | null>(null);
 
@@ -155,6 +156,12 @@ function startPolling() {
         // 出错或未开始
         stopPolling();
         generating.value = false;
+        generatingMessage.value = '';
+        // 如果进度条之前已经在跑（说明是生成失败了），提示用户
+        if (progress === 0) {
+          message.error('章节结构生成失败，请重试');
+        }
+        loadChapterTree();
       }
     } catch (e) {
       // 忽略轮询错误
@@ -220,12 +227,18 @@ function startBatchPolling() {
     batchCurrent.value = completed;
     batchProgress.value = total > 0 ? Math.round((completed / total) * 100) : 0;
     batchMessage.value = `正在生成章节内容 (${completed}/${total})...`;
-    if (!hasGeneratingChapters(chapterTree.value)) {
+    const noGenerating = !hasGeneratingChapters(chapterTree.value);
+    const allDone = total > 0 && completed >= total;
+    if (noGenerating && allDone) {
       stopBatchPolling();
-      batchGenerating.value = false;
       batchProgress.value = 100;
-      batchMessage.value = '';
+      batchMessage.value = '全部章节生成完成';
       message.success('全部章节生成完成');
+      loadChapterTree();
+      setTimeout(() => {
+        batchGenerating.value = false;
+        batchMessage.value = '';
+      }, 2000);
     }
   }, 3000);
 }
@@ -356,6 +369,11 @@ async function loadChapterTree() {
     console.log('章节树查询结果:', res);
     chapterTree.value = res || [];
 
+    // 初次加载时默认展开第一个章节
+    if (chapterTree.value.length > 0 && expandedKeys.value.length === 0) {
+      expandedKeys.value = [String(chapterTree.value[0].id)];
+    }
+
     // 通知父组件章节结构已生成
     if (chapterTree.value.length > 0) {
       emit('structure-generated', chapterTree.value);
@@ -449,7 +467,7 @@ function handleClearChapters() {
 // 手动新建章节
 function handleAddChapter() {
   chapterModalMode.value = 'add';
-  chapterModalForm.value = { chapterTitle: '', reasonDescription: '', parentId: null };
+  chapterModalForm.value = { chapterTitle: '', reasonDescription: '', parentId: null, chapterType: 'generate' };
   editingChapter.value = null;
   showChapterModal.value = true;
 }
@@ -467,16 +485,22 @@ async function handleChapterModalOk() {
         submissionDocumentId: props.documentConfigId!,
         parentId: String(chapterModalForm.value.parentId ?? 0),
         chapterTitle: chapterModalForm.value.chapterTitle.trim(),
-        chapterType: 'generate',
+        chapterType: chapterModalForm.value.chapterType,
         reasonDescription: chapterModalForm.value.reasonDescription.trim(),
       });
       message.success('章节创建成功');
       showChapterModal.value = false;
       loadChapterTree();
     } else {
-      // TODO: 调用后端接口编辑章节标题
+      if (editingChapter.value) {
+        // 如果章节类型有变化，调用后端接口更新
+        if (chapterModalForm.value.chapterType !== editingChapter.value.chapterType) {
+          await updateChapterType(String(editingChapter.value.id), chapterModalForm.value.chapterType);
+        }
+      }
       message.success('章节修改成功');
       showChapterModal.value = false;
+      loadChapterTree();
     }
   } finally {
     chapterModalSubmitting.value = false;
@@ -509,6 +533,35 @@ async function handleTreeSelect(keys: string[], info: any) {
       }
     }
   }
+}
+
+/** 手风琴模式：同级只保留一个展开的父节点 */
+function handleTreeExpand(keys: string[], { expanded, node }: { expanded: boolean; node: any }) {
+  if (!expanded) {
+    // 折叠操作：直接用新 keys
+    expandedKeys.value = keys;
+    return;
+  }
+  // 展开操作：在同级兄弟中只保留当前节点
+  const nodeId = String(node.id ?? node.key);
+  const siblings = findSiblingNodes(chapterTree.value, nodeId);
+  const siblingIdSet = new Set(siblings.map((n: any) => String(n.id)));
+  // 过滤掉同级其他节点，保留不同层级已展开的 + 当前节点
+  expandedKeys.value = keys.filter(
+    (k) => !siblingIdSet.has(String(k)) || String(k) === nodeId,
+  );
+}
+
+/** 递归查找目标节点的同级节点列表 */
+function findSiblingNodes(nodes: BizSubmissionChapter[], targetId: string): BizSubmissionChapter[] {
+  for (const node of nodes) {
+    if (String(node.id) === targetId) return nodes;
+    if (node.children?.length) {
+      const found = findSiblingNodes(node.children, targetId);
+      if (found.length > 0) return found;
+    }
+  }
+  return [];
 }
 
 // 下一步
@@ -725,7 +778,7 @@ async function handleTreeDrop(info: any) {
 // 编辑章节
 function editChapterContent(chapter: BizSubmissionChapter) {
   chapterModalMode.value = 'edit';
-  chapterModalForm.value = { chapterTitle: chapter.chapterTitle || '', reasonDescription: chapter.reasonDescription || '', parentId: null };
+  chapterModalForm.value = { chapterTitle: chapter.chapterTitle || '', reasonDescription: chapter.reasonDescription || '', parentId: null, chapterType: (chapter.chapterType as 'template' | 'generate') || 'generate' };
   editingChapter.value = chapter;
   showChapterModal.value = true;
 }
@@ -813,6 +866,8 @@ async function handleGenerateAll() {
           submissionId: props.submissionId,
           documentConfigId: props.documentConfigId!,
         });
+        // 启动轮询作为 SSE 的兜底，确保进度实时更新
+        startBatchPolling();
       } catch (e) {
         message.error('批量生成启动失败');
         batchGenerating.value = false;
@@ -888,7 +943,9 @@ function handleChapterContentSseMessage(data: any) {
       break;
     case 'batch_chapter_success':
       batchCurrent.value = current || 0;
+      batchTotal.value = total || batchTotal.value;
       batchProgress.value = progress || 0;
+      batchMessage.value = msg || `已完成 (${batchCurrent.value}/${batchTotal.value})`;
       if (chapterId) {
         updateChapterStatusInTree(chapterId, 'completed');
         if (currentChapter.value?.id === chapterId) {
@@ -898,11 +955,14 @@ function handleChapterContentSseMessage(data: any) {
       break;
     case 'batch_success':
       stopBatchPolling();
-      batchGenerating.value = false;
       batchProgress.value = 100;
       batchMessage.value = msg || '全部生成完成';
       message.success('全部章节生成完成');
       loadChapterTree();
+      setTimeout(() => {
+        batchGenerating.value = false;
+        batchMessage.value = '';
+      }, 2000);
       break;
     case 'batch_error':
       stopBatchPolling();
@@ -1051,9 +1111,9 @@ function handleClosePreview() {
           <span>加载中...</span>
         </div>
         <div v-else-if="generating" class="generating-state">
-          <ThunderboltOutlined class="generating-icon" />
-          <p class="generating-text">{{ generatingMessage }}</p>
-          <Progress :percent="generatingProgress" :show-info="true" />
+          <LoadingOutlined spin class="generating-icon" />
+          <p class="generating-text">{{ generatingMessage || 'AI 正在生成章节结构，请稍候...' }}</p>
+          <p class="generating-hint">生成过程通常需要 30~60 秒</p>
         </div>
         <div v-else-if="chapterTree.length === 0" class="empty-state">
           <FileTextOutlined class="empty-icon" />
@@ -1065,7 +1125,7 @@ function handleClosePreview() {
         </div>
         <Tree
           v-else
-          v-model:expanded-keys="expandedKeys"
+          :expanded-keys="expandedKeys"
           v-model:selected-keys="selectedKeys"
           :tree-data="chapterTree"
           :field-names="{ title: 'chapterTitle', key: 'id', children: 'children' }"
@@ -1073,6 +1133,7 @@ function handleClosePreview() {
           :virtual="false"
           draggable
           @select="handleTreeSelect"
+          @expand="handleTreeExpand"
           @drop="handleTreeDrop"
         >
           <template #switcherIcon="{ expanded }">
@@ -1083,7 +1144,9 @@ function handleClosePreview() {
               <span class="tree-node-title">
                 <span class="chapter-no">{{ node.chapterNo }}</span>
                 <span class="chapter-title-text">{{ node.chapterTitle }}</span>
-                <Tag v-if="node.chapterType === 'template'" color="blue" class="chapter-type-tag">规定格式</Tag>
+                <Tooltip v-if="isLeafChapter(node) && node.chapterType === 'template'" title="规定格式">
+                  <SafetyCertificateOutlined class="chapter-type-icon" />
+                </Tooltip>
                 <span v-if="isLeafChapter(node)" class="chapter-status-icon">
                   <CheckCircleFilled v-if="node.generationStatus === 'completed'" style="color: #52c41a; font-size: 12px;" />
                   <LoadingOutlined v-else-if="node.generationStatus === 'generating'" spin style="color: #1677ff; font-size: 12px;" />
@@ -1104,14 +1167,6 @@ function handleClosePreview() {
                     :icon="h(InfoCircleOutlined)"
                   />
                 </Tooltip>
-                <Button
-                  type="text"
-                  size="small"
-                  :icon="h(SyncOutlined)"
-                  :title="node.chapterType === 'template' ? '切换为AI生成' : '切换为规定格式'"
-                  :disabled="batchGenerating"
-                  @click="handleToggleChapterType(node)"
-                />
                 <Button
                   type="text"
                   size="small"
@@ -1342,6 +1397,12 @@ function handleClosePreview() {
             @press-enter="handleChapterModalOk"
           />
         </FormItem>
+        <FormItem label="章节类型">
+          <Select v-model:value="chapterModalForm.chapterType" style="width: 100%;">
+            <SelectOption value="generate">AI生成</SelectOption>
+            <SelectOption value="template">规定格式</SelectOption>
+          </Select>
+        </FormItem>
         <FormItem label="原因说明">
           <Input.TextArea
             v-model:value="chapterModalForm.reasonDescription"
@@ -1460,19 +1521,19 @@ function handleClosePreview() {
           font-size: 48px;
           color: hsl(var(--primary));
           margin-bottom: 16px;
-          animation: pulse 1.5s ease-in-out infinite;
         }
 
         .generating-text {
           color: hsl(var(--primary));
-          margin-bottom: 16px;
+          margin-bottom: 8px;
           font-size: 14px;
           font-weight: 500;
         }
 
-        :deep(.ant-progress) {
-          width: 100%;
-          max-width: 240px;
+        .generating-hint {
+          color: #999;
+          font-size: 12px;
+          margin: 0;
         }
       }
 
@@ -1511,14 +1572,14 @@ function handleClosePreview() {
       :deep(.ant-tree) {
         background: transparent;
 
-        // 禁用展开收起动画，防止抖动
-        .ant-tree-list-holder-inner {
-          transition: none !important;
+        // 展开/折叠过渡动画
+        .ant-tree-treenode-motion {
+          transition: all 0.25s ease-in-out;
+          overflow: hidden;
         }
 
         .ant-tree-treenode {
           padding: 4px 0;
-          transition: none !important;
         }
 
         .ant-tree-node-content-wrapper {
@@ -1549,7 +1610,7 @@ function handleClosePreview() {
         .switcher-icon {
           font-size: 12px;
           color: #999;
-          transition: transform 0.2s;
+          transition: transform 0.25s ease;
 
           &.switcher-icon-open {
             transform: rotate(90deg);
@@ -1591,19 +1652,17 @@ function handleClosePreview() {
               text-overflow: ellipsis;
             }
 
+            .chapter-type-icon {
+              flex-shrink: 0;
+              color: #1677ff;
+              font-size: 13px;
+              margin-left: 2px;
+            }
+
             .chapter-status-icon {
               flex-shrink: 0;
               display: inline-flex;
               align-items: center;
-            }
-
-            .chapter-type-tag {
-              flex-shrink: 0;
-              font-size: 11px;
-              line-height: 18px;
-              padding: 0 5px;
-              margin: 0;
-              border-radius: 3px;
             }
           }
 

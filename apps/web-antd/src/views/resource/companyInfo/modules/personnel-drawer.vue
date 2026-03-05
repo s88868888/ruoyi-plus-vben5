@@ -1,7 +1,9 @@
 <script setup lang="ts">
 
 import { ref, computed, h } from 'vue';
-import { useVbenDrawer, useVbenForm } from '@vben/common-ui';
+import { useVbenDrawer } from '@vben/common-ui';
+
+import { useVbenForm } from '#/adapter/form';
 import { Button, message, Steps } from 'ant-design-vue';
 
 import { IconifyIcon } from '@vben/icons';

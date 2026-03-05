@@ -51,8 +51,10 @@
             <ATree
               :tree-data="chapterTree"
               :selected-keys="selectedKeys"
+              :expanded-keys="expandedKeys"
               :field-names="{ title: 'chapterTitle', key: 'id', children: 'children' }"
               @select="handleChapterSelect"
+              @expand="handleExpand"
             >
               <template #title="{ chapterTitle, chapterNo, chapterType, generationStatus }">
                 <div class="chapter-node">
@@ -272,6 +274,7 @@ const treeLoading = ref(false);
 const chapterLoading = ref(false);
 const chapterTree = ref<BizSubmissionChapter[]>([]);
 const selectedKeys = ref<number[]>([]);
+const expandedKeys = ref<number[]>([]);
 const currentChapter = ref<BizSubmissionChapter | null>(null);
 const contentChanged = ref(false);
 
@@ -320,6 +323,7 @@ async function loadChapterTree() {
     if (chapterTree.value.length > 0) {
       const firstId = chapterTree.value[0].id!;
       selectedKeys.value = [firstId];
+      expandedKeys.value = [firstId];
       await loadChapterContent(firstId);
     }
   } catch (error) {
@@ -334,6 +338,33 @@ function handleChapterSelect(keys: number[]) {
     selectedKeys.value = keys;
     loadChapterContent(keys[0]);
   }
+}
+
+/** 手风琴模式：同级只保留一个展开节点 */
+function handleExpand(keys: number[], { expanded, node }: { expanded: boolean; node: any }) {
+  if (!expanded) {
+    // 折叠：直接移除
+    expandedKeys.value = keys;
+    return;
+  }
+  // 展开：找到同级兄弟节点，仅保留当前节点
+  const nodeId = node.id ?? node.key;
+  const parentChildren = findSiblings(chapterTree.value, nodeId);
+  const siblingIds = new Set(parentChildren.map((c: any) => c.id));
+  // 移除同级其他节点（保留不同层级的展开状态）
+  expandedKeys.value = keys.filter((k) => !siblingIds.has(k) || k === nodeId);
+}
+
+/** 在树中查找目标节点的同级节点列表 */
+function findSiblings(nodes: BizSubmissionChapter[], targetId: number): BizSubmissionChapter[] {
+  for (const node of nodes) {
+    if (node.id === targetId) return nodes;
+    if (node.children?.length) {
+      const found = findSiblings(node.children, targetId);
+      if (found.length > 0) return found;
+    }
+  }
+  return [];
 }
 
 async function loadChapterContent(chapterId: number) {
