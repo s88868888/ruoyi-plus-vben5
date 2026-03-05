@@ -127,7 +127,7 @@ const editorRef = ref<InstanceType<typeof AiEditorComp>>();
 /** 插入知识库图片到编辑器 */
 function handleInsertKnowledgeImages(urls: string[]) {
   if (!editorRef.value) return;
-  const html = urls.map(url => `<p><img src="${url}" style="max-width: 100%;" /></p>`).join('');
+  const html = urls.map(url => `<div style="text-align:center"><img src="${url}" alt="知识库图片" data-align="center" style="max-width:80%;border:1px solid #eee;border-radius:4px;" /></div>`).join('');
   editorRef.value.insertHtml(html);
   // 标记内容已修改
   contentModified.value = true;

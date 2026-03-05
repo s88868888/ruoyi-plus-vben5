@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { Button, message, Radio, RadioGroup, Space, Tag, Tooltip } from 'ant-design-vue';
+import { Button, message, Space, Tag, Tooltip } from 'ant-design-vue';
 import {
   DownloadOutlined,
-  FilePdfOutlined,
-  FileWordOutlined,
   PushpinOutlined,
 } from '@ant-design/icons-vue';
 import type { VxeGridProps } from '#/adapter/vxe-table';
@@ -12,8 +10,8 @@ import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
 import {
   exportDocument,
-  getLatestDocumentList,
-  saveDocumentVersion,
+  getAllDocumentList,
+  saveAllDocumentVersion,
   type BizSubmissionDocument,
 } from '#/api/bid/submissionDocument';
 
@@ -33,8 +31,8 @@ const tableCssVars = computed(() => ({
   '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
 }));
 
-// 导出格式
-const exportFormat = ref<'docx' | 'pdf'>('docx');
+// 导出格式，固定为 docx
+const exportFormat = 'docx';
 
 // 记录正在导出的行
 const exportingIds = ref<Set<string>>(new Set());
@@ -43,26 +41,15 @@ const exportingIds = ref<Set<string>>(new Set());
 const savingVersion = ref(false);
 
 async function handleSaveVersion() {
-  const checked = tableApi.grid?.getCheckboxRecords() as BizSubmissionDocument[];
-  if (!checked || checked.length === 0) {
-    message.warning('请至少勾选一个文档');
-    return;
-  }
   savingVersion.value = true;
-  let successCount = 0;
-  for (const row of checked) {
-    if (!row.documentConfigId) continue;
-    try {
-      const result = await saveDocumentVersion(row.documentConfigId, props.submissionId);
-      successCount++;
-    } catch {
-      message.error(`${row.documentName || '文档'} 归纳失败`);
-    }
-  }
-  savingVersion.value = false;
-  if (successCount > 0) {
-    message.success(`已归纳 ${successCount} 个文档为新版本`);
+  try {
+    await saveAllDocumentVersion(props.submissionId);
+    message.success('已归纳所有章节为新版本');
     tableApi.reload();
+  } catch {
+    message.error('归纳失败，请重试');
+  } finally {
+    savingVersion.value = false;
   }
 }
 
@@ -71,13 +58,12 @@ const gridOptions: VxeGridProps = {
   height: 'auto',
   checkboxConfig: { highlight: true, labelField: '' },
   columns: [
-    { type: 'checkbox', width: 50 },
+    { type: 'checkbox', width: 50, fixed: 'left' },
     { type: 'seq', width: 60, title: '序号' },
     {
       field: 'documentName',
       title: '文档名称',
       minWidth: 220,
-      fixed: 'left',
       slots: { default: 'documentName' },
     },
     {
@@ -95,10 +81,9 @@ const gridOptions: VxeGridProps = {
     {
       field: 'version',
       title: '版本号',
-      width: 100,
-      slots: { default: 'version' },
-      headerAlign: 'center',
+      width: 80,
       align: 'center',
+      formatter: ({ cellValue }: any) => (cellValue != null ? `v${cellValue}` : '-'),
     },
     {
       field: 'generationStatus',
@@ -119,7 +104,7 @@ const gridOptions: VxeGridProps = {
   proxyConfig: {
     ajax: {
       query: async () => {
-        const data = await getLatestDocumentList(props.submissionId);
+        const data = await getAllDocumentList(props.submissionId);
         return { rows: data || [], total: (data || []).length };
       },
     },
@@ -171,8 +156,8 @@ async function handleExportSingle(row: BizSubmissionDocument) {
   if (!row.id) return;
   exportingIds.value.add(row.id);
   try {
-    const blob = await exportDocument(row.id, exportFormat.value);
-    const fileName = `${row.documentName || '标书文档'}_v${row.version}.${exportFormat.value}`;
+    const blob = await exportDocument(row.id, exportFormat);
+    const fileName = `${row.documentName || '标书文档'}_v${row.version}.${exportFormat}`;
     triggerDownload(blob, fileName);
     message.success(`${fileName} 导出成功`);
   } catch {
@@ -195,8 +180,8 @@ async function handleBatchExport() {
     if (!row.id) continue;
     exportingIds.value.add(row.id);
     try {
-      const blob = await exportDocument(row.id, exportFormat.value);
-      const fileName = `${row.documentName || '标书文档'}_v${row.version}.${exportFormat.value}`;
+      const blob = await exportDocument(row.id, exportFormat);
+      const fileName = `${row.documentName || '标书文档'}_v${row.version}.${exportFormat}`;
       triggerDownload(blob, fileName);
       successCount++;
     } catch {
@@ -233,32 +218,17 @@ function handleFinish() {
   <div class="step3-export">
     <!-- 顶部工具栏 -->
     <div class="export-toolbar">
-      <div class="toolbar-left">
-        <span class="toolbar-title">导出格式：</span>
-        <RadioGroup v-model:value="exportFormat" button-style="solid" size="small">
-          <Radio.Button value="docx">
-            <FileWordOutlined style="color: #2b579a; margin-right: 4px;" />
-            Word (.docx)
-          </Radio.Button>
-          <Radio.Button value="pdf">
-            <FilePdfOutlined style="color: #e74c3c; margin-right: 4px;" />
-            PDF
-          </Radio.Button>
-        </RadioGroup>
-      </div>
-      <div class="toolbar-right">
-        <Space>
-          <Button @click="tableApi.reload()">刷新</Button>
-          <Button :loading="savingVersion" @click="handleSaveVersion">
-            <PushpinOutlined />
-            归纳为新版本
-          </Button>
-          <Button type="primary" @click="handleBatchExport">
-            <DownloadOutlined />
-            批量导出
-          </Button>
-        </Space>
-      </div>
+      <Space>
+        <Button @click="tableApi.reload()">刷新</Button>
+        <Button :loading="savingVersion" @click="handleSaveVersion">
+          <PushpinOutlined />
+          归纳为新版本
+        </Button>
+        <Button type="primary" @click="handleBatchExport">
+          <DownloadOutlined />
+          批量导出
+        </Button>
+      </Space>
     </div>
 
     <!-- VXE 表格 -->
@@ -276,13 +246,6 @@ function handleFinish() {
           </Tag>
         </template>
 
-        <!-- 版本号 Tag（青色=最新） -->
-        <template #version="{ row }">
-          <Tag :color="row.isLatest === '1' ? 'cyan' : 'default'">
-            v{{ row.version ?? 1 }}
-          </Tag>
-        </template>
-
         <!-- 生成状态 -->
         <template #generationStatus="{ row }">
           <Tag :color="getStatusColor(row.generationStatus)">
@@ -292,7 +255,7 @@ function handleFinish() {
 
         <!-- 操作列 -->
         <template #action="{ row }">
-          <Tooltip :title="`导出 ${exportFormat === 'docx' ? 'Word' : 'PDF'}`">
+          <Tooltip title="导出 Word">
             <Button
               type="link"
               size="small"
@@ -328,23 +291,11 @@ function handleFinish() {
   .export-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     padding: 12px 16px;
     background: #fff;
     border: 1px solid #f0f0f0;
     border-radius: 8px;
-
-    .toolbar-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-
-      .toolbar-title {
-        font-weight: 500;
-        color: rgba(0, 0, 0, 0.65);
-        white-space: nowrap;
-      }
-    }
   }
 
   .table-wrapper {

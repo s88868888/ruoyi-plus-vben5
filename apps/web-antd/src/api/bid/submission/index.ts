@@ -25,6 +25,8 @@ export interface BizBidSubmission {
   completedDocuments?: number;
   failedDocuments?: number;
   taskId?: string;
+  publishDate?: string;
+  deadline?: string;
   startTime?: string;
   endTime?: string;
   errorMessage?: string;

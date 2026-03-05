@@ -103,8 +103,8 @@ export async function fillTemplate(id: string) {
  * 保存章节内容
  */
 export async function saveChapterContent(id: string, content: string) {
-  return requestClient.putWithMsg('/bid/submission/chapter', null, {
-    params: { id, content },
+  return requestClient.putWithMsg('/bid/submission/chapter', { content }, {
+    params: { id },
   });
 }
 

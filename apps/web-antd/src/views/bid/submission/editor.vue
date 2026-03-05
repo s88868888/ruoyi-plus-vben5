@@ -463,7 +463,7 @@ function handleContentChange(val: string) {
 function handleInsertKnowledgeImages(urls: string[]) {
   if (!aiEditorRef.value) return;
   const html = urls.map(url =>
-    `<div class="chapter-image" style="text-align:center;margin:16px 0;"><img src="${url}" alt="知识库图片" style="max-width:80%;border:1px solid #eee;border-radius:4px;" /><p style="color:#666;font-size:12px;margin-top:4px;">图：知识库图片</p></div>`
+    `<div style="text-align:center"><img src="${url}" alt="知识库图片" data-align="center" style="max-width:80%;border:1px solid #eee;border-radius:4px;" /></div><p style="text-align:center;color:#666;font-size:12px;margin-top:4px;">图：知识库图片</p>`
   ).join('');
   aiEditorRef.value.insertHtml(html);
   contentChanged.value = true;

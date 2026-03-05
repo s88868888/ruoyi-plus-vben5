@@ -28,6 +28,13 @@ export function getLatestDocumentList(submissionId: string) {
 }
 
 /**
+ * 获取投标项目所有版本文档列表
+ */
+export function getAllDocumentList(submissionId: string) {
+  return requestClient.get<BizSubmissionDocument[]>(`/bid/document/all/${submissionId}`);
+}
+
+/**
  * 获取某配置下所有历史版本
  */
 export function getDocumentVersions(documentConfigId: string) {
@@ -42,6 +49,15 @@ export function saveDocumentVersion(documentConfigId: string, submissionId: stri
     `/bid/document/saveVersion/${documentConfigId}`,
     {},
     { params: { submissionId } },
+  );
+}
+
+/**
+ * 将所有章节合并为一份完整文档并保存为新版本
+ */
+export function saveAllDocumentVersion(submissionId: string) {
+  return requestClient.postWithMsg<BizSubmissionDocument>(
+    `/bid/document/saveAllVersion/${submissionId}`,
   );
 }
 

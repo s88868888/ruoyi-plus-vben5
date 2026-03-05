@@ -19,6 +19,11 @@ import { AnchorNav } from '#/components/anchor-nav';
 import { submissionInfo } from '#/api/bid/submission';
 import { getDocumentConfigList } from '#/api/bid/documentConfig';
 import { useDetailPagePreference } from '#/preferences/userPreference';
+import {
+  formatCnyAmount,
+  formatCnyUppercase,
+  formatRemainingDays,
+} from '../project/utils/format';
 
 const route = useRoute();
 const router = useRouter();
@@ -36,8 +41,8 @@ const layoutPreference = useDetailPagePreference();
 // 锚点导航项
 const anchorNavItems = ref<AnchorNavItem[]>([
   { key: 'generation-progress', title: '生成进度' },
-  { key: 'doc-config', title: '标书配置' },
   { key: 'project-info', title: '项目信息' },
+  { key: 'doc-config', title: '标书配置' },
   { key: 'time-record', title: '时间记录' },
 ]);
 
@@ -255,9 +260,11 @@ function handleGoConfig() {
             </div>
             <div class="header-metric">
               <div class="header-metric-label">预算金额</div>
-              <div class="header-metric-value text-orange-500">
-                {{ detailData?.budgetAmount ? `¥${Number(detailData.budgetAmount).toLocaleString('zh-CN')} 万元` : '-' }}
-              </div>
+              <div class="header-metric-value text-orange-500">{{ formatCnyAmount(detailData?.budgetAmount) }}</div>
+            </div>
+            <div class="header-metric header-metric-wide">
+              <div class="header-metric-label">预算金额（人民币大写）</div>
+              <div class="header-metric-value">{{ formatCnyUppercase(detailData?.budgetAmount) }}</div>
             </div>
             <div class="header-metric">
               <div class="header-metric-label">项目地区</div>
@@ -266,6 +273,10 @@ function handleGoConfig() {
             <div class="header-metric">
               <div class="header-metric-label">招标方式</div>
               <div class="header-metric-value">{{ bidMethodLabels[detailData?.bidMethod || ''] || detailData?.bidMethod || '-' }}</div>
+            </div>
+            <div class="header-metric">
+              <div class="header-metric-label">剩余天数</div>
+              <div class="header-metric-value">{{ formatRemainingDays(detailData?.publishDate, detailData?.deadline) }}</div>
             </div>
             <div class="header-metric">
               <div class="header-metric-label">创建时间</div>
@@ -308,34 +319,61 @@ function handleGoConfig() {
               />
             </div>
 
-            <!-- 概览统计 -->
-            <div v-if="configs.length > 0" class="config-stats">
-              <div class="stat-item">
-                <div class="stat-num">{{ configStats.total }}</div>
-                <div class="stat-label">标书总数</div>
-              </div>
-              <div class="stat-item stat-item-completed">
-                <div class="stat-num">{{ configStats.completed }}</div>
-                <div class="stat-label">已完成</div>
-              </div>
-              <div class="stat-item stat-item-generating">
-                <div class="stat-num">{{ configStats.generating }}</div>
-                <div class="stat-label">生成中</div>
-              </div>
-              <div class="stat-item stat-item-pending">
-                <div class="stat-num">{{ configStats.pending }}</div>
-                <div class="stat-label">待生成</div>
-              </div>
-              <div v-if="configStats.failed > 0" class="stat-item stat-item-failed">
-                <div class="stat-num">{{ configStats.failed }}</div>
-                <div class="stat-label">失败</div>
-              </div>
-            </div>
-
             <!-- 错误信息 -->
             <div v-if="detailData?.errorMessage" class="error-box">
               <div class="error-label">错误信息</div>
               <div class="error-content">{{ detailData.errorMessage }}</div>
+            </div>
+          </Card>
+
+          <!-- 项目信息卡片 -->
+          <Card id="project-info" class="mb-4 detail-card" :style="cardRadiusStyle">
+            <template #title>
+              <span class="card-title">
+                <CheckCircleOutlined class="card-title-icon" />
+                项目信息
+              </span>
+            </template>
+            <div class="field-grid">
+              <div class="field-item">
+                <div class="field-label">项目名称</div>
+                <div class="field-value">{{ detailData?.projectName || '-' }}</div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">招标单位</div>
+                <div class="field-value">{{ detailData?.bidOrg || '-' }}</div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">项目类型</div>
+                <div class="field-value">
+                  <Tag v-if="detailData?.projectType" :color="projectTypeColors[detailData.projectType] || 'default'">
+                    {{ projectTypeLabels[detailData.projectType] || detailData.projectType }}
+                  </Tag>
+                  <span v-else>-</span>
+                </div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">招标方式</div>
+                <div class="field-value">{{ bidMethodLabels[detailData?.bidMethod || ''] || detailData?.bidMethod || '-' }}</div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">预算金额</div>
+                <div class="field-value text-orange-500">
+                  {{ detailData?.budgetAmount ? `¥${Number(detailData.budgetAmount).toLocaleString('zh-CN')} 万元` : '-' }}
+                </div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">项目地区</div>
+                <div class="field-value">{{ detailData?.projectRegion || '-' }}</div>
+              </div>
+              <div v-if="detailData?.projectDesc" class="field-item field-item-full">
+                <div class="field-label">项目描述</div>
+                <div class="field-value field-value-block">{{ detailData.projectDesc }}</div>
+              </div>
+              <div v-if="detailData?.remark" class="field-item field-item-full">
+                <div class="field-label">备注</div>
+                <div class="field-value field-value-block">{{ detailData.remark }}</div>
+              </div>
             </div>
           </Card>
 
@@ -404,57 +442,6 @@ function handleGoConfig() {
                 </div>
               </div>
             </Spin>
-          </Card>
-
-          <!-- 项目信息卡片 -->
-          <Card id="project-info" class="mb-4 detail-card" :style="cardRadiusStyle">
-            <template #title>
-              <span class="card-title">
-                <CheckCircleOutlined class="card-title-icon" />
-                项目信息
-              </span>
-            </template>
-            <div class="field-grid">
-              <div class="field-item">
-                <div class="field-label">项目名称</div>
-                <div class="field-value">{{ detailData?.projectName || '-' }}</div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">招标单位</div>
-                <div class="field-value">{{ detailData?.bidOrg || '-' }}</div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">项目类型</div>
-                <div class="field-value">
-                  <Tag v-if="detailData?.projectType" :color="projectTypeColors[detailData.projectType] || 'default'">
-                    {{ projectTypeLabels[detailData.projectType] || detailData.projectType }}
-                  </Tag>
-                  <span v-else>-</span>
-                </div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">招标方式</div>
-                <div class="field-value">{{ bidMethodLabels[detailData?.bidMethod || ''] || detailData?.bidMethod || '-' }}</div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">预算金额</div>
-                <div class="field-value text-orange-500">
-                  {{ detailData?.budgetAmount ? `¥${Number(detailData.budgetAmount).toLocaleString('zh-CN')} 万元` : '-' }}
-                </div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">项目地区</div>
-                <div class="field-value">{{ detailData?.projectRegion || '-' }}</div>
-              </div>
-              <div v-if="detailData?.projectDesc" class="field-item field-item-full">
-                <div class="field-label">项目描述</div>
-                <div class="field-value field-value-block">{{ detailData.projectDesc }}</div>
-              </div>
-              <div v-if="detailData?.remark" class="field-item field-item-full">
-                <div class="field-label">备注</div>
-                <div class="field-value field-value-block">{{ detailData.remark }}</div>
-              </div>
-            </div>
           </Card>
 
           <!-- 时间信息卡片 -->
@@ -567,6 +554,8 @@ function handleGoConfig() {
 }
 
 .header-metric { min-width: 120px; }
+
+.header-metric-wide { min-width: 280px; }
 
 .header-metric-label {
   color: #909399;

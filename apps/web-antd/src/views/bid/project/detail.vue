@@ -642,6 +642,8 @@ async function handleVisibilityChange() {
                       <tr
                         v-for="cfg in getSubmissionConfigs(sub)"
                         :key="cfg.id"
+                        class="config-row-clickable"
+                        @click="handleViewSubmission(sub)"
                       >
                         <td>{{ cfg.companyName || '-' }}</td>
                         <td>
@@ -1151,6 +1153,10 @@ async function handleVisibilityChange() {
 
 .config-table tbody tr:hover td {
   background: #f5f7fa;
+}
+
+.config-row-clickable {
+  cursor: pointer;
 }
 
 /* ========== 响应式 ========== */
