@@ -8,7 +8,7 @@ import { computed, onMounted, ref, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { MarkdownPreviewer } from '@vben/common-ui';
-import { Card, Empty, Spin, Tag, Button, Space } from 'ant-design-vue';
+import { Card, Empty, Spin, Tag, Button, Space, Steps, Progress } from 'ant-design-vue';
 import {
   DownloadOutlined,
   ExpandOutlined,
@@ -25,6 +25,8 @@ import { AnchorNav } from '#/components/anchor-nav';
 import { bidProjectInfo } from '#/api/bid/project';
 import { getDocumentConfigList } from '#/api/bid/documentConfig';
 import { submissionList } from '#/api/bid/submission';
+import { getChapterTree } from '#/api/bid/chapter';
+import type { BizSubmissionChapter } from '#/api/bid/chapter';
 import { useDetailPagePreference } from '#/preferences/userPreference';
 import {
   formatCnyAmount,
@@ -56,6 +58,7 @@ const layoutPreference = useDetailPagePreference();
 const anchorNavItems = ref<AnchorNavItem[]>([
   { key: 'basic-info', title: '基本信息' },
   { key: 'submission-progress', title: '投标进度' },
+  { key: 'doc-config', title: '标书配置' },
   { key: 'bid-info', title: '招标信息' },
   { key: 'contact-info', title: '联系信息' },
   { key: 'match-analysis', title: '契合度分析' },
@@ -178,22 +181,72 @@ const submissions = ref<BizBidSubmission[]>([]);
 const submissionsLoading = ref(false);
 const progressConfigs = ref<BizDocumentConfig[]>([]);
 
+// 每个配置对应的章节统计（configId -> stats）
+const chapterStatsMap = ref<Record<number, { totalArticles: number; completedArticles: number; generatingArticles: number; pendingArticles: number }>>({});
 
-const workflowStageLabels: Record<string, string> = {
-  pending_config: '待配置',
+/** 从章节树中提取所有叶子节点 */
+function collectLeafNodes(nodes: BizSubmissionChapter[]): BizSubmissionChapter[] {
+  const leaves: BizSubmissionChapter[] = [];
+  function walk(list: BizSubmissionChapter[]) {
+    for (const node of list) {
+      if (node.children && node.children.length > 0) {
+        walk(node.children);
+      } else {
+        leaves.push(node);
+      }
+    }
+  }
+  walk(nodes);
+  return leaves;
+}
+
+/** 异步加载所有配置的章节统计 */
+async function loadAllConfigChapterStats() {
+  const map: Record<number, { totalArticles: number; completedArticles: number; generatingArticles: number; pendingArticles: number }> = {};
+  await Promise.all(
+    progressConfigs.value.map(async (cfg) => {
+      if (!cfg.id || !cfg.bidSubmissionId) return;
+      try {
+        const tree = await getChapterTree({ submissionId: String(cfg.bidSubmissionId), documentId: String(cfg.id) });
+        const leaves = collectLeafNodes(tree || []);
+        const completed = leaves.filter((l) => l.generationStatus === 'completed').length;
+        const generating = leaves.filter((l) => l.generationStatus === 'generating').length;
+        map[cfg.id] = { totalArticles: leaves.length, completedArticles: completed, generatingArticles: generating, pendingArticles: leaves.length - completed - generating };
+      } catch {
+        map[cfg.id!] = { totalArticles: 0, completedArticles: 0, generatingArticles: 0, pendingArticles: 0 };
+      }
+    }),
+  );
+  chapterStatsMap.value = map;
+}
+
+function getConfigChapterStats(configId?: number) {
+  if (!configId) return { totalArticles: 0, completedArticles: 0, generatingArticles: 0, pendingArticles: 0 };
+  return chapterStatsMap.value[configId] || { totalArticles: 0, completedArticles: 0, generatingArticles: 0, pendingArticles: 0 };
+}
+
+
+const statusLabelsForSubmission: Record<string, string> = {
+  draft: '草稿',
   configured: '已配置',
-  structure_generated: '结构已生成',
   generating: '生成中',
-  completed: '已完成',
+  generated: '已生成',
+  submitted: '已投标',
+  won: '中标',
+  lost: '未中标',
+  abandoned: '废标/放弃',
   failed: '失败',
 };
 
-const workflowStageColors: Record<string, string> = {
-  pending_config: 'default',
+const statusColorsForSubmission: Record<string, string> = {
+  draft: 'default',
   configured: 'blue',
-  structure_generated: 'cyan',
   generating: 'processing',
-  completed: 'success',
+  generated: 'success',
+  submitted: 'warning',
+  won: 'success',
+  lost: 'error',
+  abandoned: 'default',
   failed: 'error',
 };
 
@@ -226,20 +279,13 @@ function getSubmissionConfigs(sub: BizBidSubmission) {
 }
 
 function getDisplayWorkflowStage(sub: BizBidSubmission) {
-  const configs = getSubmissionConfigs(sub);
-  if (configs.length === 0) {
-    return sub.workflowStage || 'pending_config';
-  }
-  const statuses = configs.map((cfg) => cfg.generationStatus || 'pending');
-  if (statuses.some((s) => s === 'generating')) return 'generating';
-  if (statuses.every((s) => s === 'completed')) return 'completed';
-  if (statuses.some((s) => s === 'failed')) return 'failed';
-  return 'configured';
+  // Use the unified status field directly
+  return sub.status || 'draft';
 }
 
 function canConfigSubmission(sub: BizBidSubmission) {
-  const stage = getDisplayWorkflowStage(sub);
-  return stage === 'pending_config' || stage === 'configured';
+  const status = sub.status || 'draft';
+  return status === 'draft' || status === 'configured';
 }
 
 function getChapterCountText(cfg: BizDocumentConfig) {
@@ -258,6 +304,22 @@ function getConfigProgress(cfg: BizDocumentConfig) {
   return cfg.generationProgress ?? 0;
 }
 
+function getSubmissionStepIndex(sub: BizBidSubmission) {
+  const stages = ['draft', 'configured', 'generating', 'generated', 'submitted', 'won'];
+  const stage = sub.status || 'draft';
+  if (stage === 'failed') return stages.indexOf('generating');
+  if (stage === 'lost' || stage === 'abandoned') return stages.indexOf('submitted');
+  const idx = stages.indexOf(stage);
+  return idx >= 0 ? idx : 0;
+}
+
+function getSubmissionStepStatus(sub: BizBidSubmission) {
+  const s = sub.status;
+  if (s === 'failed' || s === 'lost' || s === 'abandoned') return 'error';
+  if (s === 'won') return 'finish';
+  return 'process';
+}
+
 
 async function loadSubmissions() {
   const projectId = route.params.id as string;
@@ -272,6 +334,8 @@ async function loadSubmissions() {
       list.map((sub: BizBidSubmission) => getDocumentConfigList(sub.id as any).catch(() => [] as BizDocumentConfig[])),
     );
     progressConfigs.value = configList.flat();
+    // 异步加载章节统计（不阻塞主渲染）
+    loadAllConfigChapterStats();
   } catch {
     submissions.value = [];
     progressConfigs.value = [];
@@ -611,8 +675,8 @@ async function handleVisibilityChange() {
                   <!-- 投标项目行：名称 + 阶段 + 操作 -->
                   <div class="submission-header">
                     <span class="submission-name">{{ sub.projectName || '-' }}</span>
-                    <Tag :color="workflowStageColors[getDisplayWorkflowStage(sub)] || 'default'">
-                      {{ workflowStageLabels[getDisplayWorkflowStage(sub)] || '待配置' }}
+                    <Tag :color="statusColorsForSubmission[getDisplayWorkflowStage(sub)] || 'default'">
+                      {{ statusLabelsForSubmission[getDisplayWorkflowStage(sub)] || '草稿' }}
                     </Tag>
                     <span class="submission-actions">
                       <Button
@@ -626,6 +690,51 @@ async function handleVisibilityChange() {
                       <Button type="link" size="small" @click="handleViewSubmission(sub)">查看</Button>
                     </span>
                   </div>
+                  <!-- 投标进度 Steps -->
+                  <Steps
+                    :current="getSubmissionStepIndex(sub)"
+                    :status="getSubmissionStepStatus(sub)"
+                    size="small"
+                    class="mb-2"
+                  >
+                    <Steps.Step title="草稿" />
+                    <Steps.Step title="已配置" />
+                    <Steps.Step title="生成中" />
+                    <Steps.Step title="已生成" />
+                    <Steps.Step title="已投标" />
+                    <Steps.Step title="中标" />
+                  </Steps>
+                  <!-- 整体进度条（生成中时显示） -->
+                  <div v-if="sub.status === 'generating'" class="overall-progress mb-3">
+                    <Progress
+                      :percent="sub.generationProgress || 0"
+                      status="active"
+                      size="small"
+                      :stroke-color="{ '0%': '#108ee9', '100%': '#87d068' }"
+                    />
+                  </div>
+                </div>
+              </div>
+            </Spin>
+          </Card>
+
+          <!-- 卡片2：标书配置 -->
+          <Card id="doc-config" class="mb-4 detail-card" :style="cardRadiusStyle">
+            <template #title>
+              <span class="card-title">
+                <FileTextOutlined class="card-title-icon" />
+                标书配置
+              </span>
+            </template>
+            <Spin :spinning="submissionsLoading">
+              <div v-if="submissions.length === 0 && !submissionsLoading" class="py-8 text-center text-gray-400">
+                暂无标书配置
+              </div>
+              <div v-else class="submission-list">
+                <div v-for="sub in submissions" :key="sub.id" class="submission-section">
+                  <div class="submission-header">
+                    <span class="submission-name">{{ sub.projectName || '-' }}</span>
+                  </div>
                   <!-- 标书配置 table -->
                   <table
                     v-if="getSubmissionConfigs(sub).length > 0"
@@ -635,7 +744,9 @@ async function handleVisibilityChange() {
                       <tr>
                         <th>公司名称</th>
                         <th>标书类型</th>
-                        <th>生成进度</th>
+                        <th>目录数</th>
+                        <th class="th-right">章节状态</th>
+                        <th>备注</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -651,12 +762,17 @@ async function handleVisibilityChange() {
                             {{ documentTypeLabels[cfg.documentType || ''] || cfg.documentType }}
                           </Tag>
                         </td>
-                        <td>
-                          <Tag :color="cfg.generationStatus === 'completed' ? 'success' : cfg.generationStatus === 'generating' ? 'processing' : cfg.generationStatus === 'failed' ? 'error' : 'default'">
-                            {{ configStatusLabels[cfg.generationStatus || 'pending'] || '待生成' }}
-                          </Tag>
-                          <span v-if="getConfigProgress(cfg) > 0" class="config-progress">{{ getConfigProgress(cfg) }}%</span>
+                        <td>{{ getConfigChapterStats(cfg.id).totalArticles || '-' }}</td>
+                        <td class="chapter-cell chapter-cell-right">
+                          <template v-if="getConfigChapterStats(cfg.id).totalArticles > 0">
+                            <span class="chapter-status-completed">{{ getConfigChapterStats(cfg.id).completedArticles }}</span>
+                            <span class="chapter-status-sep">/</span>
+                            <span>{{ getConfigChapterStats(cfg.id).totalArticles }}</span>
+                            <span class="chapter-status-label"> 篇</span>
+                          </template>
+                          <span v-else class="chapter-status-empty">未生成</span>
                         </td>
+                        <td class="remark-cell">{{ cfg.remark || '-' }}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1157,6 +1273,45 @@ async function handleVisibilityChange() {
 
 .config-row-clickable {
   cursor: pointer;
+}
+
+.remark-cell {
+  color: #909399;
+  font-size: 13px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-cell { white-space: nowrap; }
+
+.chapter-cell-right { text-align: right; }
+
+.th-right { text-align: right !important; }
+
+.chapter-status-completed {
+  color: #52c41a;
+  font-weight: 600;
+}
+
+.chapter-status-sep {
+  color: #d9d9d9;
+  margin: 0 2px;
+}
+
+.chapter-status-label {
+  color: #909399;
+  font-size: 12px;
+}
+
+.chapter-status-empty {
+  color: #909399;
+  font-size: 13px;
+}
+
+.overall-progress {
+  padding: 0 4px;
 }
 
 /* ========== 响应式 ========== */

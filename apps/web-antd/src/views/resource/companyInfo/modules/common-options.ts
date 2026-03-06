@@ -193,3 +193,28 @@ export const dataPermissionTypeOptions = [
 export const knowledgeOptions = {
   projectType: knowledgeProjectTypeList,
 };
+
+// ============ 竞争公司 ============
+
+// 公司类型
+export const competitorCompanyTypeList = [
+  '国有企业',
+  '民营企业',
+  '外资企业',
+  '合资企业',
+  '上市公司',
+  '其他',
+];
+export const competitorCompanyTypeOptions = toSelectOptions(competitorCompanyTypeList);
+
+// 竞争级别
+export const competitorLevelOptions = [
+  { label: '强', value: '强' },
+  { label: '中', value: '中' },
+  { label: '弱', value: '弱' },
+];
+
+/** 竞争公司常用选项（供 AutoComplete 使用） */
+export const competitorOptions = {
+  companyType: competitorCompanyTypeList,
+};

@@ -562,9 +562,9 @@ async function pollProgress(id: number) {
     const { requestClient } = await import('#/api/request');
     const res: any = await requestClient.get(`/bid/submission/${id}/progress`);
     overallProgress.value = res.overallProgress ?? 0;
-    if (res.submissionStatus === 'completed' || res.submissionStatus === 'failed') {
+    if (res.status === 'generated' || res.status === 'failed') {
       generating.value = false;
-      if (res.submissionStatus === 'completed') message.success('标书生成完成！');
+      if (res.status === 'generated') message.success('标书生成完成！');
       else message.error('生成失败');
       await loadChapterTree();
     } else {

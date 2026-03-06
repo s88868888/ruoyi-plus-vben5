@@ -15,12 +15,10 @@ export interface BizBidSubmission {
   projectRegion?: string;
   bidMethod?: string;
   projectDesc?: string;
-  submissionStatus?: string;
-  workflowStage?: string;
+  status?: string;
   generationProgress?: number;
   selectedCompanies?: string;
   generationConfig?: string;
-  chapterStructureGenerated?: string;
   totalDocuments?: number;
   completedDocuments?: number;
   failedDocuments?: number;
@@ -33,6 +31,12 @@ export interface BizBidSubmission {
   remark?: string;
   createTime?: string;
   updateTime?: string;
+  /** 竞争对手分析结果（Markdown） */
+  competitorAnalysisResult?: string;
+  /** 分析状态：none-未分析，analyzing-分析中，completed-已完成，failed-失败 */
+  competitorAnalysisStatus?: string;
+  /** 竞争力评分（0-100） */
+  competitorScore?: number;
 }
 
 /**
@@ -46,7 +50,7 @@ export type BizBidSubmissionVO = BizBidSubmission;
 export interface BizBidSubmissionQuery extends BasePageQuery {
   bidProjectId?: number | string;
   projectName?: string;
-  submissionStatus?: string;
+  status?: string;
 }
 
 /**
@@ -68,6 +72,8 @@ export interface CreateSubmissionParams {
   selectedCompanies: number[];
   generationConfig: GenerationConfig[];
   remark?: string;
+  /** 是否分析竞争对手 */
+  analyzeCompetitors?: boolean;
 }
 
 /**
@@ -102,6 +108,7 @@ export async function createSubmissionFromProject(data: CreateSubmissionParams) 
     selectedCompanies: JSON.stringify(data.selectedCompanies),
     generationConfig: JSON.stringify(data.generationConfig),
     remark: data.remark,
+    analyzeCompetitors: data.analyzeCompetitors,
   });
 }
 
@@ -149,10 +156,24 @@ export const submissionRegenerate = regenerateSubmission;
 export const submissionCancel = cancelSubmissionGeneration;
 
 /**
+ * 投标项目进度 VO
+ */
+export interface BidSubmissionProgressVO {
+  submissionId?: number;
+  status?: string;
+  overallProgress?: number;
+  totalDocuments?: number;
+  completedDocuments?: number;
+  failedDocuments?: number;
+  documents?: any[];
+  logs?: any[];
+}
+
+/**
  * 获取生成进度
  */
 export async function getSubmissionProgress(id: number) {
-  return requestClient.get(`/bid/submission/${id}/progress`);
+  return requestClient.get<BidSubmissionProgressVO>(`/bid/submission/${id}/progress`);
 }
 
 /**
@@ -176,4 +197,11 @@ export interface BidProjectAttachment {
  */
 export async function getSubmissionAttachments(submissionId: string | number) {
   return requestClient.get<BidProjectAttachment[]>(`/bid/submission/${submissionId}/attachments`);
+}
+
+/**
+ * 手动触发竞争对手分析
+ */
+export async function analyzeCompetitors(id: number | string) {
+  return requestClient.post(`/bid/submission/${id}/analyzeCompetitors`);
 }

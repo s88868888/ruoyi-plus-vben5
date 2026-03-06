@@ -26,6 +26,7 @@ import PerformanceInfo from './modules/performance-info.vue';
 import PatentMedalInfo from './modules/patent-medal-info.vue';
 import FinanceInfo from './modules/finance-info.vue';
 import KnowledgeInfo from './modules/knowledge-info.vue';
+import CompetitorInfo from './modules/competitor-info.vue';
 
 const route = useRoute();
 
@@ -176,6 +177,13 @@ onMounted(() => {
           </TabPane>
           <TabPane key="finance" tab="财务信息">
             <FinanceInfo
+              :dept-id="deptId"
+              :dept-name="deptName"
+              auto-height
+            />
+          </TabPane>
+          <TabPane key="competitor" tab="竞争公司">
+            <CompetitorInfo
               :dept-id="deptId"
               :dept-name="deptName"
               auto-height

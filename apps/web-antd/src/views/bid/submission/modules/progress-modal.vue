@@ -87,7 +87,7 @@
         <ASpace>
           <AButton @click="handleRefresh">刷新</AButton>
           <AButton
-            v-if="progressData?.submissionStatus === 'generating'"
+            v-if="progressData?.status === 'generating'"
             danger
             @click="handleCancel"
           >
@@ -166,8 +166,8 @@ async function loadProgress() {
 
     // 如果已完成或失败，停止轮询
     if (
-      progressData.value.submissionStatus === 'completed' ||
-      progressData.value.submissionStatus === 'failed'
+      progressData.value.status === 'generated' ||
+      progressData.value.status === 'failed'
     ) {
       stopPolling();
     }
@@ -222,8 +222,8 @@ function handleClose() {
 // 获取整体进度状态
 function getProgressStatus() {
   if (!progressData.value) return 'normal';
-  if (progressData.value.submissionStatus === 'completed') return 'success';
-  if (progressData.value.submissionStatus === 'failed') return 'exception';
+  if (progressData.value.status === 'generated') return 'success';
+  if (progressData.value.status === 'failed') return 'exception';
   return 'active';
 }
 

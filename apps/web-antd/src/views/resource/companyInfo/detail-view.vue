@@ -15,6 +15,7 @@ import {
   ProjectOutlined,
   DollarOutlined,
   BookOutlined,
+  AlertOutlined,
   ArrowLeftOutlined,
 } from '@ant-design/icons-vue';
 
@@ -32,6 +33,7 @@ import PerformanceInfo from './modules/performance-info.vue';
 import PatentMedalInfo from './modules/patent-medal-info.vue';
 import FinanceInfo from './modules/finance-info.vue';
 import KnowledgeInfo from './modules/knowledge-info.vue';
+import CompetitorInfo from './modules/competitor-info.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -58,6 +60,7 @@ const anchorNavItems = ref<AnchorNavItem[]>([
   { key: 'performance', title: '业绩信息' },
   { key: 'patent-medal', title: '专利荣誉' },
   { key: 'finance', title: '财务信息' },
+  { key: 'competitor', title: '竞争公司' },
   { key: 'knowledge', title: '知识库' },
 ]);
 
@@ -345,9 +348,24 @@ onMounted(() => {
               <FinanceInfo :dept-id="deptIdNumber" :dept-name="deptName" readonly />
             </Card>
 
-            <!-- 知识库 -->
+            <!-- 竞争公司 -->
             <Card
               :id="anchorNavItems[7].key"
+              class="detail-card mb-4"
+              :style="cardRadiusStyle"
+            >
+              <template #title>
+                <span class="card-title">
+                  <AlertOutlined class="card-title-icon" />
+                  竞争公司
+                </span>
+              </template>
+              <CompetitorInfo :dept-id="deptIdNumber" :dept-name="deptName" readonly />
+            </Card>
+
+            <!-- 知识库 -->
+            <Card
+              :id="anchorNavItems[8].key"
               class="detail-card"
               :style="cardRadiusStyle"
             >

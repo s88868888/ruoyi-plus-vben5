@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { Modal, Tabs, TabPane, Spin, Empty, Image, Checkbox, message } from 'ant-design-vue';
+import { ref, watch, computed } from 'vue';
+import { Modal, Tabs, TabPane, Spin, Empty, Image, Checkbox, message, Input } from 'ant-design-vue';
 import { personnelList, certificateList, type BizPersonnel, type PersonnelCertificate } from '#/api/resource/personnel/index';
 import { qualificationList, type BizQualification } from '#/api/resource/qualification';
 import { performanceList, type BizPerformance } from '#/api/resource/performance';
@@ -36,6 +36,7 @@ const emit = defineEmits<{
 const loading = ref(false);
 const activeTab = ref('personnel');
 const selectedUrls = ref<string[]>([]);
+const searchKeyword = ref('');
 
 // 各分类图片列表
 const personnelImages = ref<ImageItem[]>([]);
@@ -44,9 +45,33 @@ const performanceImages = ref<ImageItem[]>([]);
 const patentImages = ref<ImageItem[]>([]);
 const financeImages = ref<ImageItem[]>([]);
 
+/** 当前 Tab 对应的原始列表 */
+const currentImages = computed<ImageItem[]>(() => {
+  const map: Record<string, ImageItem[]> = {
+    personnel: personnelImages.value,
+    qualification: qualificationImages.value,
+    performance: performanceImages.value,
+    patent: patentImages.value,
+    finance: financeImages.value,
+  };
+  return map[activeTab.value] || [];
+});
+
+/** 搜索过滤后的列表 */
+const filteredImages = computed<ImageItem[]>(() => {
+  const kw = searchKeyword.value.trim().toLowerCase();
+  if (!kw) return currentImages.value;
+  return currentImages.value.filter(item => item.label.toLowerCase().includes(kw));
+});
+
+function onTabChange() {
+  searchKeyword.value = '';
+}
+
 watch(() => props.open, async (val) => {
   if (val) {
     selectedUrls.value = [];
+    searchKeyword.value = '';
     await loadAllImages();
   }
 });
@@ -279,15 +304,21 @@ const fallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQwIiBoZWlnaHQ
     @cancel="handleCancel"
   >
     <Spin :spinning="loading">
-      <Tabs v-model:activeKey="activeTab">
+      <Input.Search
+        v-model:value="searchKeyword"
+        placeholder="搜索图片名称..."
+        allow-clear
+        style="margin-bottom: 12px;"
+      />
+      <Tabs v-model:activeKey="activeTab" @change="onTabChange">
         <!-- 人员及证书 -->
         <TabPane key="personnel" tab="人员及证书">
-          <div v-if="personnelImages.length === 0" class="image-empty">
-            <Empty description="暂无人员图片" />
+          <div v-if="filteredImages.length === 0" class="image-empty">
+            <Empty :description="searchKeyword ? '未找到匹配图片' : '暂无人员图片'" />
           </div>
           <div v-else class="image-grid">
             <div
-              v-for="item in personnelImages"
+              v-for="item in filteredImages"
               :key="item.url"
               class="image-card"
               :class="{ selected: isSelected(item.url) }"
@@ -304,12 +335,12 @@ const fallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQwIiBoZWlnaHQ
 
         <!-- 企业资质 -->
         <TabPane key="qualification" tab="企业资质">
-          <div v-if="qualificationImages.length === 0" class="image-empty">
-            <Empty description="暂无资质图片" />
+          <div v-if="filteredImages.length === 0" class="image-empty">
+            <Empty :description="searchKeyword ? '未找到匹配图片' : '暂无资质图片'" />
           </div>
           <div v-else class="image-grid">
             <div
-              v-for="item in qualificationImages"
+              v-for="item in filteredImages"
               :key="item.url"
               class="image-card"
               :class="{ selected: isSelected(item.url) }"
@@ -326,12 +357,12 @@ const fallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQwIiBoZWlnaHQ
 
         <!-- 业绩附件 -->
         <TabPane key="performance" tab="业绩附件">
-          <div v-if="performanceImages.length === 0" class="image-empty">
-            <Empty description="暂无业绩图片" />
+          <div v-if="filteredImages.length === 0" class="image-empty">
+            <Empty :description="searchKeyword ? '未找到匹配图片' : '暂无业绩图片'" />
           </div>
           <div v-else class="image-grid">
             <div
-              v-for="item in performanceImages"
+              v-for="item in filteredImages"
               :key="item.url"
               class="image-card"
               :class="{ selected: isSelected(item.url) }"
@@ -348,12 +379,12 @@ const fallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQwIiBoZWlnaHQ
 
         <!-- 专利奖章 -->
         <TabPane key="patent" tab="专利奖章">
-          <div v-if="patentImages.length === 0" class="image-empty">
-            <Empty description="暂无专利图片" />
+          <div v-if="filteredImages.length === 0" class="image-empty">
+            <Empty :description="searchKeyword ? '未找到匹配图片' : '暂无专利图片'" />
           </div>
           <div v-else class="image-grid">
             <div
-              v-for="item in patentImages"
+              v-for="item in filteredImages"
               :key="item.url"
               class="image-card"
               :class="{ selected: isSelected(item.url) }"
@@ -370,12 +401,12 @@ const fallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQwIiBoZWlnaHQ
 
         <!-- 财务信息 -->
         <TabPane key="finance" tab="财务信息">
-          <div v-if="financeImages.length === 0" class="image-empty">
-            <Empty description="暂无财务附件" />
+          <div v-if="filteredImages.length === 0" class="image-empty">
+            <Empty :description="searchKeyword ? '未找到匹配图片' : '暂无财务附件'" />
           </div>
           <div v-else class="image-grid">
             <div
-              v-for="item in financeImages"
+              v-for="item in filteredImages"
               :key="item.url"
               class="image-card"
               :class="{ selected: isSelected(item.url) }"

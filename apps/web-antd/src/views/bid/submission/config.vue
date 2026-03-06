@@ -2,16 +2,19 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 import type { BizDocumentConfig } from '#/api/bid/documentConfig';
 
+import type { BizSubmissionChapter } from '#/api/bid/chapter';
+
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
 
-import { Button, message, Modal, Space, Tag, Dropdown, Menu, MenuItem, Progress, Tooltip } from 'ant-design-vue';
-import { FileTextOutlined, PlusOutlined, EllipsisOutlined, CheckCircleOutlined, LoadingOutlined, CloseCircleOutlined } from '@ant-design/icons-vue';
+import { Button, message, Modal, Space, Tag, Dropdown, Menu, MenuItem } from 'ant-design-vue';
+import { FileTextOutlined, PlusOutlined, EllipsisOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { addConfig, deleteConfig, getDocumentConfigList } from '#/api/bid/documentConfig';
+import { getChapterTree } from '#/api/bid/chapter';
 import { submissionInfo } from '#/api/bid/submission';
 import { useListTablePreference } from '#/preferences/userPreference';
 import DocumentConfigDrawer from './modules/document-config-drawer.vue';
@@ -33,18 +36,71 @@ const tableCssVars = computed(() => ({
 // 全量配置，用于统计卡片
 const allConfigs = ref<BizDocumentConfig[]>([]);
 
+// 每个配置对应的章节统计（configId -> stats）
+const chapterStatsMap = ref<Record<number, { totalArticles: number; completedArticles: number; generatingArticles: number; pendingArticles: number }>>({});
+
+/** 从章节树中提取所有叶子节点（无 children 的节点才是文章） */
+function collectLeafNodes(nodes: BizSubmissionChapter[]): BizSubmissionChapter[] {
+  const leaves: BizSubmissionChapter[] = [];
+  function walk(list: BizSubmissionChapter[]) {
+    for (const node of list) {
+      if (node.children && node.children.length > 0) {
+        walk(node.children);
+      } else {
+        leaves.push(node);
+      }
+    }
+  }
+  walk(nodes);
+  return leaves;
+}
+
+/** 加载所有配置的章节统计 */
+async function loadAllChapterStats() {
+  const map: Record<number, { totalArticles: number; completedArticles: number; generatingArticles: number; pendingArticles: number }> = {};
+  await Promise.all(
+    allConfigs.value.map(async (config) => {
+      if (!config.id) return;
+      try {
+        const tree = await getChapterTree({ submissionId: submissionId.value, documentId: String(config.id) });
+        const leaves = collectLeafNodes(tree || []);
+        const completed = leaves.filter((l) => l.generationStatus === 'completed').length;
+        const generating = leaves.filter((l) => l.generationStatus === 'generating').length;
+        map[config.id] = {
+          totalArticles: leaves.length,
+          completedArticles: completed,
+          generatingArticles: generating,
+          pendingArticles: leaves.length - completed - generating,
+        };
+      } catch {
+        map[config.id!] = { totalArticles: 0, completedArticles: 0, generatingArticles: 0, pendingArticles: 0 };
+      }
+    }),
+  );
+  chapterStatsMap.value = map;
+}
+
+/** 获取某个配置的章节统计 */
+function getConfigChapterStats(configId?: number) {
+  if (!configId) return { totalArticles: 0, completedArticles: 0, generatingArticles: 0, pendingArticles: 0 };
+  return chapterStatsMap.value[configId] || { totalArticles: 0, completedArticles: 0, generatingArticles: 0, pendingArticles: 0 };
+}
+
 const documentStats = computed(() => {
   const stats = { technical: 0, commercial: 0, complete: 0, total: 0, generated: 0, generating: 0, pending: 0 };
   allConfigs.value.forEach((config) => {
     if (config.documentType === 'technical') stats.technical++;
     else if (config.documentType === 'commercial') stats.commercial++;
     else if (config.documentType === 'complete') stats.complete++;
-
-    if (config.generationStatus === 'completed') stats.generated++;
-    else if (config.generationStatus === 'generating') stats.generating++;
-    else stats.pending++;
   });
   stats.total = stats.technical + stats.commercial + stats.complete;
+
+  // 已生成/生成中/待生成 基于叶子章节（文章）统计
+  Object.values(chapterStatsMap.value).forEach((s) => {
+    stats.generated += s.completedArticles;
+    stats.generating += s.generatingArticles;
+    stats.pending += s.pendingArticles;
+  });
   return stats;
 });
 
@@ -105,10 +161,20 @@ const gridOptions: VxeGridProps = {
       formatter: ({ cellValue }: any) => cellValue || '-',
     },
     {
-      field: 'generationStatus',
-      title: '生成状态',
-      width: 180,
-      slots: { default: 'generationStatus' },
+      field: 'catalogCount',
+      title: '目录数',
+      width: 100,
+      headerAlign: 'center',
+      align: 'center',
+      slots: { default: 'catalogCount' },
+    },
+    {
+      field: 'chapterStatus',
+      title: '章节状态',
+      width: 160,
+      headerAlign: 'center',
+      align: 'center',
+      slots: { default: 'chapterStatus' },
     },
     {
       field: 'action',
@@ -125,6 +191,8 @@ const gridOptions: VxeGridProps = {
       query: async ({ page }) => {
         const configs = await getDocumentConfigList(submissionId.value as any);
         allConfigs.value = configs;
+        // 异步加载章节统计（不阻塞表格渲染）
+        loadAllChapterStats();
         const start = (page.currentPage - 1) * page.pageSize;
         return {
           rows: configs.slice(start, start + page.pageSize),
@@ -312,17 +380,17 @@ onMounted(() => {
           </div>
           <div class="stat-divider"></div>
           <div class="stat-item">
-            <div class="stat-label">已生成</div>
+            <div class="stat-label">已生成文章</div>
             <div class="stat-value" style="color: #52c41a">{{ documentStats.generated }}</div>
           </div>
           <div class="stat-divider"></div>
           <div class="stat-item">
-            <div class="stat-label">生成中</div>
+            <div class="stat-label">生成中文章</div>
             <div class="stat-value" style="color: #1890ff">{{ documentStats.generating }}</div>
           </div>
           <div class="stat-divider"></div>
           <div class="stat-item">
-            <div class="stat-label">待生成</div>
+            <div class="stat-label">待生成文章</div>
             <div class="stat-value" style="color: #909399">{{ documentStats.pending }}</div>
           </div>
         </div>
@@ -350,48 +418,26 @@ onMounted(() => {
               </Tag>
             </template>
 
-            <template #generationStatus="{ row }">
-              <div class="gen-status-cell">
-                <template v-if="row.generationStatus === 'completed'">
-                  <Tag color="success">
-                    <CheckCircleOutlined />
-                    已完成
-                  </Tag>
-                  <span v-if="row.totalChapters" class="gen-chapters">
-                    {{ row.completedChapters }}/{{ row.totalChapters }} 章
-                  </span>
-                </template>
-                <template v-else-if="row.generationStatus === 'generating'">
-                  <Tag color="processing">
-                    <LoadingOutlined />
-                    生成中
-                  </Tag>
-                  <Progress
-                    v-if="row.generationProgress !== undefined"
-                    :percent="row.generationProgress"
-                    size="small"
-                    :show-info="false"
-                    style="width: 80px; display: inline-block; margin-left: 4px"
-                  />
-                </template>
-                <template v-else-if="row.generationStatus === 'failed'">
-                  <Tooltip :title="row.errorMessage || '生成失败'">
-                    <Tag color="error">
-                      <CloseCircleOutlined />
-                      失败
-                    </Tag>
-                  </Tooltip>
-                </template>
-                <template v-else>
-                  <Tag color="default">待生成</Tag>
-                </template>
-              </div>
+            <template #catalogCount="{ row }">
+              {{ getConfigChapterStats(row.id).totalArticles || '-' }}
+            </template>
+
+            <template #chapterStatus="{ row }">
+              <template v-if="getConfigChapterStats(row.id).totalArticles > 0">
+                <span class="chapter-status-cell">
+                  <span class="chapter-status-completed">{{ getConfigChapterStats(row.id).completedArticles }}</span>
+                  <span class="chapter-status-sep">/</span>
+                  <span class="chapter-status-total">{{ getConfigChapterStats(row.id).totalArticles }}</span>
+                  <span class="chapter-status-label">篇</span>
+                </span>
+              </template>
+              <span v-else class="chapter-status-empty">未生成</span>
             </template>
 
             <template #action="{ row }">
               <Space>
                 <ghost-button @click.stop="handleStartGenerate(row)">
-                  {{ row.generationStatus === 'completed' ? '查看' : '开始生成' }}
+                  {{ getConfigChapterStats(row.id).completedArticles > 0 && getConfigChapterStats(row.id).completedArticles === getConfigChapterStats(row.id).totalArticles ? '查看' : '开始生成' }}
                 </ghost-button>
                 <Dropdown placement="bottomRight">
                   <template #overlay>
@@ -580,16 +626,37 @@ onMounted(() => {
   padding-bottom: var(--list-cell-padding-y) !important;
 }
 
-/* 生成状态单元格 */
-.gen-status-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+/* 章节状态单元格 */
+.chapter-status-cell {
+  /* display: flex; */
+  /* align-items: center; */
+  gap: 2px;
+  font-size: 14px;
 }
 
-.gen-chapters {
+.chapter-status-completed {
+  color: #52c41a;
+  font-weight: 600;
+}
+
+.chapter-status-sep {
+  color: #d9d9d9;
+  margin: 0 2px;
+}
+
+.chapter-status-total {
+  color: rgba(0, 0, 0, 0.65);
+  font-weight: 600;
+}
+
+.chapter-status-label {
   color: #909399;
   font-size: 12px;
+  margin-left: 2px;
+}
+
+.chapter-status-empty {
+  color: #909399;
+  font-size: 13px;
 }
 </style>

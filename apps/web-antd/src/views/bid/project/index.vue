@@ -2,12 +2,12 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 import type { BizBidProject } from '#/api/bid/project';
 
-import { computed, ref } from 'vue';
+import { computed, createVNode, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
-import { Button, Dropdown, Menu, MenuItem, Modal, Progress, Space, Tag, message } from 'ant-design-vue';
+import { Button, Checkbox, Dropdown, Menu, MenuItem, Modal, Progress, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -366,10 +366,31 @@ async function handleCreateSubmission(record: BizBidProject) {
     return;
   }
 
+  // 使用 ref 追踪勾选状态
+  const analyzeCompetitors = ref(false);
+
   Modal.confirm({
     title: '确认转为投标项目',
-    content: `确定将"${record.projectName}"转为投标项目吗？`,
-    width: 420,
+    content: () =>
+      createVNode('div', {}, [
+        createVNode('p', { style: { marginBottom: '12px' } }, `确定将"${record.projectName}"转为投标项目吗？`),
+        createVNode(
+          Checkbox,
+          {
+            checked: analyzeCompetitors.value,
+            'onUpdate:checked': (val: boolean) => {
+              analyzeCompetitors.value = val;
+            },
+          },
+          { default: () => '同时分析竞争对手' },
+        ),
+        createVNode(
+          'div',
+          { style: { fontSize: '12px', color: '#909399', marginTop: '4px', paddingLeft: '24px' } },
+          '勾选后将使用 AI 自动分析竞争态势，生成分析报告和竞争力评分',
+        ),
+      ]),
+    width: 460,
     centered: true,
     async onOk() {
       try {
@@ -377,6 +398,7 @@ async function handleCreateSubmission(record: BizBidProject) {
           bidProjectId: record.id,
           selectedCompanies: [],
           generationConfig: [],
+          analyzeCompetitors: analyzeCompetitors.value,
         });
         message.success('创建投标项目成功');
         router.push('/bid/submission');
@@ -486,7 +508,7 @@ async function handleSuccess() {
         <template #projectName="{ row }">
           <div class="flex flex-col">
             <span
-              class="font-bold cursor-pointer text-blue-500 hover:underline"
+              class="font-bold cursor-pointer text-gray-900 hover:underline"
               @click="handleView(row)"
             >{{ row.projectName }}</span>
             <span

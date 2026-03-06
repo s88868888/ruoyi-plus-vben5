@@ -11,13 +11,16 @@ import {
   RocketOutlined,
   SettingOutlined,
   CheckCircleOutlined,
-  ClockCircleOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons-vue';
-import { Button, Card, Progress, Space, Spin, Steps, Tag } from 'ant-design-vue';
+import { Button, Card, Empty, Progress, Space, Spin, Steps, Tag, message } from 'ant-design-vue';
 
+import { MarkdownPreviewer } from '@vben/common-ui';
 import { AnchorNav } from '#/components/anchor-nav';
-import { submissionInfo } from '#/api/bid/submission';
+import { submissionInfo, analyzeCompetitors } from '#/api/bid/submission';
 import { getDocumentConfigList } from '#/api/bid/documentConfig';
+import { getChapterTree } from '#/api/bid/chapter';
+import type { BizSubmissionChapter } from '#/api/bid/chapter';
 import { useDetailPagePreference } from '#/preferences/userPreference';
 import {
   formatCnyAmount,
@@ -40,10 +43,10 @@ const layoutPreference = useDetailPagePreference();
 
 // 锚点导航项
 const anchorNavItems = ref<AnchorNavItem[]>([
-  { key: 'generation-progress', title: '生成进度' },
   { key: 'project-info', title: '项目信息' },
+  { key: 'bid-progress', title: '投标进度' },
   { key: 'doc-config', title: '标书配置' },
-  { key: 'time-record', title: '时间记录' },
+  { key: 'competitor-analysis', title: '竞争对手分析' },
 ]);
 
 // 滚动容器引用
@@ -70,17 +73,14 @@ const bidMethodLabels: Record<string, string> = {
 };
 const statusConfig: Record<string, { label: string; color: string }> = {
   draft:      { label: '草稿',   color: 'default' },
+  configured: { label: '已配置', color: 'blue' },
   generating: { label: '生成中', color: 'processing' },
-  completed:  { label: '已完成', color: 'success' },
+  generated:  { label: '已生成', color: 'success' },
+  submitted:  { label: '已投标', color: 'warning' },
+  won:        { label: '中标',   color: 'success' },
+  lost:       { label: '未中标', color: 'error' },
+  abandoned:  { label: '废标/放弃', color: 'default' },
   failed:     { label: '失败',   color: 'error' },
-};
-const workflowStageLabels: Record<string, string> = {
-  pending_config:     '待配置',
-  configured:         '已配置',
-  structure_generated:'结构已生成',
-  generating:         '生成中',
-  completed:          '已完成',
-  failed:             '失败',
 };
 const documentTypeLabels: Record<string, string> = {
   commercial: '商务标', technical: '技术标', complete: '整本标书',
@@ -88,30 +88,45 @@ const documentTypeLabels: Record<string, string> = {
 const documentTypeColors: Record<string, string> = {
   commercial: 'blue', technical: 'green', complete: 'orange',
 };
-const configStatusConfig: Record<string, { label: string; color: string }> = {
-  pending:    { label: '待生成', color: 'default' },
-  generating: { label: '生成中', color: 'processing' },
-  completed:  { label: '已完成', color: 'success' },
-  failed:     { label: '失败',   color: 'error' },
-};
 
 // ========== 计算属性 ==========
-const statusLabel = computed(() => statusConfig[detailData.value?.submissionStatus || '']?.label || '未知');
-const statusColor = computed(() => statusConfig[detailData.value?.submissionStatus || '']?.color || 'default');
+const statusLabel = computed(() => statusConfig[detailData.value?.status || '']?.label || '未知');
+const statusColor = computed(() => statusConfig[detailData.value?.status || '']?.color || 'default');
 
 const workflowStepIndex = computed(() => {
-  const stages = ['pending_config', 'configured', 'structure_generated', 'generating', 'completed'];
-  const stage = detailData.value?.workflowStage || 'pending_config';
+  const stages = ['draft', 'configured', 'generating', 'generated', 'submitted', 'won'];
+  const stage = detailData.value?.status || 'draft';
   if (stage === 'failed') return stages.indexOf('generating');
+  if (stage === 'lost' || stage === 'abandoned') return stages.indexOf('submitted');
   const idx = stages.indexOf(stage);
   return idx >= 0 ? idx : 0;
 });
 
-const workflowStepStatus = computed(() =>
-  detailData.value?.workflowStage === 'failed' ? 'error' : 'process',
-);
+const workflowStepStatus = computed(() => {
+  const s = detailData.value?.status;
+  if (s === 'failed' || s === 'lost' || s === 'abandoned') return 'error';
+  if (s === 'won') return 'finish';
+  return 'process';
+});
 
-const isGenerating = computed(() => detailData.value?.submissionStatus === 'generating');
+const isGenerating = computed(() => detailData.value?.status === 'generating');
+const isCompetitorAnalyzing = computed(() => detailData.value?.competitorAnalysisStatus === 'analyzing');
+const needsAutoRefresh = computed(() => isGenerating.value || isCompetitorAnalyzing.value);
+
+// 解析关联公司
+const parsedCompanies = computed(() => {
+  try {
+    const json = detailData.value?.selectedCompanies;
+    if (!json) return [];
+    const parsed = JSON.parse(json);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item: any) => typeof item === 'object' ? (item.companyName || item.name || String(item.id)) : String(item));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+});
 
 // 按公司分组配置
 const configsByCompany = computed(() => {
@@ -124,22 +139,73 @@ const configsByCompany = computed(() => {
   return map;
 });
 
-// 概览统计
+// 每个配置对应的章节统计（configId -> stats）
+const chapterStatsMap = ref<Record<number, { totalArticles: number; completedArticles: number; generatingArticles: number; pendingArticles: number }>>({});
+
+/** 从章节树中提取所有叶子节点 */
+function collectLeafNodes(nodes: BizSubmissionChapter[]): BizSubmissionChapter[] {
+  const leaves: BizSubmissionChapter[] = [];
+  function walk(list: BizSubmissionChapter[]) {
+    for (const node of list) {
+      if (node.children && node.children.length > 0) {
+        walk(node.children);
+      } else {
+        leaves.push(node);
+      }
+    }
+  }
+  walk(nodes);
+  return leaves;
+}
+
+/** 加载所有配置的章节统计 */
+async function loadAllChapterStats() {
+  const map: Record<number, { totalArticles: number; completedArticles: number; generatingArticles: number; pendingArticles: number }> = {};
+  await Promise.all(
+    configs.value.map(async (config) => {
+      if (!config.id) return;
+      try {
+        const tree = await getChapterTree({ submissionId: submissionId.value, documentId: String(config.id) });
+        const leaves = collectLeafNodes(tree || []);
+        const completed = leaves.filter((l) => l.generationStatus === 'completed').length;
+        const generating = leaves.filter((l) => l.generationStatus === 'generating').length;
+        map[config.id] = {
+          totalArticles: leaves.length,
+          completedArticles: completed,
+          generatingArticles: generating,
+          pendingArticles: leaves.length - completed - generating,
+        };
+      } catch {
+        map[config.id!] = { totalArticles: 0, completedArticles: 0, generatingArticles: 0, pendingArticles: 0 };
+      }
+    }),
+  );
+  chapterStatsMap.value = map;
+}
+
+function getConfigChapterStats(configId?: number) {
+  if (!configId) return { totalArticles: 0, completedArticles: 0, generatingArticles: 0, pendingArticles: 0 };
+  return chapterStatsMap.value[configId] || { totalArticles: 0, completedArticles: 0, generatingArticles: 0, pendingArticles: 0 };
+}
+
+// 概览统计 - 基于叶子章节（文章）
 const configStats = computed(() => {
-  const total = configs.value.length;
-  const completed = configs.value.filter(c => c.generationStatus === 'completed').length;
-  const generating = configs.value.filter(c => c.generationStatus === 'generating').length;
-  const failed = configs.value.filter(c => c.generationStatus === 'failed').length;
-  const pending = total - completed - generating - failed;
-  return { total, completed, generating, failed, pending };
+  let totalArticles = 0;
+  let completed = 0;
+  let generating = 0;
+  Object.values(chapterStatsMap.value).forEach((s) => {
+    totalArticles += s.totalArticles;
+    completed += s.completedArticles;
+    generating += s.generatingArticles;
+  });
+  const pending = totalArticles - completed - generating;
+  return { total: configs.value.length, completed, generating, pending, totalArticles };
 });
 
 function getConfigProgress(cfg: BizDocumentConfig) {
-  if (cfg.generationStatus === 'completed') return 100;
-  const total = cfg.totalChapters ?? 0;
-  const done = cfg.completedChapters ?? 0;
-  if (total > 0) return Math.min(100, Math.floor((done / total) * 100));
-  return cfg.generationProgress ?? 0;
+  const stats = getConfigChapterStats(cfg.id);
+  if (stats.totalArticles === 0) return 0;
+  return Math.min(100, Math.floor((stats.completedArticles / stats.totalArticles) * 100));
 }
 
 // ========== 数据加载 ==========
@@ -158,6 +224,8 @@ async function loadConfigs() {
   configsLoading.value = true;
   try {
     configs.value = await getDocumentConfigList(submissionId.value);
+    // 加载章节统计
+    await loadAllChapterStats();
   } catch {
     configs.value = [];
   } finally {
@@ -171,7 +239,7 @@ const refreshTimer = ref<ReturnType<typeof setInterval> | null>(null);
 function startAutoRefresh() {
   if (refreshTimer.value) return;
   refreshTimer.value = setInterval(async () => {
-    if (!isGenerating.value) {
+    if (!needsAutoRefresh.value) {
       stopAutoRefresh();
       return;
     }
@@ -190,7 +258,7 @@ function stopAutoRefresh() {
 onMounted(async () => {
   await loadDetail();
   await loadConfigs();
-  if (isGenerating.value) startAutoRefresh();
+  if (needsAutoRefresh.value) startAutoRefresh();
 });
 
 onUnmounted(() => stopAutoRefresh());
@@ -198,6 +266,30 @@ onUnmounted(() => stopAutoRefresh());
 // ========== 操作 ==========
 function handleGoConfig() {
   router.push(`/bid/submission/config/${submissionId.value}`);
+}
+
+// 竞争对手分析状态配置
+const competitorStatusConfig: Record<string, { label: string; color: string }> = {
+  none:      { label: '未分析', color: 'default' },
+  analyzing: { label: '分析中', color: 'processing' },
+  completed: { label: '已完成', color: 'success' },
+  failed:    { label: '分析失败', color: 'error' },
+};
+
+const competitorAnalysisLoading = ref(false);
+
+async function handleStartCompetitorAnalysis() {
+  competitorAnalysisLoading.value = true;
+  try {
+    await analyzeCompetitors(submissionId.value);
+    message.success('竞争对手分析已开始，请稍候...');
+    await loadDetail();
+    if (needsAutoRefresh.value) startAutoRefresh();
+  } catch (error) {
+    message.error('触发竞争对手分析失败');
+  } finally {
+    competitorAnalysisLoading.value = false;
+  }
 }
 </script>
 
@@ -231,7 +323,7 @@ function handleGoConfig() {
             <div class="header-actions">
               <Space>
                 <Button
-                  v-if="detailData?.workflowStage === 'pending_config' || detailData?.workflowStage === 'configured'"
+                  v-if="detailData?.status === 'draft' || detailData?.status === 'configured'"
                   type="primary"
                   size="small"
                   @click="handleGoConfig"
@@ -274,25 +366,58 @@ function handleGoConfig() {
               <div class="header-metric-label">招标方式</div>
               <div class="header-metric-value">{{ bidMethodLabels[detailData?.bidMethod || ''] || detailData?.bidMethod || '-' }}</div>
             </div>
-            <div class="header-metric">
-              <div class="header-metric-label">剩余天数</div>
-              <div class="header-metric-value">{{ formatRemainingDays(detailData?.publishDate, detailData?.deadline) }}</div>
-            </div>
-            <div class="header-metric">
-              <div class="header-metric-label">创建时间</div>
-              <div class="header-metric-value">{{ detailData?.createTime?.split(' ')[0] || '-' }}</div>
-            </div>
           </div>
         </div>
 
         <!-- 卡片区域 -->
         <div class="cards-wrapper">
-          <!-- 生成进度卡片 -->
-          <Card id="generation-progress" class="mb-4 detail-card" :style="cardRadiusStyle">
+          <!-- 项目信息卡片 -->
+          <Card id="project-info" class="mb-4 detail-card" :style="cardRadiusStyle">
+            <template #title>
+              <span class="card-title">
+                <CheckCircleOutlined class="card-title-icon" />
+                项目信息
+              </span>
+            </template>
+            <div class="field-grid">
+              <div class="field-item">
+                <div class="field-label">关联公司</div>
+                <div class="field-value">
+                  <Space v-if="parsedCompanies.length > 0" :size="4" wrap>
+                    <Tag v-for="company in parsedCompanies" :key="company" color="blue">{{ company }}</Tag>
+                  </Space>
+                  <span v-else class="text-gray-400">未关联</span>
+                </div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">发布日期</div>
+                <div class="field-value">{{ detailData?.publishDate?.split(' ')[0] || '-' }}</div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">截止日期</div>
+                <div class="field-value">{{ detailData?.deadline?.split(' ')[0] || '-' }}</div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">剩余天数</div>
+                <div class="field-value">{{ formatRemainingDays(detailData?.publishDate, detailData?.deadline) }}</div>
+              </div>
+              <div v-if="detailData?.projectDesc" class="field-item field-item-full">
+                <div class="field-label">项目描述</div>
+                <div class="field-value field-value-block">{{ detailData.projectDesc }}</div>
+              </div>
+              <div v-if="detailData?.remark" class="field-item field-item-full">
+                <div class="field-label">备注</div>
+                <div class="field-value field-value-block">{{ detailData.remark }}</div>
+              </div>
+            </div>
+          </Card>
+
+          <!-- 投标进度卡片 -->
+          <Card id="bid-progress" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
               <span class="card-title">
                 <RocketOutlined class="card-title-icon" />
-                生成进度
+                投标进度
               </span>
             </template>
             <!-- 工作流步骤 -->
@@ -302,11 +427,12 @@ function handleGoConfig() {
               size="small"
               class="mb-6"
             >
-              <Steps.Step title="待配置" description="配置标书参数" />
+              <Steps.Step title="草稿" description="项目创建" />
               <Steps.Step title="已配置" description="参数配置完成" />
-              <Steps.Step title="结构生成" description="章节结构已生成" />
-              <Steps.Step title="内容生成中" description="AI正在生成内容" />
-              <Steps.Step title="已完成" description="标书生成完成" />
+              <Steps.Step title="生成中" description="AI正在生成内容" />
+              <Steps.Step title="已生成" description="标书生成完成" />
+              <Steps.Step title="已投标" description="已提交投标" />
+              <Steps.Step title="中标" description="中标结果" />
             </Steps>
 
             <!-- 整体进度条（生成中时显示） -->
@@ -323,57 +449,6 @@ function handleGoConfig() {
             <div v-if="detailData?.errorMessage" class="error-box">
               <div class="error-label">错误信息</div>
               <div class="error-content">{{ detailData.errorMessage }}</div>
-            </div>
-          </Card>
-
-          <!-- 项目信息卡片 -->
-          <Card id="project-info" class="mb-4 detail-card" :style="cardRadiusStyle">
-            <template #title>
-              <span class="card-title">
-                <CheckCircleOutlined class="card-title-icon" />
-                项目信息
-              </span>
-            </template>
-            <div class="field-grid">
-              <div class="field-item">
-                <div class="field-label">项目名称</div>
-                <div class="field-value">{{ detailData?.projectName || '-' }}</div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">招标单位</div>
-                <div class="field-value">{{ detailData?.bidOrg || '-' }}</div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">项目类型</div>
-                <div class="field-value">
-                  <Tag v-if="detailData?.projectType" :color="projectTypeColors[detailData.projectType] || 'default'">
-                    {{ projectTypeLabels[detailData.projectType] || detailData.projectType }}
-                  </Tag>
-                  <span v-else>-</span>
-                </div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">招标方式</div>
-                <div class="field-value">{{ bidMethodLabels[detailData?.bidMethod || ''] || detailData?.bidMethod || '-' }}</div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">预算金额</div>
-                <div class="field-value text-orange-500">
-                  {{ detailData?.budgetAmount ? `¥${Number(detailData.budgetAmount).toLocaleString('zh-CN')} 万元` : '-' }}
-                </div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">项目地区</div>
-                <div class="field-value">{{ detailData?.projectRegion || '-' }}</div>
-              </div>
-              <div v-if="detailData?.projectDesc" class="field-item field-item-full">
-                <div class="field-label">项目描述</div>
-                <div class="field-value field-value-block">{{ detailData.projectDesc }}</div>
-              </div>
-              <div v-if="detailData?.remark" class="field-item field-item-full">
-                <div class="field-label">备注</div>
-                <div class="field-value field-value-block">{{ detailData.remark }}</div>
-              </div>
             </div>
           </Card>
 
@@ -404,9 +479,10 @@ function handleGoConfig() {
                     <thead>
                       <tr>
                         <th>标书类型</th>
-                        <th>生成状态</th>
-                        <th>章节进度</th>
+                        <th>目录数</th>
+                        <th class="th-right">章节状态</th>
                         <th style="width: 200px">生成进度</th>
+                        <th>备注</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -417,25 +493,27 @@ function handleGoConfig() {
                             <span v-if="(cfg.documentNo ?? 1) > 1"> {{ cfg.documentNo }}</span>
                           </Tag>
                         </td>
-                        <td>
-                          <Tag :color="configStatusConfig[cfg.generationStatus || 'pending']?.color || 'default'">
-                            {{ configStatusConfig[cfg.generationStatus || 'pending']?.label || '待生成' }}
-                          </Tag>
-                        </td>
                         <td class="chapter-cell">
-                          <span v-if="(cfg.totalChapters ?? 0) > 0">
-                            {{ cfg.completedChapters ?? 0 }} / {{ cfg.totalChapters }}章
-                          </span>
-                          <span v-else class="text-gray-400">-</span>
+                          {{ getConfigChapterStats(cfg.id).totalArticles || '-' }}
+                        </td>
+                        <td class="chapter-cell chapter-cell-right">
+                          <template v-if="getConfigChapterStats(cfg.id).totalArticles > 0">
+                            <span class="chapter-status-completed">{{ getConfigChapterStats(cfg.id).completedArticles }}</span>
+                            <span class="chapter-status-sep">/</span>
+                            <span>{{ getConfigChapterStats(cfg.id).totalArticles }}</span>
+                            <span class="chapter-status-label"> 篇</span>
+                          </template>
+                          <span v-else class="chapter-status-empty">未生成</span>
                         </td>
                         <td>
                           <Progress
                             :percent="getConfigProgress(cfg)"
-                            :status="cfg.generationStatus === 'completed' ? 'success' : cfg.generationStatus === 'failed' ? 'exception' : cfg.generationStatus === 'generating' ? 'active' : 'normal'"
+                            :status="getConfigProgress(cfg) >= 100 ? 'success' : getConfigChapterStats(cfg.id).generatingArticles > 0 ? 'active' : 'normal'"
                             size="small"
                           />
                           <div v-if="cfg.errorMessage" class="cfg-error-tip">{{ cfg.errorMessage }}</div>
                         </td>
+                        <td class="remark-cell">{{ cfg.remark || '-' }}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -444,31 +522,88 @@ function handleGoConfig() {
             </Spin>
           </Card>
 
-          <!-- 时间信息卡片 -->
-          <Card id="time-record" class="mb-4 detail-card" :style="cardRadiusStyle">
+          <!-- 竞争对手分析卡片 -->
+          <Card id="competitor-analysis" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
               <span class="card-title">
-                <ClockCircleOutlined class="card-title-icon" />
-                时间记录
+                <ThunderboltOutlined class="card-title-icon" />
+                竞争对手分析
               </span>
             </template>
-            <div class="field-grid">
-              <div class="field-item">
-                <div class="field-label">创建时间</div>
-                <div class="field-value">{{ detailData?.createTime || '-' }}</div>
+            <template #extra>
+              <Tag
+                v-if="detailData?.competitorAnalysisStatus && detailData.competitorAnalysisStatus !== 'none'"
+                :color="competitorStatusConfig[detailData.competitorAnalysisStatus]?.color || 'default'"
+              >
+                {{ competitorStatusConfig[detailData.competitorAnalysisStatus]?.label || detailData.competitorAnalysisStatus }}
+              </Tag>
+            </template>
+
+            <!-- 已完成：评分 + Markdown 结果 -->
+            <div v-if="detailData?.competitorAnalysisStatus === 'completed'">
+              <!-- 竞争力评分 -->
+              <div v-if="detailData.competitorScore != null" class="competitor-score-section">
+                <div class="competitor-score-box">
+                  <Progress
+                    type="circle"
+                    :percent="detailData.competitorScore"
+                    :size="80"
+                    :stroke-color="
+                      detailData.competitorScore >= 70
+                        ? '#52c41a'
+                        : detailData.competitorScore >= 40
+                          ? '#faad14'
+                          : '#ff4d4f'
+                    "
+                  >
+                    <template #format="{ percent }">
+                      <span class="score-text">{{ percent }}</span>
+                    </template>
+                  </Progress>
+                  <div class="competitor-score-label">竞争力评分</div>
+                </div>
+                <div class="competitor-score-actions">
+                  <Button size="small" @click="handleStartCompetitorAnalysis" :loading="competitorAnalysisLoading">
+                    重新分析
+                  </Button>
+                </div>
               </div>
-              <div class="field-item">
-                <div class="field-label">更新时间</div>
-                <div class="field-value">{{ detailData?.updateTime || '-' }}</div>
+              <!-- Markdown 分析结果 -->
+              <div class="competitor-result-content">
+                <MarkdownPreviewer
+                  :model-value="detailData.competitorAnalysisResult || ''"
+                />
               </div>
-              <div class="field-item">
-                <div class="field-label">开始生成时间</div>
-                <div class="field-value">{{ detailData?.startTime || '-' }}</div>
+            </div>
+
+            <!-- 分析中：加载状态 -->
+            <div v-else-if="detailData?.competitorAnalysisStatus === 'analyzing'" class="competitor-loading">
+              <Spin tip="AI 正在分析竞争对手，请稍候...">
+                <div class="competitor-loading-placeholder" />
+              </Spin>
+            </div>
+
+            <!-- 分析失败：错误提示 + 重新分析 -->
+            <div v-else-if="detailData?.competitorAnalysisStatus === 'failed'" class="competitor-failed">
+              <div class="error-box">
+                <div class="error-label">分析失败</div>
+                <div class="error-content">{{ detailData?.competitorAnalysisResult || '竞争对手分析过程中出现错误' }}</div>
               </div>
-              <div class="field-item">
-                <div class="field-label">完成时间</div>
-                <div class="field-value">{{ detailData?.endTime || '-' }}</div>
+              <div class="mt-4">
+                <Button type="primary" @click="handleStartCompetitorAnalysis" :loading="competitorAnalysisLoading">
+                  重新分析
+                </Button>
               </div>
+            </div>
+
+            <!-- 未分析：空状态 + 开始分析按钮 -->
+            <div v-else class="competitor-empty">
+              <Empty description="暂未进行竞争对手分析">
+                <Button type="primary" @click="handleStartCompetitorAnalysis" :loading="competitorAnalysisLoading">
+                  <ThunderboltOutlined />
+                  开始分析
+                </Button>
+              </Empty>
             </div>
           </Card>
         </div>
@@ -712,12 +847,49 @@ function handleGoConfig() {
 
 .chapter-cell { white-space: nowrap; }
 
+.chapter-status-completed {
+  color: #52c41a;
+  font-weight: 600;
+}
+
+.chapter-status-sep {
+  color: #d9d9d9;
+  margin: 0 2px;
+}
+
+.chapter-status-label {
+  color: #909399;
+  font-size: 12px;
+}
+
+.chapter-status-empty {
+  color: #909399;
+  font-size: 13px;
+}
+
+.chapter-cell-right {
+  text-align: right;
+}
+
+.th-right {
+  text-align: right !important;
+}
+
 .cfg-error-tip {
   font-size: 11px;
   color: #ff4d4f;
   margin-top: 4px;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.remark-cell {
+  color: #909399;
+  font-size: 13px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ===== 字段网格 ===== */
@@ -761,5 +933,60 @@ function handleGoConfig() {
   .header-metrics-row { gap: 12px; }
   .field-grid { grid-template-columns: repeat(2, 1fr); }
   .config-stats { gap: 16px; }
+}
+
+/* ===== 竞争对手分析 ===== */
+.competitor-score-section {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 20px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.competitor-score-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.competitor-score-label {
+  font-size: 13px;
+  color: #909399;
+  font-weight: 500;
+}
+
+.score-text {
+  font-size: 22px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.competitor-score-actions {
+  margin-left: auto;
+}
+
+.competitor-result-content {
+  padding: 0 4px;
+}
+
+.competitor-loading {
+  padding: 60px 0;
+  text-align: center;
+}
+
+.competitor-loading-placeholder {
+  min-height: 120px;
+}
+
+.competitor-failed {
+  padding: 20px;
+}
+
+.competitor-empty {
+  padding: 40px 0;
 }
 </style>

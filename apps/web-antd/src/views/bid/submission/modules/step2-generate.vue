@@ -144,24 +144,20 @@ function startPolling() {
     try {
       const info = await submissionInfo(props.submissionId);
       const progress = info?.generationProgress ?? 0;
-      const status = Number(info?.chapterStructureGenerated ?? 0);
       generatingProgress.value = progress;
-      if (status === 1) {
-        // 已完成
-        stopPolling();
-        generating.value = false;
-        generatingMessage.value = '章节结构生成完成';
-        loadChapterTree();
-      } else if (status === 0) {
-        // 出错或未开始
-        stopPolling();
-        generating.value = false;
-        generatingMessage.value = '';
-        // 如果进度条之前已经在跑（说明是生成失败了），提示用户
-        if (progress === 0) {
-          message.error('章节结构生成失败，请重试');
+      // 检查章节树是否已生成（通过加载章节树判断）
+      try {
+        const tree = await getChapterTree({ submissionId: props.submissionId, documentId: props.documentConfigId });
+        const treeData = (tree as BizSubmissionChapter[]) || [];
+        if (treeData.length > 0) {
+          // 已完成
+          stopPolling();
+          generating.value = false;
+          generatingMessage.value = '章节结构生成完成';
+          loadChapterTree();
         }
-        loadChapterTree();
+      } catch {
+        // 继续轮询
       }
     } catch (e) {
       // 忽略轮询错误
@@ -258,9 +254,8 @@ onMounted(async () => {
   // 先检查后端状态，判断是否有正在进行的生成任务（刷新页面后恢复）
   try {
     const info = await submissionInfo(props.submissionId);
-    const status = Number(info?.chapterStructureGenerated ?? 0);
-    if (status === 2) {
-      // 生成中：恢复进度条状态并开始轮询
+    // 如果投标项目处于生成中，恢复轮询
+    if (info?.status === 'generating') {
       generating.value = true;
       generatingProgress.value = info?.generationProgress ?? 0;
       generatingMessage.value = '正在生成章节结构，请稍候...';

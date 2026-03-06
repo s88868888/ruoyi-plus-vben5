@@ -48,14 +48,19 @@ const filterData = ref([
     isCommon: false,
   },
   {
-    field: 'submissionStatus',
+    field: 'status',
     label: '投标状态',
     type: 'a-select',
     data: '',
     options: [
       { label: '草稿', value: 'draft' },
+      { label: '已配置', value: 'configured' },
       { label: '生成中', value: 'generating' },
-      { label: '已完成', value: 'completed' },
+      { label: '已生成', value: 'generated' },
+      { label: '已投标', value: 'submitted' },
+      { label: '中标', value: 'won' },
+      { label: '未中标', value: 'lost' },
+      { label: '废标/放弃', value: 'abandoned' },
       { label: '失败', value: 'failed' },
     ],
     isCommon: true,
@@ -78,36 +83,27 @@ const handleFilterQuery = (conditions: any[]) => {
 // 状态标签颜色
 const statusColors: Record<string, string> = {
   draft: 'default',
+  configured: 'blue',
   generating: 'processing',
-  completed: 'success',
+  generated: 'success',
+  submitted: 'warning',
+  won: 'success',
+  lost: 'error',
+  abandoned: 'default',
   failed: 'error',
 };
 
 // 状态标签文本
 const statusLabels: Record<string, string> = {
   draft: '草稿',
-  generating: '生成中',
-  completed: '已完成',
-  failed: '失败',
-};
-
-// 工作流阶段标签
-const workflowStageLabels: Record<string, string> = {
-  pending_config: '待配置',
   configured: '已配置',
-  structure_generated: '结构已生成',
   generating: '生成中',
-  completed: '已完成',
+  generated: '已生成',
+  submitted: '已投标',
+  won: '中标',
+  lost: '未中标',
+  abandoned: '废标/放弃',
   failed: '失败',
-};
-
-const workflowStageColors: Record<string, string> = {
-  pending_config: 'default',
-  configured: 'blue',
-  structure_generated: 'cyan',
-  generating: 'processing',
-  completed: 'success',
-  failed: 'error',
 };
 
 // 项目类型配置
@@ -141,16 +137,10 @@ const gridOptions: VxeGridProps = {
     {
       field: 'projectName',
       title: '项目名称',
-      minWidth: 200,
+      minWidth: 220,
       headerAlign: 'left',
       align: 'left',
       slots: { default: 'projectName' },
-    },
-    {
-      field: 'submissionStatus',
-      title: '投标状态',
-      width: 100,
-      slots: { default: 'submissionStatus' },
     },
     {
       field: 'projectType',
@@ -197,6 +187,12 @@ const gridOptions: VxeGridProps = {
       headerAlign: 'left',
       align: 'left',
       formatter: ({ cellValue }: any) => cellValue?.replace(/:\d{2}$/, '') || '-',
+    },
+    {
+      field: 'status',
+      title: '投标状态',
+      width: 110,
+      slots: { default: 'status' },
     },
     {
       field: 'action',
@@ -312,11 +308,7 @@ function handleProgressModalClose() {
       <!-- 筛选条件区域 -->
       <div class="shrink-0 bg-white p-4 rounded shadow-sm">
         <div class="flex items-center justify-between">
-          <CommonFilter
-            :filter-data="filterData"
-            type="both"
-            @handle-query="handleFilterQuery"
-          />
+          <CommonFilter :filter-data="filterData" type="both" @handle-query="handleFilterQuery" />
           <Space>
             <Button type="primary" @click="handleAdd">
               <PlusOutlined />
@@ -330,15 +322,16 @@ function handleProgressModalClose() {
       <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
         <BasicTable class="h-full" table-title="投标项目列表">
           <template #projectName="{ row }">
-            <span
-              class="font-medium cursor-pointer text-blue-500 hover:underline"
-              @click="handleView(row)"
-            >{{ row.projectName }}</span>
+            <div class="flex flex-col gap-1">
+              <span class="font-bold cursor-pointer text-gray-900 hover:underline" @click="handleView(row)">{{
+                row.projectName }}</span>
+              <span class="text-xs text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap" :title="row.projectDesc">{{row.projectDesc}}</span>
+            </div>
           </template>
 
-          <template #submissionStatus="{ row }">
-            <Tag :color="workflowStageColors[row.workflowStage] || statusColors[row.submissionStatus]">
-              {{ workflowStageLabels[row.workflowStage] || statusLabels[row.submissionStatus] || row.submissionStatus }}
+          <template #status="{ row }">
+            <Tag :color="statusColors[row.status] || 'default'">
+              {{ statusLabels[row.status] || row.status }}
             </Tag>
           </template>
 
@@ -351,19 +344,16 @@ function handleProgressModalClose() {
 
           <template #budgetAmount="{ row }">
             <span v-if="row.budgetAmount" class="text-orange-500 font-medium">
-              ¥{{ Number(row.budgetAmount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+              ¥{{ Number(row.budgetAmount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2
+              }) }}
             </span>
             <span v-else class="text-gray-400">-</span>
           </template>
 
           <template #selectedCompanies="{ row }">
             <template v-if="parseCompanies(row.selectedCompanies).length > 0">
-              <Space :size="4" wrap>
-                <Tag
-                  v-for="company in parseCompanies(row.selectedCompanies)"
-                  :key="company"
-                  color="blue"
-                >
+              <Space :size="3" wrap>
+                <Tag v-for="company in parseCompanies(row.selectedCompanies)" :key="company" color="blue" >
                   {{ company }}
                 </Tag>
               </Space>
@@ -373,40 +363,27 @@ function handleProgressModalClose() {
 
           <template #action="{ row }">
             <Space>
-              <ghost-button
-                v-if="row.submissionStatus === 'draft'"
-                @click.stop="handleConfig(row)"
-              >
+              <ghost-button v-if="row.status === 'draft' || row.status === 'configured'" @click.stop="handleConfig(row)">
                 标书管理
               </ghost-button>
-              <ghost-button
-                v-if="row.submissionStatus === 'generating'"
-                @click.stop="handleViewProgress(row)"
-              >
+              <ghost-button v-if="row.status === 'generating'" @click.stop="handleViewProgress(row)">
                 查看进度
               </ghost-button>
               <Dropdown placement="bottomRight">
                 <template #overlay>
                   <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); }">
                     <MenuItem key="view" @click="handleView(row)">
-                      查看详情
+                    查看详情
                     </MenuItem>
-                    <MenuItem
-                      v-if="row.submissionStatus === 'generating'"
-                      key="cancel"
-                      @click="handleCancel(row)"
-                    >
-                      取消生成
+                    <MenuItem v-if="row.status === 'generating'" key="cancel" @click="handleCancel(row)">
+                    取消生成
                     </MenuItem>
-                    <MenuItem
-                      v-if="row.submissionStatus === 'failed' || row.submissionStatus === 'completed'"
-                      key="regenerate"
-                      @click="handleRegenerate(row)"
-                    >
-                      重新生成
+                    <MenuItem v-if="row.status === 'failed' || row.status === 'generated'"
+                      key="regenerate" @click="handleRegenerate(row)">
+                    重新生成
                     </MenuItem>
                     <MenuItem key="delete">
-                      <span class="text-red-500">删除</span>
+                    <span class="text-red-500">删除</span>
                     </MenuItem>
                   </Menu>
                 </template>
@@ -421,11 +398,8 @@ function handleProgressModalClose() {
     </div>
 
     <!-- 进度弹窗 -->
-    <ProgressModal
-      v-model:open="progressModalOpen"
-      :submission-id="currentSubmissionId"
-      @update:open="handleProgressModalClose"
-    />
+    <ProgressModal v-model:open="progressModalOpen" :submission-id="currentSubmissionId"
+      @update:open="handleProgressModalClose" />
   </Page>
 </template>
 
