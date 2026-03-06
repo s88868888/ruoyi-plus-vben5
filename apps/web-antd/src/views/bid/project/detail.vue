@@ -740,6 +740,13 @@ async function handleVisibilityChange() {
                     v-if="getSubmissionConfigs(sub).length > 0"
                     class="config-table"
                   >
+                    <colgroup>
+                      <col class="config-col-company" />
+                      <col class="config-col-type" />
+                      <col class="config-col-count" />
+                      <col class="config-col-status" />
+                      <col class="config-col-remark" />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>公司名称</th>
@@ -756,8 +763,8 @@ async function handleVisibilityChange() {
                         class="config-row-clickable"
                         @click="handleViewSubmission(sub)"
                       >
-                        <td>{{ cfg.companyName || '-' }}</td>
-                        <td>
+                        <td class="company-cell">{{ cfg.companyName || '-' }}</td>
+                        <td class="type-cell">
                           <Tag :color="cfg.documentType === 'commercial' ? 'blue' : cfg.documentType === 'technical' ? 'green' : 'orange'">
                             {{ documentTypeLabels[cfg.documentType || ''] || cfg.documentType }}
                           </Tag>
@@ -1240,6 +1247,27 @@ async function handleVisibilityChange() {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
+}
+
+.config-col-company {
+  width: 34%;
+}
+
+.config-col-type {
+  width: 16%;
+}
+
+.config-col-count {
+  width: 10%;
+}
+
+.config-col-status {
+  width: 18%;
+}
+
+.config-col-remark {
+  width: 22%;
 }
 
 .config-table th {
@@ -1275,15 +1303,21 @@ async function handleVisibilityChange() {
   cursor: pointer;
 }
 
-.remark-cell {
-  color: #909399;
-  font-size: 13px;
-  max-width: 200px;
+.company-cell {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.remark-cell {
+  color: #909399;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.type-cell,
 .chapter-cell { white-space: nowrap; }
 
 .chapter-cell-right { text-align: right; }
