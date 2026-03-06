@@ -57,9 +57,9 @@ const layoutPreference = useDetailPagePreference();
 // 锚点导航项配置
 const anchorNavItems = ref<AnchorNavItem[]>([
   { key: 'basic-info', title: '基本信息' },
+  { key: 'bid-info', title: '招标信息' },
   { key: 'submission-progress', title: '投标进度' },
   { key: 'doc-config', title: '标书配置' },
-  { key: 'bid-info', title: '招标信息' },
   { key: 'contact-info', title: '联系信息' },
   { key: 'match-analysis', title: '契合度分析' },
   { key: 'scoring-criteria', title: '评分标准' },
@@ -658,6 +658,36 @@ async function handleVisibilityChange() {
 
       <!-- 内容卡片 -->
       <div class="cards-wrapper">
+          <!-- 卡片1：招标信息 -->
+          <Card id="bid-info" class="mb-4 detail-card" :style="cardRadiusStyle">
+            <template #title>
+              <span class="card-title">
+                <FileTextOutlined class="card-title-icon" />
+                招标信息
+              </span>
+            </template>
+            <div class="field-grid" :style="contentFontStyle">
+              <div class="field-item">
+                <div class="field-label">招标单位</div>
+                <div class="field-value">{{ projectDetail.bidOrg || '-' }}</div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">项目区域</div>
+                <div class="field-value">{{ projectDetail.projectRegion || '-' }}</div>
+              </div>
+              <div class="field-item">
+                <div class="field-label">项目类型</div>
+                <div class="field-value">
+                  <Tag :color="projectTypeColor">{{ projectTypeLabel }}</Tag>
+                </div>
+              </div>
+              <div class="field-item field-item-full">
+                <div class="field-label">项目描述</div>
+                <div class="field-value field-value-block">{{ projectDetail.projectDesc || '-' }}</div>
+              </div>
+            </div>
+          </Card>
+
           <!-- 卡片1：投标进度 -->
           <Card id="submission-progress" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
@@ -787,36 +817,6 @@ async function handleVisibilityChange() {
                 </div>
               </div>
             </Spin>
-          </Card>
-
-          <!-- 卡片2：招标信息 -->
-          <Card id="bid-info" class="mb-4 detail-card" :style="cardRadiusStyle">
-            <template #title>
-              <span class="card-title">
-                <FileTextOutlined class="card-title-icon" />
-                招标信息
-              </span>
-            </template>
-            <div class="field-grid" :style="contentFontStyle">
-              <div class="field-item">
-                <div class="field-label">招标单位</div>
-                <div class="field-value">{{ projectDetail.bidOrg || '-' }}</div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">项目区域</div>
-                <div class="field-value">{{ projectDetail.projectRegion || '-' }}</div>
-              </div>
-              <div class="field-item">
-                <div class="field-label">项目类型</div>
-                <div class="field-value">
-                  <Tag :color="projectTypeColor">{{ projectTypeLabel }}</Tag>
-                </div>
-              </div>
-              <div class="field-item field-item-full">
-                <div class="field-label">项目描述</div>
-                <div class="field-value field-value-block">{{ projectDetail.projectDesc || '-' }}</div>
-              </div>
-            </div>
           </Card>
 
           <!-- 卡片3：联系信息 -->

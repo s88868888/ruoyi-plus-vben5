@@ -3,21 +3,26 @@ import type { BizBidSubmission } from '#/api/bid/submission';
 import type { BizDocumentConfig } from '#/api/bid/documentConfig';
 import type { AnchorNavItem } from '#/components/anchor-nav';
 
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, createVNode, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
+  DownloadOutlined,
+  ExpandOutlined,
   FileTextOutlined,
+  FullscreenExitOutlined,
   RocketOutlined,
   SettingOutlined,
   CheckCircleOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons-vue';
-import { Button, Card, Empty, Progress, Space, Spin, Steps, Tag, message } from 'ant-design-vue';
+import { Button, Card, Empty, Input, Modal, Progress, Select, Space, Spin, Steps, Tag, message } from 'ant-design-vue';
 
 import { MarkdownPreviewer } from '@vben/common-ui';
 import { AnchorNav } from '#/components/anchor-nav';
 import { submissionInfo, analyzeCompetitors } from '#/api/bid/submission';
+import { promptTemplateListByType } from '#/api/bid/promptTemplate';
+import type { BizAiPromptTemplate } from '#/api/bid/promptTemplate';
 import { getDocumentConfigList } from '#/api/bid/documentConfig';
 import { getChapterTree } from '#/api/bid/chapter';
 import type { BizSubmissionChapter } from '#/api/bid/chapter';
@@ -245,7 +250,7 @@ function startAutoRefresh() {
     }
     await loadDetail();
     await loadConfigs();
-  }, 3000);
+  }, 10000);
 }
 
 function stopAutoRefresh() {
@@ -278,18 +283,148 @@ const competitorStatusConfig: Record<string, { label: string; color: string }> =
 
 const competitorAnalysisLoading = ref(false);
 
-async function handleStartCompetitorAnalysis() {
-  competitorAnalysisLoading.value = true;
-  try {
-    await analyzeCompetitors(submissionId.value);
-    message.success('竞争对手分析已开始，请稍候...');
-    await loadDetail();
-    if (needsAutoRefresh.value) startAutoRefresh();
-  } catch (error) {
-    message.error('触发竞争对手分析失败');
-  } finally {
-    competitorAnalysisLoading.value = false;
+// 竞争对手分析全屏
+const isCompetitorFullscreen = ref(false);
+
+function toggleCompetitorFullscreen() {
+  isCompetitorFullscreen.value = !isCompetitorFullscreen.value;
+}
+
+// 竞争对手分析结果（清理 markdown 标记）
+const competitorAnalysisContent = computed(() => {
+  const raw = detailData.value?.competitorAnalysisResult || '';
+  return raw
+    .replace(/^```markdown\s*\n?/, '')
+    .replace(/\n?```\s*$/, '')
+    .trim();
+});
+
+// 下载 PDF
+function downloadCompetitorPdf() {
+  const aiResultElement = document.querySelector('.competitor-ai-result');
+  if (!aiResultElement) return;
+
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    const htmlContent = aiResultElement.innerHTML;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>竞争对手分析报告 - ${detailData.value?.projectName || '投标项目'}</title>
+          <style>
+            * { margin: 0; padding: 0; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              padding: 40px;
+              line-height: 1.6;
+              color: rgba(0, 0, 0, 0.88);
+            }
+            h1, h2, h3, h4, h5, h6 { margin: 20px 0 10px; font-weight: 600; }
+            h1 { font-size: 28px; }
+            h2 { font-size: 24px; }
+            h3 { font-size: 20px; }
+            p { margin: 10px 0; }
+            ul, ol { margin: 10px 0 10px 20px; }
+            li { margin: 5px 0; }
+            code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-family: 'Monaco', 'Menlo', monospace; }
+            pre { background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto; margin: 10px 0; }
+            pre code { background: none; padding: 0; }
+            blockquote { border-left: 4px solid #d9d9d9; padding-left: 12px; margin: 10px 0; color: #666; }
+            table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+            th, td { border: 1px solid #d9d9d9; padding: 8px 12px; text-align: left; }
+            th { background: #fafafa; font-weight: 600; }
+            @media print {
+              body { padding: 20px; }
+              h1, h2 { page-break-after: avoid; }
+              pre, table { page-break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>${htmlContent}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
   }
+}
+
+async function handleStartCompetitorAnalysis() {
+  const isReAnalyze = detailData.value?.competitorAnalysisStatus === 'completed' || detailData.value?.competitorAnalysisStatus === 'failed';
+
+  // 响应式状态
+  const selectedTemplateId = ref<number | undefined>(undefined);
+  const customPromptText = ref<string>('');
+  const templateOptions = ref<BizAiPromptTemplate[]>([]);
+  const templateLoading = ref(true);
+
+  // 加载模板列表
+  try {
+    templateOptions.value = await promptTemplateListByType('competitor_analysis') || [];
+    if (templateOptions.value.length === 0) {
+      templateOptions.value = await promptTemplateListByType() || [];
+    }
+  } catch {
+    templateOptions.value = [];
+  } finally {
+    templateLoading.value = false;
+  }
+
+  Modal.confirm({
+    title: isReAnalyze ? '确认重新分析' : '确认开始竞争对手分析',
+    content: () =>
+      createVNode('div', {}, [
+        createVNode('p', { style: { marginBottom: '12px' } },
+          isReAnalyze ? '重新分析将覆盖当前结果，确定继续吗？' : '确定开始竞争对手分析吗？',
+        ),
+        createVNode('div', { style: { marginTop: '8px' } }, [
+          createVNode('div', { style: { fontSize: '13px', color: '#606266', marginBottom: '6px' } }, '提示词模板（可选）'),
+          createVNode(Select, {
+            value: selectedTemplateId.value,
+            placeholder: '选择模板自动填充提示词',
+            allowClear: true,
+            loading: templateLoading.value,
+            style: { width: '100%' },
+            options: templateOptions.value.map((t) => ({
+              label: t.templateName,
+              value: t.id,
+            })),
+            'onUpdate:value': (val: number | undefined) => {
+              selectedTemplateId.value = val;
+              const tpl = templateOptions.value.find((t) => t.id === val);
+              if (tpl?.promptContent) {
+                customPromptText.value = tpl.promptContent;
+              }
+            },
+          }),
+          createVNode('div', { style: { fontSize: '13px', color: '#606266', marginBottom: '6px', marginTop: '12px' } }, '自定义提示词（可选，不填则使用系统默认）'),
+          createVNode(Input.TextArea, {
+            value: customPromptText.value,
+            placeholder: '输入自定义提示词，或选择上方模板自动填充',
+            rows: 4,
+            style: { width: '100%' },
+            'onUpdate:value': (val: string) => {
+              customPromptText.value = val;
+            },
+          }),
+        ]),
+      ]),
+    width: 480,
+    centered: true,
+    async onOk() {
+      competitorAnalysisLoading.value = true;
+      try {
+        await analyzeCompetitors(submissionId.value, customPromptText.value || undefined);
+        message.success('竞争对手分析已开始，请稍候...');
+        await loadDetail();
+        if (needsAutoRefresh.value) startAutoRefresh();
+      } catch {
+        message.error('触发竞争对手分析失败');
+      } finally {
+        competitorAnalysisLoading.value = false;
+      }
+    },
+  });
 }
 </script>
 
@@ -523,7 +658,7 @@ async function handleStartCompetitorAnalysis() {
           </Card>
 
           <!-- 竞争对手分析卡片 -->
-          <Card id="competitor-analysis" class="mb-4 detail-card" :style="cardRadiusStyle">
+          <Card id="competitor-analysis" class="mb-4 detail-card" :style="cardRadiusStyle" :class="{ 'ai-fullscreen-card': isCompetitorFullscreen }">
             <template #title>
               <span class="card-title">
                 <ThunderboltOutlined class="card-title-icon" />
@@ -531,79 +666,52 @@ async function handleStartCompetitorAnalysis() {
               </span>
             </template>
             <template #extra>
-              <Tag
-                v-if="detailData?.competitorAnalysisStatus && detailData.competitorAnalysisStatus !== 'none'"
-                :color="competitorStatusConfig[detailData.competitorAnalysisStatus]?.color || 'default'"
-              >
-                {{ competitorStatusConfig[detailData.competitorAnalysisStatus]?.label || detailData.competitorAnalysisStatus }}
-              </Tag>
+              <Space>
+                <template v-if="detailData?.competitorAnalysisStatus === 'completed'">
+                  <Button type="text" size="small" @click="toggleCompetitorFullscreen">
+                    <ExpandOutlined v-if="!isCompetitorFullscreen" />
+                    <FullscreenExitOutlined v-else />
+                    {{ isCompetitorFullscreen ? '退出' : '全屏' }}
+                  </Button>
+                  <Button type="text" size="small" @click="downloadCompetitorPdf">
+                    <DownloadOutlined />
+                    下载PDF
+                  </Button>
+                </template>
+                <Button type="text" size="small" @click="handleStartCompetitorAnalysis" :loading="competitorAnalysisLoading">
+                  <ThunderboltOutlined />
+                  {{ detailData?.competitorAnalysisStatus === 'none' || !detailData?.competitorAnalysisStatus ? '开始分析' : '重新分析' }}
+                </Button>
+              </Space>
             </template>
 
-            <!-- 已完成：评分 + Markdown 结果 -->
-            <div v-if="detailData?.competitorAnalysisStatus === 'completed'">
-              <!-- 竞争力评分 -->
-              <div v-if="detailData.competitorScore != null" class="competitor-score-section">
-                <div class="competitor-score-box">
-                  <Progress
-                    type="circle"
-                    :percent="detailData.competitorScore"
-                    :size="80"
-                    :stroke-color="
-                      detailData.competitorScore >= 70
-                        ? '#52c41a'
-                        : detailData.competitorScore >= 40
-                          ? '#faad14'
-                          : '#ff4d4f'
-                    "
-                  >
-                    <template #format="{ percent }">
-                      <span class="score-text">{{ percent }}</span>
-                    </template>
-                  </Progress>
-                  <div class="competitor-score-label">竞争力评分</div>
-                </div>
-                <div class="competitor-score-actions">
-                  <Button size="small" @click="handleStartCompetitorAnalysis" :loading="competitorAnalysisLoading">
-                    重新分析
-                  </Button>
-                </div>
-              </div>
-              <!-- Markdown 分析结果 -->
-              <div class="competitor-result-content">
+            <!-- 已完成：Markdown 结果 -->
+            <div v-if="detailData?.competitorAnalysisStatus === 'completed' && competitorAnalysisContent">
+              <div class="competitor-ai-result ai-result competitor-ai-result-fixed">
                 <MarkdownPreviewer
-                  :model-value="detailData.competitorAnalysisResult || ''"
+                  :key="competitorAnalysisContent"
+                  :value="competitorAnalysisContent"
+                  height="auto"
                 />
               </div>
             </div>
 
             <!-- 分析中：加载状态 -->
-            <div v-else-if="detailData?.competitorAnalysisStatus === 'analyzing'" class="competitor-loading">
-              <Spin tip="AI 正在分析竞争对手，请稍候...">
-                <div class="competitor-loading-placeholder" />
-              </Spin>
+            <div v-else-if="detailData?.competitorAnalysisStatus === 'analyzing'" class="ai-loading">
+              <Spin tip="AI 正在分析竞争对手，请稍候..." />
             </div>
 
-            <!-- 分析失败：错误提示 + 重新分析 -->
-            <div v-else-if="detailData?.competitorAnalysisStatus === 'failed'" class="competitor-failed">
+            <!-- 分析失败：错误提示 -->
+            <div v-else-if="detailData?.competitorAnalysisStatus === 'failed'">
               <div class="error-box">
                 <div class="error-label">分析失败</div>
                 <div class="error-content">{{ detailData?.competitorAnalysisResult || '竞争对手分析过程中出现错误' }}</div>
               </div>
-              <div class="mt-4">
-                <Button type="primary" @click="handleStartCompetitorAnalysis" :loading="competitorAnalysisLoading">
-                  重新分析
-                </Button>
-              </div>
             </div>
 
-            <!-- 未分析：空状态 + 开始分析按钮 -->
-            <div v-else class="competitor-empty">
-              <Empty description="暂未进行竞争对手分析">
-                <Button type="primary" @click="handleStartCompetitorAnalysis" :loading="competitorAnalysisLoading">
-                  <ThunderboltOutlined />
-                  开始分析
-                </Button>
-              </Empty>
+            <!-- 未分析：空状态 -->
+            <div v-else>
+              <Empty description="暂未进行竞争对手分析" />
             </div>
           </Card>
         </div>
@@ -936,57 +1044,61 @@ async function handleStartCompetitorAnalysis() {
 }
 
 /* ===== 竞争对手分析 ===== */
-.competitor-score-section {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 16px 20px;
-  background: #fafafa;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.competitor-score-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.competitor-score-label {
-  font-size: 13px;
-  color: #909399;
-  font-weight: 500;
-}
-
-.score-text {
-  font-size: 22px;
-  font-weight: 700;
-  color: rgba(0, 0, 0, 0.88);
-}
-
-.competitor-score-actions {
-  margin-left: auto;
-}
-
-.competitor-result-content {
-  padding: 0 4px;
-}
-
-.competitor-loading {
+.ai-loading {
   padding: 60px 0;
   text-align: center;
 }
 
-.competitor-loading-placeholder {
-  min-height: 120px;
+.ai-result :deep(.vditor-reset) {
+  padding: 16px 20px !important;
 }
 
-.competitor-failed {
-  padding: 20px;
+/* 非全屏时固定高度 */
+.competitor-ai-result-fixed {
+  max-height: 600px;
+  overflow-y: auto;
 }
 
-.competitor-empty {
-  padding: 40px 0;
+/* AI 全屏卡片 */
+.ai-fullscreen-card {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  margin: 0;
+  border-radius: 0;
+  overflow: auto;
+  background: #fff;
+}
+
+.ai-fullscreen-card :deep(.ant-card-head) {
+  padding: 16px 24px;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ai-fullscreen-card :deep(.ant-card-body) {
+  padding: 0;
+}
+
+.ai-fullscreen-card .ai-result {
+  padding: 0;
+  max-height: none;
+  height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.ai-fullscreen-card :deep(.vditor-reset) {
+  font-size: 16px !important;
+  line-height: 1.8 !important;
+}
+
+.ai-fullscreen-card :deep(.vditor-reset table) {
+  width: 100%;
 }
 </style>

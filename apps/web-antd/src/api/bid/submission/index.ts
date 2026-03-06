@@ -74,6 +74,8 @@ export interface CreateSubmissionParams {
   remark?: string;
   /** 是否分析竞争对手 */
   analyzeCompetitors?: boolean;
+  /** 竞争对手分析自定义提示词 */
+  competitorAnalysisPrompt?: string;
 }
 
 /**
@@ -109,6 +111,7 @@ export async function createSubmissionFromProject(data: CreateSubmissionParams) 
     generationConfig: JSON.stringify(data.generationConfig),
     remark: data.remark,
     analyzeCompetitors: data.analyzeCompetitors,
+    competitorAnalysisPrompt: data.competitorAnalysisPrompt,
   });
 }
 
@@ -202,6 +205,6 @@ export async function getSubmissionAttachments(submissionId: string | number) {
 /**
  * 手动触发竞争对手分析
  */
-export async function analyzeCompetitors(id: number | string) {
-  return requestClient.post(`/bid/submission/${id}/analyzeCompetitors`);
+export async function analyzeCompetitors(id: number | string, prompt?: string) {
+  return requestClient.post(`/bid/submission/${id}/analyzeCompetitors`, { prompt });
 }

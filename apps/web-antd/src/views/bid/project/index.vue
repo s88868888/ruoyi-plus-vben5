@@ -2,17 +2,19 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 import type { BizBidProject } from '#/api/bid/project';
 
-import { computed, createVNode, ref } from 'vue';
+import { computed, createVNode, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
-import { Button, Checkbox, Dropdown, Menu, MenuItem, Modal, Progress, Space, Tag, message } from 'ant-design-vue';
+import { Button, Checkbox, Dropdown, Input, Menu, MenuItem, Modal, Progress, Select, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { bidProjectList, bidProjectRemove } from '#/api/bid/project';
 import { createSubmissionFromProject } from '#/api/bid/submission';
+import { promptTemplateListByType } from '#/api/bid/promptTemplate';
+import type { BizAiPromptTemplate } from '#/api/bid/promptTemplate';
 import { useListTablePreference } from '#/preferences/userPreference';
 
 import BidProjectDrawer from './modules/bid-project-three-step-drawer.vue';
@@ -366,8 +368,36 @@ async function handleCreateSubmission(record: BizBidProject) {
     return;
   }
 
-  // 使用 ref 追踪勾选状态
+  // 响应式状态
   const analyzeCompetitors = ref(false);
+  const selectedTemplateId = ref<number | undefined>(undefined);
+  const selectedPromptContent = ref<string | undefined>(undefined);
+  const customPromptText = ref<string>('');
+  const templateOptions = ref<BizAiPromptTemplate[]>([]);
+  const templateLoading = ref(false);
+
+  // 监听 checkbox 变化，勾选时加载模板列表
+  watch(analyzeCompetitors, async (val) => {
+    if (val && templateOptions.value.length === 0) {
+      templateLoading.value = true;
+      try {
+        templateOptions.value = await promptTemplateListByType('competitor_analysis') || [];
+        // 如果竞争对手分析类型没有模板，尝试加载所有模板
+        if (templateOptions.value.length === 0) {
+          templateOptions.value = await promptTemplateListByType() || [];
+        }
+      } catch {
+        templateOptions.value = [];
+      } finally {
+        templateLoading.value = false;
+      }
+    }
+    if (!val) {
+      selectedTemplateId.value = undefined;
+      selectedPromptContent.value = undefined;
+      customPromptText.value = '';
+    }
+  });
 
   Modal.confirm({
     title: '确认转为投标项目',
@@ -384,13 +414,52 @@ async function handleCreateSubmission(record: BizBidProject) {
           },
           { default: () => '同时分析竞争对手' },
         ),
-        createVNode(
-          'div',
-          { style: { fontSize: '12px', color: '#909399', marginTop: '4px', paddingLeft: '24px' } },
-          '勾选后将使用 AI 自动分析竞争态势，生成分析报告和竞争力评分',
-        ),
+        // 勾选后显示模板选择 + 自定义提示词输入
+        analyzeCompetitors.value
+          ? createVNode(
+              'div',
+              { style: { marginTop: '12px', paddingLeft: '24px' } },
+              [
+                createVNode('div', { style: { fontSize: '13px', color: '#606266', marginBottom: '6px' } }, '提示词模板（可选）'),
+                createVNode(Select, {
+                  value: selectedTemplateId.value,
+                  placeholder: '选择模板自动填充提示词',
+                  allowClear: true,
+                  loading: templateLoading.value,
+                  style: { width: '100%' },
+                  options: templateOptions.value.map((t) => ({
+                    label: t.templateName,
+                    value: t.id,
+                  })),
+                  'onUpdate:value': (val: number | undefined) => {
+                    selectedTemplateId.value = val;
+                    const tpl = templateOptions.value.find((t) => t.id === val);
+                    selectedPromptContent.value = tpl?.promptContent;
+                    // 选中模板时自动填充到文本框
+                    if (tpl?.promptContent) {
+                      customPromptText.value = tpl.promptContent;
+                    }
+                  },
+                }),
+                createVNode('div', { style: { fontSize: '13px', color: '#606266', marginBottom: '6px', marginTop: '12px' } }, '自定义提示词（可选，不填则使用系统默认）'),
+                createVNode(Input.TextArea, {
+                  value: customPromptText.value,
+                  placeholder: '输入自定义提示词，或选择上方模板自动填充',
+                  rows: 4,
+                  style: { width: '100%' },
+                  'onUpdate:value': (val: string) => {
+                    customPromptText.value = val;
+                  },
+                }),
+              ],
+            )
+          : createVNode(
+              'div',
+              { style: { fontSize: '12px', color: '#909399', marginTop: '4px', paddingLeft: '24px' } },
+              '勾选后将使用 AI 自动分析竞争态势，生成分析报告和竞争力评分',
+            ),
       ]),
-    width: 460,
+    width: 480,
     centered: true,
     async onOk() {
       try {
@@ -399,6 +468,7 @@ async function handleCreateSubmission(record: BizBidProject) {
           selectedCompanies: [],
           generationConfig: [],
           analyzeCompetitors: analyzeCompetitors.value,
+          competitorAnalysisPrompt: customPromptText.value || undefined,
         });
         message.success('创建投标项目成功');
         router.push('/bid/submission');

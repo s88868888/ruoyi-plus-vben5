@@ -20,6 +20,7 @@ import {
   PaperClipOutlined,
   EyeOutlined,
   PictureOutlined,
+  WarningOutlined,
 } from '@ant-design/icons-vue';
 import {
   getChapterTree,
@@ -133,12 +134,121 @@ function handleInsertKnowledgeImages(urls: string[]) {
   contentModified.value = true;
 }
 
+// 缺失图片预警
+interface MissingImageInfo {
+  chapterTitle: string;
+  chapterId: number | string;
+  imageName: string;
+}
+const missingImages = ref<MissingImageInfo[]>([]);
+const missingImagePopoverOpen = ref(false);
+
+/** 递归扫描章节树，收集所有缺失图片 */
+function scanMissingImages(chapters: BizSubmissionChapter[]): MissingImageInfo[] {
+  const result: MissingImageInfo[] = [];
+  const regex = /缺失图片[:：]\s*(.+?)<\/span>/g;
+  for (const ch of chapters) {
+    if (ch.chapterContent) {
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(ch.chapterContent)) !== null) {
+        result.push({
+          chapterTitle: ch.chapterTitle || '未命名章节',
+          chapterId: ch.id!,
+          imageName: match[1]!.trim(),
+        });
+      }
+    }
+    if (ch.children?.length) {
+      result.push(...scanMissingImages(ch.children));
+    }
+  }
+  return result;
+}
+
+/** 刷新缺失图片列表 */
+function refreshMissingImages() {
+  missingImages.value = scanMissingImages(chapterTree.value);
+}
+
+/** 点击缺失图片项，跳转到对应章节 */
+function handleMissingImageClick(item: MissingImageInfo) {
+  const chapter = findChapterById(chapterTree.value, item.chapterId);
+  if (chapter) {
+    handleTreeSelect([String(item.chapterId)], { node: chapter } as any);
+  }
+  missingImagePopoverOpen.value = false;
+}
+
+function findChapterById(chapters: BizSubmissionChapter[], id: number | string): BizSubmissionChapter | null {
+  for (const ch of chapters) {
+    if (String(ch.id) === String(id)) return ch;
+    if (ch.children?.length) {
+      const found = findChapterById(ch.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// 章节树变化时自动扫描缺失图片
+watch(chapterTree, () => {
+  refreshMissingImages();
+}, { deep: true });
+
 // 轮询定时器（刷新页面后恢复生成中状态用）
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 // 批量生成轮询（刷新后检测 generating 章节状态）
 let batchPollTimer: ReturnType<typeof setInterval> | null = null;
+function applyChapterTree(tree: BizSubmissionChapter[]) {
+  chapterTree.value = tree;
+
+  if (chapterTree.value.length > 0 && expandedKeys.value.length === 0) {
+    expandedKeys.value = [String(chapterTree.value[0].id)];
+  }
+
+  if (chapterTree.value.length > 0) {
+    emit('structure-generated', chapterTree.value);
+  }
+}
+
+async function fetchChapterTreeSilently() {
+  const res = await getChapterTree({
+    submissionId: props.submissionId,
+    documentId: props.documentConfigId
+  });
+  return (res as BizSubmissionChapter[]) || [];
+}
+
+async function tryFinishStructureGenerating() {
+  const treeData = await fetchChapterTreeSilently();
+  if (treeData.length === 0) {
+    return false;
+  }
+
+  stopPolling();
+  generating.value = false;
+  generatingProgress.value = 100;
+  generatingMessage.value = '绔犺妭缁撴瀯鐢熸垚瀹屾垚';
+  applyChapterTree(treeData);
+  return true;
+}
+
+function startStructurePolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    try {
+      const info = await submissionInfo(props.submissionId);
+      generatingProgress.value = info?.generationProgress ?? generatingProgress.value;
+      await tryFinishStructureGenerating();
+    } catch (e) {
+      // ignore polling errors
+    }
+  }, 3000);
+}
 
 function startPolling() {
+  startStructurePolling();
+  return;
   if (pollTimer) return;
   pollTimer = setInterval(async () => {
     try {
@@ -203,11 +313,11 @@ function countLeafChapterProgress(list: BizSubmissionChapter[]): { total: number
 // 静默刷新章节树（不显示 loading，避免闪烁）
 async function silentRefreshTree() {
   try {
-    const res = await getChapterTree({
+    await getChapterTree({
       submissionId: props.submissionId,
       documentId: props.documentConfigId
     });
-    chapterTree.value = res || [];
+    chapterTree.value = await fetchChapterTreeSilently();
   } catch (e) {
     // 忽略
   }
@@ -254,14 +364,18 @@ onMounted(async () => {
   // 先检查后端状态，判断是否有正在进行的生成任务（刷新页面后恢复）
   try {
     const info = await submissionInfo(props.submissionId);
+    await loadChapterTree();
+    const progress = info?.generationProgress ?? 0;
+    const isStructureGenerating =
+      info?.status === 'generating' ||
+      (chapterTree.value.length === 0 && progress > 0 && progress < 100);
     // 如果投标项目处于生成中，恢复轮询
-    if (info?.status === 'generating') {
+    if (isStructureGenerating) {
       generating.value = true;
-      generatingProgress.value = info?.generationProgress ?? 0;
+      generatingProgress.value = progress;
       generatingMessage.value = '正在生成章节结构，请稍候...';
       startPolling();
     } else {
-      await loadChapterTree();
       // 检测是否有批量内容生成任务在进行（刷新页面后恢复进度条）
       if (hasGeneratingChapters(chapterTree.value)) {
         batchGenerating.value = true;
@@ -327,6 +441,7 @@ function handleSseMessage(data: any) {
       generatingMessage.value = msg;
       break;
     case 'progress':
+      generating.value = true;
       generatingProgress.value = progress;
       generatingMessage.value = msg;
       break;
@@ -362,7 +477,7 @@ async function loadChapterTree() {
       documentId: props.documentConfigId
     });
     console.log('章节树查询结果:', res);
-    chapterTree.value = res || [];
+    applyChapterTree((res as BizSubmissionChapter[]) || []);
 
     // 初次加载时默认展开第一个章节
     if (chapterTree.value.length > 0 && expandedKeys.value.length === 0) {
@@ -397,6 +512,7 @@ async function handleAIGenerate() {
       submissionId: props.submissionId,
       documentConfigId: props.documentConfigId
     });
+    startPolling();
 
     // SSE 会推送进度，无需轮询
     generatingMessage.value = 'AI正在生成章节结构，请稍候...';
@@ -423,6 +539,7 @@ async function handleRegenerate() {
       submissionId: props.submissionId,
       documentConfigId: props.documentConfigId
     });
+    startPolling();
 
     // SSE 会推送进度，无需轮询
     generatingMessage.value = 'AI正在重新生成章节结构，请稍候...';
@@ -1273,6 +1390,64 @@ function handleClosePreview() {
               附件信息
             </Button>
           </Popover>
+          <!-- 缺失图片预警按钮 -->
+          <Popover
+            v-model:open="missingImagePopoverOpen"
+            trigger="click"
+            placement="bottomRight"
+            overlay-class-name="missing-image-popover"
+          >
+            <template #content>
+              <div class="missing-image-popover-content">
+                <div class="missing-image-popover-header">
+                  <span class="missing-image-popover-title">缺失图片预警</span>
+                  <Badge :count="missingImages.length" :number-style="{ backgroundColor: '#fa8c16' }" />
+                </div>
+                <div v-if="missingImages.length === 0" class="missing-image-empty">
+                  <CheckCircleFilled style="color: #52c41a; font-size: 28px; margin-bottom: 8px;" />
+                  <div>所有图片正常，无缺失</div>
+                </div>
+                <div v-else class="missing-image-table-wrapper">
+                  <table class="missing-image-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 40px;">#</th>
+                        <th>缺失图片名称</th>
+                        <th>所属章节</th>
+                        <th style="width: 60px;">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="(item, idx) in missingImages"
+                        :key="idx"
+                      >
+                        <td class="cell-index">{{ idx + 1 }}</td>
+                        <td>
+                          <div class="cell-image-name" :title="item.imageName">
+                            <PictureOutlined style="color: #fa8c16; margin-right: 4px;" />
+                            {{ item.imageName }}
+                          </div>
+                        </td>
+                        <td>
+                          <div class="cell-chapter" :title="item.chapterTitle">{{ item.chapterTitle }}</div>
+                        </td>
+                        <td>
+                          <a class="cell-action" @click="handleMissingImageClick(item)">定位</a>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+            <Badge :count="missingImages.length" :offset="[-6, 4]" size="small" :number-style="{ backgroundColor: '#fa8c16' }">
+              <Button :style="missingImages.length > 0 ? { borderColor: '#fa8c16', color: '#fa8c16' } : {}">
+                <template #icon><WarningOutlined /></template>
+                图片预警
+              </Button>
+            </Badge>
+          </Popover>
           <Button @click="handleBack">返回</Button>
           <Button type="primary" @click="handleNext">下一步</Button>
         </div>
@@ -1959,5 +2134,107 @@ function handleClosePreview() {
   font-size: 12px;
   color: #999;
   line-height: 1.4;
+}
+
+/* 缺失图片预警弹窗 */
+.missing-image-popover-content {
+  width: 480px;
+  max-height: 440px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.missing-image-popover-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.missing-image-popover-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.missing-image-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: #52c41a;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.missing-image-table-wrapper {
+  overflow-y: auto;
+  max-height: 370px;
+}
+
+.missing-image-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.missing-image-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.missing-image-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.65);
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+  white-space: nowrap;
+}
+
+.missing-image-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f5f5f5;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.missing-image-table tbody tr:hover {
+  background: #fff7e6;
+}
+
+.cell-index {
+  color: #999;
+  text-align: center;
+}
+
+.cell-image-name {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.cell-chapter {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  color: #666;
+}
+
+.cell-action {
+  color: #1677ff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cell-action:hover {
+  color: #4096ff;
 }
 </style>
