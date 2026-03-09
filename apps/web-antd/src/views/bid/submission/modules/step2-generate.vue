@@ -199,6 +199,8 @@ watch(chapterTree, () => {
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 // 批量生成轮询（刷新后检测 generating 章节状态）
 let batchPollTimer: ReturnType<typeof setInterval> | null = null;
+// 单章节轮询定时器
+let chapterPollTimer: ReturnType<typeof setInterval> | null = null;
 function applyChapterTree(tree: BizSubmissionChapter[]) {
   chapterTree.value = tree;
 
@@ -282,6 +284,39 @@ function stopPolling() {
   }
 }
 
+// 启动单章节轮询
+function startChapterPolling(chapterId: number) {
+  stopChapterPolling();
+  chapterPollTimer = setInterval(async () => {
+    try {
+      const info = await getChapterInfo(String(chapterId));
+      if (info && info.generationStatus === 'completed') {
+        stopChapterPolling();
+        const { chapterType, ...updateData } = info;
+        updateChapterInTree(chapterId, updateData);
+        if (currentChapter.value?.id === chapterId) {
+          currentChapter.value = { ...currentChapter.value, ...updateData };
+          chapterContentValue.value = info.chapterContent || '';
+          contentModified.value = false;
+        }
+      } else if (info && info.generationStatus === 'failed') {
+        stopChapterPolling();
+        updateChapterStatusInTree(chapterId, 'failed');
+      }
+    } catch (e) {
+      // 忽略轮询错误
+    }
+  }, 10000);
+}
+
+// 停止单章节轮询
+function stopChapterPolling() {
+  if (chapterPollTimer) {
+    clearInterval(chapterPollTimer);
+    chapterPollTimer = null;
+  }
+}
+
 // 递归判断是否有章节正在生成或等待生成
 function hasGeneratingChapters(list: BizSubmissionChapter[]): boolean {
   for (const item of list) {
@@ -361,31 +396,18 @@ onMounted(async () => {
   calcEditorHeight();
   window.addEventListener('resize', calcEditorHeight);
 
-  // 先检查后端状态，判断是否有正在进行的生成任务（刷新页面后恢复）
+  // 加载章节树
   try {
-    const info = await submissionInfo(props.submissionId);
     await loadChapterTree();
-    const progress = info?.generationProgress ?? 0;
-    const isStructureGenerating =
-      info?.status === 'generating' ||
-      (chapterTree.value.length === 0 && progress > 0 && progress < 100);
-    // 如果投标项目处于生成中，恢复轮询
-    if (isStructureGenerating) {
-      generating.value = true;
-      generatingProgress.value = progress;
-      generatingMessage.value = '正在生成章节结构，请稍候...';
-      startPolling();
-    } else {
-      // 检测是否有批量内容生成任务在进行（刷新页面后恢复进度条）
-      if (hasGeneratingChapters(chapterTree.value)) {
-        batchGenerating.value = true;
-        const { total, completed } = countLeafChapterProgress(chapterTree.value);
-        batchTotal.value = total;
-        batchCurrent.value = completed;
-        batchProgress.value = total > 0 ? Math.round((completed / total) * 100) : 0;
-        batchMessage.value = `正在生成章节内容 (${completed}/${total})...`;
-        startBatchPolling();
-      }
+    // 检测是否有批量内容生成任务在进行（刷新页面后恢复进度条）
+    if (hasGeneratingChapters(chapterTree.value)) {
+      batchGenerating.value = true;
+      const { total, completed } = countLeafChapterProgress(chapterTree.value);
+      batchTotal.value = total;
+      batchCurrent.value = completed;
+      batchProgress.value = total > 0 ? Math.round((completed / total) * 100) : 0;
+      batchMessage.value = `正在生成章节内容 (${completed}/${total})...`;
+      startBatchPolling();
     }
   } catch (e) {
     loadChapterTree();
@@ -418,6 +440,7 @@ onMounted(async () => {
 onUnmounted(() => {
   stopPolling();
   stopBatchPolling();
+  stopChapterPolling();
   window.removeEventListener('resize', calcEditorHeight);
 });
 
@@ -928,7 +951,7 @@ async function generateChapterContent(chapter: BizSubmissionChapter) {
   updateChapterStatusInTree(chapter.id!, 'generating');
   try {
     await generateChapter(String(chapter.id));
-    // SSE 会推送进度，无需等待
+    startChapterPolling(chapter.id!);
   } catch (e) {
     message.error('生成失败');
     updateChapterStatusInTree(chapter.id!, 'failed');
@@ -950,6 +973,7 @@ async function handleRegenerateContent() {
       contentModified.value = false;
       try {
         await regenerateChapter(String(chapter.id));
+        startChapterPolling(chapter.id!);
       } catch (e) {
         message.error('重新生成失败');
         updateChapterStatusInTree(chapter.id!, 'failed');
@@ -1104,15 +1128,38 @@ function updateChapterStatusInTree(chapterId: number, status: string) {
   chapterTree.value = [...chapterTree.value];
 }
 
+// 在树中更新章节完整数据
+function updateChapterInTree(chapterId: number, data: Partial<BizSubmissionChapter>) {
+  function updateInList(list: BizSubmissionChapter[]): boolean {
+    for (const item of list) {
+      if (item.id === chapterId) {
+        Object.assign(item, data);
+        return true;
+      }
+      if (item.children?.length && updateInList(item.children)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  updateInList(chapterTree.value);
+  chapterTree.value = [...chapterTree.value];
+}
+
 // 刷新当前选中章节的内容
 async function refreshCurrentChapter() {
   if (!currentChapter.value?.id) return;
   try {
     const info = await getChapterInfo(String(currentChapter.value.id));
     if (info) {
-      currentChapter.value = { ...currentChapter.value, ...info };
+      // 排除 chapterType，防止后端降级覆盖用户设定的章节类型
+      const { chapterType, ...updateData } = info;
+      currentChapter.value = { ...currentChapter.value, ...updateData };
       chapterContentValue.value = info.chapterContent || '';
       contentModified.value = false;
+
+      // 同步更新树中的章节数据，确保状态图标和类型标识正确显示
+      updateChapterInTree(currentChapter.value.id!, updateData);
     }
   } catch (e) {
     // 忽略刷新错误
