@@ -107,6 +107,7 @@ const compareGridOptions: VxeGridProps = {
   showOverflow: true,
   border: true,
   toolbarConfig: { enabled: false },
+  pagerConfig: { enabled: false },
   columns: [
     { field: 'metric', title: '指标', width: 100, align: 'left' },
     { field: 'valueA', title: '当前版本', minWidth: 100, align: 'center', slots: { default: 'valueA' } },
@@ -117,7 +118,7 @@ const compareGridOptions: VxeGridProps = {
   proxyConfig: {
     ajax: {
       query: async () => {
-        return compareTableData.value;
+        return { rows: compareTableData.value, total: compareTableData.value.length };
       },
     },
   },

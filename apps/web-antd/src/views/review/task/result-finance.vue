@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import type { VxeGridProps } from '#/adapter/vxe-table';
+
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { Card, Tag, Button, Space } from 'ant-design-vue';
+import { Card, Tag, Button, Space, Select } from 'ant-design-vue';
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
@@ -18,11 +20,13 @@ import {
   AuditOutlined,
   DatabaseOutlined,
   HistoryOutlined,
+  SwapOutlined,
 } from '@ant-design/icons-vue';
 
 import { AnchorNav } from '#/components/anchor-nav';
 import type { AnchorNavItem } from '#/components/anchor-nav';
 import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
+import { useVbenVxeGrid } from '#/adapter/vxe-table';
 
 const router = useRouter();
 const layoutPreference = useDetailPagePreference();
@@ -40,6 +44,7 @@ const anchorNavItems = ref<AnchorNavItem[]>([
   { key: 'overview', title: '基本信息' },
   { key: 'data-overview', title: '数据概览' },
   { key: 'detail-table', title: '报销明细' },
+  { key: 'version-compare', title: '版本对比' },
 ]);
 
 const containerStyle = computed(() => {
@@ -97,6 +102,57 @@ const displayData = computed(() => {
 
 // 展开行
 const expandedRowKeys = ref<number[]>([]);
+
+// 版本对比
+const versionHistory = ref([
+  { version: 1, time: '2024-12-20 13:45:12', errorCount: 4, warningCount: 3, passRows: 38, totalRows: 45, submitter: '王五' },
+]);
+
+const compareVersionA = ref(1);
+const compareVersionB = ref(1);
+
+const versionOptions = computed(() => versionHistory.value.map(v => ({
+  label: `第${v.version}次审核 (${v.time.split(' ')[0]})`,
+  value: v.version,
+})));
+
+const versionAData = computed(() => versionHistory.value.find(v => v.version === compareVersionA.value));
+const versionBData = computed(() => versionHistory.value.find(v => v.version === compareVersionB.value));
+
+const compareTableData = computed(() => {
+  if (!versionAData.value || !versionBData.value) return [];
+  const a = versionAData.value;
+  const b = versionBData.value;
+  return [
+    { id: 1, metric: '严重问题', valueA: a.errorCount, valueB: b.errorCount, diff: a.errorCount - b.errorCount, type: 'less-better' },
+    { id: 2, metric: '一般问题', valueA: a.warningCount, valueB: b.warningCount, diff: a.warningCount - b.warningCount, type: 'less-better' },
+    { id: 3, metric: '通过率', valueA: Math.round(a.passRows / a.totalRows * 100), valueB: Math.round(b.passRows / b.totalRows * 100), diff: Math.round(a.passRows / a.totalRows * 100) - Math.round(b.passRows / b.totalRows * 100), type: 'more-better' },
+  ];
+});
+
+const compareGridOptions: VxeGridProps = {
+  showOverflow: true,
+  border: true,
+  toolbarConfig: { enabled: false },
+  pagerConfig: { enabled: false },
+  columns: [
+    { field: 'metric', title: '指标', width: 100, align: 'left' },
+    { field: 'valueA', title: '当前版本', minWidth: 100, align: 'center', slots: { default: 'valueA' } },
+    { field: 'valueB', title: '对比版本', minWidth: 100, align: 'center', slots: { default: 'valueB' } },
+    { field: 'diff', title: '变化', width: 100, align: 'center', slots: { default: 'diff' } },
+  ],
+  rowConfig: { keyField: 'id' },
+  proxyConfig: {
+    ajax: {
+      query: async () => {
+        return { rows: compareTableData.value, total: compareTableData.value.length };
+      },
+    },
+  },
+  id: 'review-finance-version-compare',
+};
+
+const [CompareTable] = useVbenVxeGrid({ gridOptions: compareGridOptions } as any);
 
 function toggleExpand(key: number) {
   const idx = expandedRowKeys.value.indexOf(key);
@@ -387,6 +443,53 @@ onUnmounted(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+      </Card>
+
+      <!-- 版本对比 -->
+      <Card id="version-compare" class="mb-4 detail-card" :style="cardRadiusStyle">
+        <template #title>
+          <span class="card-title">
+            <HistoryOutlined class="card-title-icon" />
+            版本对比
+          </span>
+        </template>
+        <template #extra>
+          <Tag color="blue">当前第{{ docInfo.reviewVersion }}次审核</Tag>
+        </template>
+
+        <!-- 版本选择器 -->
+        <div class="version-selector">
+          <div class="version-select-item">
+            <span class="version-select-label">对比版本</span>
+            <Select v-model:value="compareVersionA" :options="versionOptions" style="width: 200px;" />
+          </div>
+          <SwapOutlined class="version-swap-icon" />
+          <div class="version-select-item">
+            <Select v-model:value="compareVersionB" :options="versionOptions" style="width: 200px;" />
+          </div>
+        </div>
+
+        <!-- 对比结果 -->
+        <div v-if="versionAData && versionBData" class="version-compare-table" :style="tableCssVars">
+          <CompareTable>
+            <template #valueA="{ row }">
+              <span :class="row.metric === '通过率' ? 'text-green-500 font-semibold' : row.metric === '严重问题' ? 'text-red-500 font-semibold' : 'text-orange-500 font-semibold'">
+                {{ row.valueA }}{{ row.metric === '通过率' ? '%' : '' }}
+              </span>
+            </template>
+            <template #valueB="{ row }">
+              <span :class="row.metric === '通过率' ? 'text-green-500 font-semibold' : row.metric === '严重问题' ? 'text-red-500 font-semibold' : 'text-orange-500 font-semibold'">
+                {{ row.valueB }}{{ row.metric === '通过率' ? '%' : '' }}
+              </span>
+            </template>
+            <template #diff="{ row }">
+              <Tag v-if="row.diff !== 0" :color="(row.type === 'less-better' && row.diff < 0) || (row.type === 'more-better' && row.diff > 0) ? 'success' : 'error'">
+                {{ row.diff > 0 ? '↑' : '↓' }} {{ Math.abs(row.diff) }}{{ row.metric === '通过率' ? '%' : '' }}
+              </Tag>
+              <span v-else class="text-gray-400">-</span>
+            </template>
+          </CompareTable>
         </div>
       </Card>
     </div>
@@ -694,6 +797,59 @@ onUnmounted(() => {
 .issue-tooltip-suggest {
   font-size: 12px;
   color: #52c41a;
+}
+
+/* 版本对比 */
+.version-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.version-select-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.version-select-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.65);
+  white-space: nowrap;
+}
+
+.version-swap-icon {
+  font-size: 16px;
+  color: #909399;
+}
+
+.version-compare-table {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.version-compare-table :deep(.vxe-table--header-wrapper),
+.version-compare-table :deep(.vxe-header--column) {
+  background-color: var(--list-header-bg) !important;
+}
+
+.version-compare-table :deep(.vxe-header--column .vxe-cell) {
+  color: var(--list-header-color) !important;
+}
+
+.version-compare-table :deep(.vxe-header--column) {
+  padding-top: var(--list-header-padding-y) !important;
+  padding-bottom: var(--list-header-padding-y) !important;
+}
+
+.version-compare-table :deep(.vxe-body--column) {
+  padding-top: var(--list-cell-padding-y) !important;
+  padding-bottom: var(--list-cell-padding-y) !important;
 }
 
 </style>
