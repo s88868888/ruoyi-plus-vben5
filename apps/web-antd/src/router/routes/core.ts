@@ -98,6 +98,15 @@ const coreRoutes: RouteRecordRaw[] = [
           title: $t('page.auth.register'),
         },
       },
+      {
+        name: 'LoginTest',
+        path: 'login-test',
+        component: () =>
+          import('#/views/_core/authentication/login-test.vue'),
+        meta: {
+          title: '登录测试',
+        },
+      },
     ],
   },
 ];

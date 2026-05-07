@@ -1,0 +1,173 @@
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { useVbenDrawer } from '@vben/common-ui';
+import {
+  message, Steps, Upload, Select, Input, Form, FormItem, Alert, Tag, Card, Textarea,
+} from 'ant-design-vue';
+import { InboxOutlined } from '@ant-design/icons-vue';
+
+const emit = defineEmits<{ reload: [] }>();
+
+const currentStep = ref(0);
+const fileList = ref<any[]>([]);
+const formData = ref({
+  name: '',
+  type: undefined as string | undefined,
+  description: '',
+});
+
+// AI 解析后的规则预览（Mock）
+const parsedRules = ref([
+  { id: 1, content: '合同必须包含甲方全称及统一社会信用代码', severity: 'must' },
+  { id: 2, content: '合同金额大写与小写必须完全一致', severity: 'must' },
+  { id: 3, content: '服务期限必须明确起止日期', severity: 'must' },
+  { id: 4, content: '违约责任条款应双向约定', severity: 'should' },
+  { id: 5, content: '验收条款应明确验收方式和时限', severity: 'should' },
+  { id: 6, content: '建议补充仲裁作为争议解决备选', severity: 'suggest' },
+]);
+
+const severityMap: Record<string, { label: string; color: string }> = {
+  must: { label: '必须', color: 'red' },
+  should: { label: '应当', color: 'orange' },
+  suggest: { label: '建议', color: 'blue' },
+};
+
+const [BasicDrawer, drawerApi] = useVbenDrawer({
+  title: computed(() => {
+    const stepNames = ['基本信息', '上传规范文件', 'AI解析确认'];
+    return `新增审核标准 - ${stepNames[currentStep.value]}`;
+  }),
+  onOpenChange: (visible) => {
+    if (!visible) {
+      currentStep.value = 0;
+      fileList.value = [];
+      formData.value = { name: '', type: undefined, description: '' };
+    }
+  },
+  onConfirm: async () => {
+    if (currentStep.value === 0) {
+      if (!formData.value.name) {
+        message.warning('请输入规范名称');
+        return;
+      }
+      if (!formData.value.type) {
+        message.warning('请选择适用文档类型');
+        return;
+      }
+      currentStep.value = 1;
+      return;
+    }
+    if (currentStep.value === 1) {
+      if (fileList.value.length === 0) {
+        message.warning('请上传规范文件');
+        return;
+      }
+      message.loading({ content: 'AI正在解析规范文件...', key: 'parse', duration: 1.5 });
+      setTimeout(() => {
+        message.success({ content: '解析完成，已提取 6 条规则', key: 'parse' });
+      }, 1500);
+      currentStep.value = 2;
+      return;
+    }
+    // 最后一步：确认发布
+    message.success('审核标准已创建并发布');
+    drawerApi.close();
+    emit('reload');
+  },
+  confirmText: computed(() => {
+    if (currentStep.value === 0) return '下一步';
+    if (currentStep.value === 1) return '上传并解析';
+    return '确认发布';
+  }),
+  cancelText: computed(() => currentStep.value === 0 ? '取消' : '上一步'),
+  onCancel: () => {
+    if (currentStep.value > 0) {
+      currentStep.value--;
+      return false;
+    }
+    return true;
+  },
+});
+</script>
+
+<template>
+  <BasicDrawer class="w-[700px]">
+    <Steps :current="currentStep" size="small" style="margin-bottom: 24px;">
+      <Steps.Step title="基本信息" />
+      <Steps.Step title="上传规范" />
+      <Steps.Step title="AI解析确认" />
+    </Steps>
+
+    <!-- Step 1: 基本信息 -->
+    <div v-show="currentStep === 0">
+      <Form layout="vertical">
+        <FormItem label="规范名称" required>
+          <Input v-model:value="formData.name" placeholder="如：政府采购合同审核标准" />
+        </FormItem>
+        <FormItem label="适用文档类型" required>
+          <Select
+            v-model:value="formData.type"
+            placeholder="请选择"
+            style="width: 100%;"
+            :options="[
+              { label: '合同', value: 'contract' },
+              { label: '财务账单', value: 'finance' },
+              { label: '表单', value: 'form' },
+              { label: '标书', value: 'bid' },
+            ]"
+          />
+        </FormItem>
+        <FormItem label="补充说明（可选）">
+          <Textarea v-model:value="formData.description" placeholder="对规范的额外说明，如适用范围、特殊注意事项等..." :rows="3" />
+        </FormItem>
+      </Form>
+    </div>
+
+    <!-- Step 2: 上传规范文件 -->
+    <div v-show="currentStep === 1">
+      <Alert
+        message="上传规范文件后，AI将自动提取其中的审核要点并生成结构化规则"
+        type="info"
+        show-icon
+        style="margin-bottom: 16px;"
+      />
+      <Upload.Dragger
+        v-model:file-list="fileList"
+        :multiple="false"
+        :before-upload="() => false"
+      >
+        <p class="ant-upload-drag-icon"><InboxOutlined /></p>
+        <p class="ant-upload-text">点击或拖拽规范文件到此区域</p>
+        <p class="ant-upload-hint">支持 Word、PDF、TXT 格式</p>
+      </Upload.Dragger>
+    </div>
+
+    <!-- Step 3: AI解析确认 -->
+    <div v-show="currentStep === 2">
+      <Alert
+        message="以下规则由AI自动提取，请确认或调整后发布"
+        type="success"
+        show-icon
+        style="margin-bottom: 16px;"
+      />
+      <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+        <Tag color="red">必须 {{ parsedRules.filter(r => r.severity === 'must').length }}</Tag>
+        <Tag color="orange">应当 {{ parsedRules.filter(r => r.severity === 'should').length }}</Tag>
+        <Tag color="blue">建议 {{ parsedRules.filter(r => r.severity === 'suggest').length }}</Tag>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <Card v-for="(rule, index) in parsedRules" :key="rule.id" size="small" :body-style="{ padding: '12px 16px' }">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="width: 24px; height: 24px; border-radius: 50%; background: #1890ff; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">
+              {{ index + 1 }}
+            </span>
+            <span style="flex: 1; font-size: 13px;">{{ rule.content }}</span>
+            <Tag :color="severityMap[rule.severity]?.color" style="flex-shrink: 0;">
+              {{ severityMap[rule.severity]?.label }}
+            </Tag>
+          </div>
+        </Card>
+      </div>
+    </div>
+  </BasicDrawer>
+</template>

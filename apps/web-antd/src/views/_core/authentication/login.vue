@@ -1,23 +1,19 @@
 <script lang="ts" setup>
 import type { LoginAndRegisterParams, VbenFormSchema } from '@vben/common-ui';
 
-import type { TenantResp } from '#/api';
 import type { CaptchaResponse } from '#/api/core/captcha';
 
 import { computed, markRaw, onMounted, ref, useTemplateRef } from 'vue';
 
 import { AuthenticationLogin, z } from '@vben/common-ui';
-import { DEFAULT_TENANT_ID } from '@vben/constants';
 import { $t } from '@vben/locales';
 
-import { Input, Select } from 'ant-design-vue';
+import { Input } from 'ant-design-vue';
 import { omit } from 'lodash-es';
 
-import { tenantList } from '#/api';
 import { captchaImage } from '#/api/core/captcha';
 import { useAuthStore } from '#/store';
 
-import { useLoginTenantId } from '../oauth-common';
 import InputCaptcha from './input-captcha.vue';
 import OAuthLogin from './oauth-login.vue';
 
@@ -51,66 +47,12 @@ async function loadCaptcha() {
   }
 }
 
-const tenantInfo = ref<TenantResp>({
-  tenantEnabled: false,
-  voList: [],
-});
-
-async function loadTenant() {
-  try {
-    const resp = await tenantList();
-    tenantInfo.value = resp;
-    // 选中第一个租户
-    if (resp.tenantEnabled && resp.voList.length > 0) {
-      const firstTenantId = resp.voList[0]!.tenantId;
-      loginFormRef.value?.getFormApi().setFieldValue('tenantId', firstTenantId);
-    }
-  } catch (error) {
-    console.error('Failed to load tenant list:', error);
-    // 如果获取租户列表失败，默认关闭多租户功能
-    tenantInfo.value = {
-      tenantEnabled: false,
-      voList: [],
-    };
-  }
-}
-
 onMounted(async () => {
-  await Promise.all([loadCaptcha(), loadTenant()]);
+  await loadCaptcha();
 });
-
-const { loginTenantId } = useLoginTenantId();
 
 const formSchema = computed((): VbenFormSchema[] => {
   return [
-    {
-      component: markRaw(Select),
-      modelPropName: 'value',
-      componentProps: {
-        class: 'w-full',
-        size: 'large',
-        showSearch: true,
-        optionFilterProp: 'label',
-        options: tenantInfo.value.voList?.map((item) => ({
-          label: item.companyName,
-          value: item.tenantId,
-        })),
-        placeholder: $t('ui.formRules.selectRequired'),
-      },
-      defaultValue: DEFAULT_TENANT_ID,
-      dependencies: {
-        if: () => tenantInfo.value.tenantEnabled,
-        // 可以把这里当做watch
-        trigger: (model) => {
-          // 给oauth登录使用
-          loginTenantId.value = model?.tenantId ?? DEFAULT_TENANT_ID;
-        },
-        triggerFields: ['', 'tenantId'],
-      },
-      fieldName: 'tenantId',
-      label: $t('authentication.selectAccount'),
-      rules: z.string().min(1, { message: $t('authentication.selectAccount') }),
-    },
     {
       component: markRaw(Input),
       modelPropName: 'value',

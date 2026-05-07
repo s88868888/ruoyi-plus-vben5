@@ -1,27 +1,53 @@
 <script setup lang="ts">
-import { ColorPicker, InputNumber, Slider, Switch } from 'ant-design-vue';
+import { computed } from 'vue';
+
+import { InputNumber, Radio, RadioGroup, Slider, Switch } from 'ant-design-vue';
+import { ColorPicker } from 'vue3-colorpicker';
+
+import { usePreferences } from '@vben/preferences';
 
 import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
 
+import 'vue3-colorpicker/style.css';
+
 const preference = useDetailPagePreference();
 const listPref = useListTablePreference();
+
+const { isDark } = usePreferences();
+const theme = computed(() => {
+  return isDark.value ? 'black' : 'white';
+});
 </script>
 
 <template>
   <div class="mt-[16px] md:w-full lg:w-3/4 2xl:w-3/5">
     <h3 class="mb-6 text-base font-semibold">详情页设置</h3>
 
-    <!-- 侧边导航 -->
+    <!-- 导航模式 -->
     <div class="setting-item">
       <div class="setting-label">
-        侧边锚点导航
+        导航模式
+      </div>
+      <div class="setting-desc">选择详情页的锚点导航展示方式</div>
+      <div class="mt-2">
+        <RadioGroup v-model:value="preference.navMode" size="small">
+          <Radio value="side">侧边导航</Radio>
+          <Radio value="horizontal">横向菜单条</Radio>
+        </RadioGroup>
+      </div>
+    </div>
+
+    <!-- 侧边锚点导航开关 -->
+    <div class="setting-item">
+      <div class="setting-label">
+        显示导航
         <Switch v-model:checked="preference.showAnchorNav" size="small" />
       </div>
-      <div class="setting-desc">开启后在详情页左侧显示锚点导航菜单，设置了内容最大宽度时建议关闭</div>
+      <div class="setting-desc">关闭后隐藏锚点导航</div>
     </div>
 
     <!-- 侧边导航左边距 -->
-    <div v-if="preference.showAnchorNav" class="setting-item">
+    <div v-if="preference.showAnchorNav && preference.navMode === 'side'" class="setting-item">
       <div class="setting-label">
         导航左边距
         <span class="setting-value">{{ preference.anchorNavMarginLeft }}px</span>
@@ -47,7 +73,7 @@ const listPref = useListTablePreference();
     </div>
 
     <!-- 侧边导航右边距 -->
-    <div v-if="preference.showAnchorNav" class="setting-item">
+    <div v-if="preference.showAnchorNav && preference.navMode === 'side'" class="setting-item">
       <div class="setting-label">
         导航右边距
         <span class="setting-value">{{ preference.anchorNavMarginRight }}px</span>
@@ -73,7 +99,7 @@ const listPref = useListTablePreference();
     </div>
 
     <!-- 侧边导航宽度 -->
-    <div v-if="preference.showAnchorNav" class="setting-item">
+    <div v-if="preference.showAnchorNav && preference.navMode === 'side'" class="setting-item">
       <div class="setting-label">
         导航宽度
         <span class="setting-value">{{ preference.anchorNavWidth }}px</span>
@@ -190,7 +216,7 @@ const listPref = useListTablePreference();
       </div>
       <div class="setting-desc">列表表头的背景颜色</div>
       <div class="mt-2">
-        <ColorPicker v-model:value="listPref.headerBgColor" show-text />
+        <ColorPicker v-model:pure-color="listPref.headerBgColor" format="hex" :theme="theme" />
       </div>
     </div>
 
@@ -203,7 +229,7 @@ const listPref = useListTablePreference();
       </div>
       <div class="setting-desc">列表表头字段名的文字颜色</div>
       <div class="mt-2">
-        <ColorPicker v-model:value="listPref.headerTextColor" show-text />
+        <ColorPicker v-model:pure-color="listPref.headerTextColor" format="hex" :theme="theme" />
       </div>
     </div>
 

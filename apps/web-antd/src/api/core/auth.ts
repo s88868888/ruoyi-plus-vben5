@@ -20,7 +20,7 @@ export namespace AuthApi {
   export interface BaseLoginParams {
     clientId?: string;
     grantType: GrantType;
-    tenantId: string;
+    tenantId?: string;
   }
 
   /**

@@ -1,0 +1,699 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+
+import { Card, Tag, Button, Space } from 'ant-design-vue';
+import {
+  ArrowLeftOutlined,
+  DownloadOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ExclamationCircleOutlined,
+  DollarOutlined,
+  FileExcelOutlined,
+  SafetyCertificateOutlined,
+  UserOutlined,
+  ClockCircleOutlined,
+  ThunderboltOutlined,
+  AuditOutlined,
+  DatabaseOutlined,
+  HistoryOutlined,
+} from '@ant-design/icons-vue';
+
+import { AnchorNav } from '#/components/anchor-nav';
+import type { AnchorNavItem } from '#/components/anchor-nav';
+import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
+
+const router = useRouter();
+const layoutPreference = useDetailPagePreference();
+const tablePreference = useListTablePreference();
+const scrollContainer = ref<HTMLElement | null>(null);
+
+const tableCssVars = computed(() => ({
+  '--list-header-bg': tablePreference.headerBgColor,
+  '--list-header-color': tablePreference.headerTextColor,
+  '--list-header-padding-y': `${tablePreference.headerPaddingY}px`,
+  '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
+}));
+
+const anchorNavItems = ref<AnchorNavItem[]>([
+  { key: 'overview', title: '基本信息' },
+  { key: 'data-overview', title: '数据概览' },
+  { key: 'detail-table', title: '报销明细' },
+]);
+
+const containerStyle = computed(() => {
+  if (layoutPreference.contentWidth > 0) {
+    return { maxWidth: `${layoutPreference.contentWidth}px`, margin: '0 auto', padding: '20px 24px' };
+  }
+  return { padding: '20px' };
+});
+
+const cardRadiusStyle = computed(() => ({
+  borderRadius: `${layoutPreference.cardRadius}px`,
+}));
+
+// Mock 数据
+const docInfo = ref({
+  name: '2024年Q4财务报销汇总表.xlsx',
+  type: '财务账单',
+  standard: '企业财务报销规范 v1.3',
+  submitter: '王五（财务部）',
+  submitTime: '2024-12-20 13:45:12',
+  reviewTime: '12秒',
+  totalRows: 45,
+  passRows: 38,
+  errorCount: 4,
+  warningCount: 3,
+  totalAmount: 287650,
+  issueAmount: 18320,
+  overLimitAmount: 5200,
+  missingInvoiceAmount: 8500,
+  reviewVersion: 1,
+});
+
+// 表格筛选
+const showMode = ref<'all' | 'issues'>('all');
+
+const tableData = ref([
+  { key: 1, row: 1, date: '2024-10-05', person: '张三', type: '差旅-交通', amount: 1280, invoice: 'FP20241005001', approver: '李总', remark: '北京出差高铁', status: 'pass' },
+  { key: 2, row: 2, date: '2024-10-05', person: '张三', type: '差旅-住宿', amount: 850, invoice: 'FP20241005002', approver: '李总', remark: '北京住宿2晚', status: 'pass' },
+  { key: 3, row: 3, date: '2024-10-08', person: '李四', type: '差旅-住宿', amount: 2800, invoice: 'FP20241008003', approver: '王总', remark: '上海出差3晚', status: 'error', issue: '住宿费超出标准', issueDetail: '单晚金额 ¥933 超出标准上限 ¥800/晚（普通员工标准）', rule: '规则 R06 · 住宿费不得超过对应级别标准', suggestion: '超出部分 ¥400 需个人承担或提供特殊审批说明' },
+  { key: 4, row: 4, date: '2024-10-12', person: '王五', type: '办公用品', amount: 3200, invoice: 'FP20241012004', approver: '李总', remark: '采购打印纸等', status: 'pass' },
+  { key: 5, row: 5, date: '2024-10-15', person: '赵六', type: '招待费', amount: 5600, invoice: '', approver: '李总', remark: '客户晚宴', status: 'error', issue: '缺少发票附件', issueDetail: '金额 ¥5,600 的招待费未提供对应发票编号和扫描件', rule: '规则 R02 · 所有报销项必须附有效发票', suggestion: '补充发票或提供情况说明' },
+  { key: 6, row: 6, date: '2024-10-18', person: '张三', type: '差旅-交通', amount: 680, invoice: 'FP20241018006', approver: '李总', remark: '打车费', status: 'warning', issue: '单次打车费异常偏高', issueDetail: '单次打车 ¥680，历史同类出差平均打车费为 ¥120-200', rule: '规则 R09 · 单笔交通费超出历史均值3倍需说明', suggestion: '请补充行程说明（如机场接送、跨城等）' },
+  { key: 7, row: 7, date: '2024-10-20', person: '孙七', type: '招待费', amount: 2900, invoice: '', approver: '', remark: '部门聚餐', status: 'error', issue: '多项违规', issueDetail: '缺少发票附件；审批人为空；"部门聚餐"不属于招待费范畴', rule: '规则 R02、R01、R11', suggestion: '补充发票、填写审批人、修改费用类型为"团建费"' },
+  { key: 8, row: 8, date: '2024-10-22', person: '李四', type: '办公用品', amount: 560, invoice: 'FP20241022008', approver: '王总', remark: '键盘鼠标', status: 'pass' },
+  { key: 9, row: 9, date: '2024-10-25', person: '张三', type: '差旅-住宿', amount: 1800, invoice: 'FP20241025009', approver: '李总', remark: '深圳出差2晚', status: 'error', issue: '住宿费超出标准', issueDetail: '单晚 ¥900 超出标准上限 ¥800/晚', rule: '规则 R06 · 住宿费不得超过对应级别标准', suggestion: '超出部分需个人承担或提供特殊审批' },
+  { key: 10, row: 10, date: '2024-10-28', person: '王五', type: '通讯费', amount: 450, invoice: 'FP20241028010', approver: '李总', remark: '10月话费', status: 'warning', issue: '通讯费超额', issueDetail: '月度通讯费 ¥450 超出标准 ¥300/月', rule: '规则 R08 · 通讯费不得超过岗位标准', suggestion: '超出部分 ¥150 需说明原因' },
+]);
+
+const displayData = computed(() => {
+  if (showMode.value === 'issues') {
+    return tableData.value.filter(r => r.status !== 'pass');
+  }
+  return tableData.value;
+});
+
+// 展开行
+const expandedRowKeys = ref<number[]>([]);
+
+function toggleExpand(key: number) {
+  const idx = expandedRowKeys.value.indexOf(key);
+  if (idx >= 0) {
+    expandedRowKeys.value.splice(idx, 1);
+  } else {
+    expandedRowKeys.value.push(key);
+  }
+}
+
+function getRowClassName(record: any) {
+  if (record.status === 'error') return 'row-error';
+  if (record.status === 'warning') return 'row-warning';
+  return '';
+}
+
+// 横向导航
+const activeAnchor = ref('overview');
+
+function scrollToAnchor(key: string) {
+  const el = scrollContainer.value?.querySelector(`#${key}`) as HTMLElement | null;
+  if (el && scrollContainer.value) {
+    const offset = el.offsetTop - 56;
+    scrollContainer.value.scrollTo({ top: offset, behavior: 'smooth' });
+  }
+}
+
+function handleScroll() {
+  if (!scrollContainer.value) return;
+  const scrollTop = scrollContainer.value.scrollTop + 80;
+  let current = anchorNavItems.value[0]?.key || '';
+  for (const item of anchorNavItems.value) {
+    const el = scrollContainer.value.querySelector(`#${item.key}`) as HTMLElement | null;
+    if (el && el.offsetTop <= scrollTop) {
+      current = item.key;
+    }
+  }
+  activeAnchor.value = current;
+}
+
+onMounted(() => {
+  scrollContainer.value?.addEventListener('scroll', handleScroll, { passive: true });
+});
+
+onUnmounted(() => {
+  scrollContainer.value?.removeEventListener('scroll', handleScroll);
+});
+</script>
+
+<template>
+  <div class="detail-page-layout">
+    <!-- 侧边导航 -->
+    <div
+      v-if="layoutPreference.showAnchorNav && layoutPreference.navMode === 'side'"
+      class="side-nav-panel hide-scrollbar"
+      :style="{
+        width: `${layoutPreference.anchorNavWidth}px`,
+        margin: `20px ${layoutPreference.anchorNavMarginRight}px 20px ${layoutPreference.anchorNavMarginLeft}px`,
+      }"
+    >
+      <AnchorNav :items="anchorNavItems" :container="scrollContainer" />
+    </div>
+
+    <div
+      class="main-scroll-area hide-scrollbar"
+      :style="{ left: layoutPreference.showAnchorNav && layoutPreference.navMode === 'side' ? `${layoutPreference.anchorNavMarginLeft + layoutPreference.anchorNavWidth + layoutPreference.anchorNavMarginRight}px` : '0' }"
+      ref="scrollContainer"
+    >
+      <div :style="containerStyle">
+        <!-- 顶部信息 -->
+        <div id="overview" class="header-card" :style="cardRadiusStyle">
+          <div class="header-title-row">
+            <span class="header-project-name">
+              {{ docInfo.name }}
+              <Tag color="green" style="margin-left: 8px;">{{ docInfo.type }}</Tag>
+            </span>
+            <Space>
+              <Button type="default" size="small" @click="router.push('/review/task')"><ArrowLeftOutlined /> 返回</Button>
+              <Button type="default" size="small"><DownloadOutlined /> 导出报告</Button>
+              <Button type="primary" size="small"><FileExcelOutlined /> 下载标注表格</Button>
+            </Space>
+          </div>
+          <div class="header-metrics-row">
+            <div class="header-metric">
+              <div class="header-metric-icon-wrap header-metric-icon-blue"><AuditOutlined /></div>
+              <div class="header-metric-body">
+                <div class="header-metric-label">审核标准</div>
+                <div class="header-metric-value">{{ docInfo.standard }}</div>
+              </div>
+            </div>
+            <div class="header-metric-divider" />
+            <div class="header-metric">
+              <div class="header-metric-icon-wrap header-metric-icon-cyan"><UserOutlined /></div>
+              <div class="header-metric-body">
+                <div class="header-metric-label">提交人</div>
+                <div class="header-metric-value">{{ docInfo.submitter }}</div>
+              </div>
+            </div>
+            <div class="header-metric-divider" />
+            <div class="header-metric">
+              <div class="header-metric-icon-wrap header-metric-icon-purple"><ClockCircleOutlined /></div>
+              <div class="header-metric-body">
+                <div class="header-metric-label">审核时间</div>
+                <div class="header-metric-value">{{ docInfo.submitTime }}</div>
+              </div>
+            </div>
+            <div class="header-metric-divider" />
+            <div class="header-metric">
+              <div class="header-metric-icon-wrap header-metric-icon-blue"><DatabaseOutlined /></div>
+              <div class="header-metric-body">
+                <div class="header-metric-label">数据量</div>
+                <div class="header-metric-value">{{ docInfo.totalRows }} 行</div>
+              </div>
+            </div>
+            <div class="header-metric-divider" />
+            <div class="header-metric">
+              <div class="header-metric-icon-wrap header-metric-icon-green"><ThunderboltOutlined /></div>
+              <div class="header-metric-body">
+                <div class="header-metric-label">耗时</div>
+                <div class="header-metric-value">{{ docInfo.reviewTime }}</div>
+              </div>
+            </div>
+            <div class="header-metric-divider" />
+            <div class="header-metric">
+              <div class="header-metric-icon-wrap header-metric-icon-orange"><HistoryOutlined /></div>
+              <div class="header-metric-body">
+                <div class="header-metric-label">审核次数</div>
+                <div class="header-metric-value">第{{ docInfo.reviewVersion }}次</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 横向菜单条 -->
+        <div
+          v-if="layoutPreference.showAnchorNav && layoutPreference.navMode === 'horizontal'"
+          class="horizontal-nav-bar"
+          :style="{ borderRadius: `${layoutPreference.cardRadius}px` }"
+        >
+          <a
+            v-for="item in anchorNavItems"
+            :key="item.key"
+            :class="['horizontal-nav-item', { 'horizontal-nav-item-active': activeAnchor === item.key }]"
+            @click="scrollToAnchor(item.key)"
+          >
+            {{ item.title }}
+          </a>
+        </div>
+
+      <!-- 数据概览 -->
+      <Card id="data-overview" class="mb-4" :style="cardRadiusStyle">
+        <template #title>
+          <span class="card-title">
+            <SafetyCertificateOutlined style="color: hsl(var(--primary)); margin-right: 8px;" />
+            数据概览
+          </span>
+        </template>
+        <div class="overview-row">
+          <div class="overview-item" :style="cardRadiusStyle">
+            <div class="overview-icon overview-icon-total"><SafetyCertificateOutlined /></div>
+            <div class="overview-body">
+              <div class="overview-label">总记录数</div>
+              <div class="overview-value">{{ docInfo.totalRows }}</div>
+            </div>
+          </div>
+          <div class="overview-item" :style="cardRadiusStyle">
+            <div class="overview-icon overview-icon-pass"><CheckCircleOutlined /></div>
+            <div class="overview-body">
+              <div class="overview-label">通过</div>
+              <div class="overview-value text-green-500">{{ docInfo.passRows }}</div>
+            </div>
+          </div>
+          <div class="overview-item" :style="cardRadiusStyle">
+            <div class="overview-icon overview-icon-error"><CloseCircleOutlined /></div>
+            <div class="overview-body">
+              <div class="overview-label">严重问题</div>
+              <div class="overview-value text-red-500">{{ docInfo.errorCount }}</div>
+            </div>
+          </div>
+          <div class="overview-item" :style="cardRadiusStyle">
+            <div class="overview-icon overview-icon-warning"><ExclamationCircleOutlined /></div>
+            <div class="overview-body">
+              <div class="overview-label">一般问题</div>
+              <div class="overview-value text-orange-500">{{ docInfo.warningCount }}</div>
+            </div>
+          </div>
+          <div class="overview-item" :style="cardRadiusStyle">
+            <div class="overview-icon overview-icon-amount"><DollarOutlined /></div>
+            <div class="overview-body">
+              <div class="overview-label">报销总金额</div>
+              <div class="overview-value text-blue-500">¥{{ docInfo.totalAmount.toLocaleString() }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 金额汇总 -->
+        <div class="amount-row">
+          <div class="amount-card">
+          <div class="amount-label">问题金额合计</div>
+          <div class="amount-value text-red-500">¥{{ docInfo.issueAmount.toLocaleString() }}</div>
+          <div class="amount-detail">占总金额 {{ (docInfo.issueAmount / docInfo.totalAmount * 100).toFixed(1) }}%，涉及 7 笔</div>
+        </div>
+        <div class="amount-card">
+          <div class="amount-label">超标金额</div>
+          <div class="amount-value text-orange-500">¥{{ docInfo.overLimitAmount.toLocaleString() }}</div>
+          <div class="amount-detail">3 笔超出报销标准上限</div>
+        </div>
+        <div class="amount-card">
+          <div class="amount-label">缺少发票金额</div>
+          <div class="amount-value text-red-500">¥{{ docInfo.missingInvoiceAmount.toLocaleString() }}</div>
+          <div class="amount-detail">2 笔无对应发票附件</div>
+        </div>
+        </div>
+      </Card>
+
+      <!-- 报销明细表格 -->
+      <Card id="detail-table" class="mb-4" :style="cardRadiusStyle">
+        <template #title>
+          <span class="card-title">
+            <FileExcelOutlined style="color: #52c41a; margin-right: 8px;" />
+            报销明细审核
+          </span>
+        </template>
+        <template #extra>
+          <Space>
+            <Button
+              :type="showMode === 'issues' ? 'primary' : 'default'"
+              size="small"
+              @click="showMode = 'issues'"
+            >仅看问题行</Button>
+            <Button
+              :type="showMode === 'all' ? 'primary' : 'default'"
+              size="small"
+              @click="showMode = 'all'"
+            >全部显示</Button>
+          </Space>
+        </template>
+
+        <div class="finance-table-wrap" :style="tableCssVars">
+          <table class="finance-table">
+            <thead>
+              <tr>
+                <th class="col-row">行号</th>
+                <th class="col-date">报销日期</th>
+                <th class="col-person">报销人</th>
+                <th class="col-type">费用类型</th>
+                <th class="col-amount">金额(元)</th>
+                <th class="col-invoice">发票编号</th>
+                <th class="col-approver">审批人</th>
+                <th class="col-remark">备注</th>
+                <th class="col-status">审核结果</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="record in displayData" :key="record.key">
+                <tr :class="getRowClassName(record)" @click="record.status !== 'pass' && toggleExpand(record.key)">
+                  <td class="cell-row">{{ record.row }}</td>
+                  <td>{{ record.date }}</td>
+                  <td>{{ record.person }}</td>
+                  <td>{{ record.type }}</td>
+                  <td :class="{ 'cell-error': record.status === 'error', 'cell-warning': record.status === 'warning' }">
+                    ¥{{ record.amount.toLocaleString() }}
+                  </td>
+                  <td :class="{ 'cell-missing': !record.invoice }">{{ record.invoice || '缺失' }}</td>
+                  <td :class="{ 'cell-missing': !record.approver }">{{ record.approver || '—' }}</td>
+                  <td>{{ record.remark }}</td>
+                  <td>
+                    <Tag v-if="record.status === 'pass'" color="success">通过</Tag>
+                    <Tag v-else-if="record.status === 'error'" color="error">{{ record.issue }}</Tag>
+                    <Tag v-else color="warning">{{ record.issue }}</Tag>
+                  </td>
+                </tr>
+                <!-- 展开的问题详情 -->
+                <tr v-if="record.status !== 'pass' && expandedRowKeys.includes(record.key)" class="expand-row">
+                  <td colspan="9">
+                    <div :class="['issue-tooltip', record.status === 'warning' ? 'issue-tooltip-warning' : '']">
+                      <div class="issue-tooltip-title">{{ record.issue }}</div>
+                      <div class="issue-tooltip-desc">{{ record.issueDetail }}</div>
+                      <div class="issue-tooltip-rule">{{ record.rule }}</div>
+                      <div class="issue-tooltip-suggest"><CheckCircleOutlined /> {{ record.suggestion }}</div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+              <tr v-if="showMode === 'all'" class="row-summary">
+                <td class="cell-row">...</td>
+                <td colspan="8" style="text-align: center; color: #909399;">其余 {{ docInfo.totalRows - tableData.length }} 行均通过审核</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* 页面布局 */
+.detail-page-layout {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+.side-nav-panel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 800px;
+  background: #ffffff;
+  z-index: 10;
+  padding: 8px 10px;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+}
+
+.main-scroll-area {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
+}
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* 横向菜单条 */
+.horizontal-nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 4px;
+  margin: 0 0 12px;
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.horizontal-nav-item {
+  padding: 12px 20px;
+  font-size: 14px;
+  color: #606266;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+
+.horizontal-nav-item:hover { color: hsl(var(--primary)); }
+
+.horizontal-nav-item-active {
+  color: hsl(var(--primary));
+  font-weight: 600;
+  border-bottom-color: hsl(var(--primary));
+}
+
+.header-card {
+  background: #fff;
+  padding: 24px 28px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  border: 1px solid #f0f0f0;
+  margin-bottom: 16px;
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-project-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+}
+
+.header-metrics-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 16px 0 0;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 16px;
+}
+
+.header-metric {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.header-metric-divider {
+  width: 1px;
+  height: 36px;
+  background: #f0f0f0;
+  margin: 0 20px;
+  flex-shrink: 0;
+}
+
+.header-metric-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.header-metric-icon-blue   { background: #e6f4ff; color: #1677ff; }
+.header-metric-icon-cyan   { background: #e6fffb; color: #13c2c2; }
+.header-metric-icon-purple { background: #f9f0ff; color: #722ed1; }
+.header-metric-icon-green  { background: #f6ffed; color: #52c41a; }
+.header-metric-icon-orange { background: #fff7e6; color: #fa8c16; }
+
+.header-metric-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.header-metric-label {
+  color: #909399;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.header-metric-value {
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+/* 数据概览 */
+.overview-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.overview-item {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.overview-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.overview-icon-total { background: #f9f0ff; color: #722ed1; }
+.overview-icon-pass { background: #f6ffed; color: #52c41a; }
+.overview-icon-error { background: #fff1f0; color: #f5222d; }
+.overview-icon-warning { background: #fff7e6; color: #fa8c16; }
+.overview-icon-amount { background: #e6f4ff; color: #1677ff; }
+
+.overview-body { display: flex; flex-direction: column; }
+.overview-label { font-size: 12px; color: #909399; }
+.overview-value { font-size: 20px; font-weight: 700; line-height: 1.3; }
+
+/* 金额汇总 */
+.amount-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+
+}
+
+.amount-card {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.amount-label { font-size: 13px; color: #909399; margin-bottom: 4px; }
+.amount-value { font-size: 20px; font-weight: 700; }
+.amount-detail { font-size: 12px; color: #909399; margin-top: 4px; }
+
+/* 表格 */
+.card-title { font-size: 15px; font-weight: 600; }
+
+.finance-table-wrap { overflow-x: auto; }
+
+.finance-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 900px;
+}
+
+.finance-table th {
+  background: var(--list-header-bg, #fafafa);
+  padding: var(--list-header-padding-y, 10px) 12px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid #e8e8e8;
+  white-space: nowrap;
+  color: var(--list-header-color, #606266);
+  font-size: 12px;
+}
+
+.finance-table td {
+  padding: var(--list-cell-padding-y, 10px) 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.finance-table tbody tr { cursor: default; transition: background 0.15s; }
+.finance-table tbody tr:hover { background: #fafafa; }
+
+.finance-table .row-error { background: #fff1f0; }
+.finance-table .row-error:hover { background: #ffccc7; }
+.finance-table .row-warning { background: #fffbe6; }
+.finance-table .row-warning:hover { background: #fff1b8; }
+
+.finance-table .row-error,
+.finance-table .row-warning { cursor: pointer; }
+
+.cell-row { color: #909399; font-family: monospace; font-size: 12px; }
+.cell-error { color: #f5222d; font-weight: 600; }
+.cell-warning { color: #fa8c16; font-weight: 500; }
+.cell-missing { color: #f5222d; font-weight: 600; }
+
+.col-row { width: 50px; }
+.col-date { width: 100px; }
+.col-person { width: 70px; }
+.col-type { width: 90px; }
+.col-amount { width: 100px; }
+.col-invoice { width: 140px; }
+.col-approver { width: 70px; }
+.col-status { width: 100px; }
+
+.expand-row td { padding: 0 !important; border-bottom: 1px solid #f0f0f0; }
+
+.row-summary td { color: #909399; }
+
+/* 问题提示 */
+.issue-tooltip {
+  padding: 12px 16px;
+  margin: 0 12px 8px;
+  border-left: 3px solid #f5222d;
+  background: #fff;
+  border-radius: 0 6px 6px 0;
+}
+
+.issue-tooltip-warning { border-left-color: #fa8c16; }
+
+.issue-tooltip-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #f5222d;
+  margin-bottom: 4px;
+}
+
+.issue-tooltip-warning .issue-tooltip-title { color: #fa8c16; }
+
+.issue-tooltip-desc {
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+
+.issue-tooltip-rule {
+  font-size: 12px;
+  color: #1890ff;
+  margin-bottom: 4px;
+}
+
+.issue-tooltip-suggest {
+  font-size: 12px;
+  color: #52c41a;
+}
+
+</style>

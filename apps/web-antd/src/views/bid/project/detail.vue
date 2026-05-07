@@ -630,14 +630,14 @@ async function handleVisibilityChange() {
               <Tag :color="projectSourceColor">{{ projectSourceLabel }}</Tag>
             </div>
           </div>
-          <div class="header-metric">
+          <!-- <div class="header-metric">
             <div class="header-metric-label">发布日期</div>
             <div class="header-metric-value">{{ publishDateDisplay }}</div>
           </div>
           <div class="header-metric">
             <div class="header-metric-label">截止日期</div>
             <div class="header-metric-value">{{ deadlineDisplay }}</div>
-          </div>
+          </div> -->
           <div class="header-metric">
             <div class="header-metric-label">剩余天数</div>
             <div class="header-metric-value">{{ remainingDaysDisplay }}</div>
@@ -1001,28 +1001,41 @@ async function handleVisibilityChange() {
 /* 关键指标行 */
 .header-metrics-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   flex-wrap: wrap;
-  column-gap: 32px;
-  row-gap: 16px;
-  padding: 16px 0;
+  gap: 0;
+  padding: 16px 0 0;
   border-top: 1px solid #f0f0f0;
+  margin-top: 4px;
 }
 
 .header-metric {
-  padding: 0;
-  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 32px 8px 0;
+  position: relative;
+}
+
+.header-metric + .header-metric::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 32px;
+  background: #f0f0f0;
 }
 
 .header-metric-wide {
-  min-width: 280px;
+  min-width: 220px;
 }
 
 .header-metric-label {
   color: #909399;
-  font-size: 13px;
-  line-height: 20px;
-  margin-bottom: 4px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .header-metric-value {

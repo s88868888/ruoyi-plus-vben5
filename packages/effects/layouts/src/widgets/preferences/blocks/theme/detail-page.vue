@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue';
 
 import NumberFieldItem from '../number-field-item.vue';
+import SelectItem from '../select-item.vue';
 import SwitchItem from '../switch-item.vue';
 
 defineOptions({
@@ -15,6 +16,7 @@ interface DetailPagePreference {
   contentWidth: number;
   fontSize: number;
   showAnchorNav: boolean;
+  navMode: 'horizontal' | 'side';
   anchorNavMarginLeft: number;
   anchorNavMarginRight: number;
   anchorNavWidth: number;
@@ -32,6 +34,7 @@ const DEFAULT_DETAIL: DetailPagePreference = {
   contentWidth: 0,
   fontSize: 14,
   showAnchorNav: true,
+  navMode: 'side',
   anchorNavMarginLeft: 20,
   anchorNavMarginRight: 0,
   anchorNavWidth: 210,
@@ -115,12 +118,20 @@ const paddingMax = 24;
 <template>
   <SwitchItem
     v-model="preference.showAnchorNav"
-    tip="开启后在详情页左侧显示锚点导航菜单，设置了内容最大宽度时建议关闭"
+    tip="开启后在详情页显示锚点导航"
   >
-    侧边锚点导航
+    锚点导航
   </SwitchItem>
-  <NumberFieldItem
+  <SelectItem
     v-if="preference.showAnchorNav"
+    v-model="preference.navMode"
+    :items="[{ label: '侧边导航', value: 'side' }, { label: '横向菜单条', value: 'horizontal' }]"
+  >
+    导航模式
+    <template #tip>侧边导航在左侧显示，横向菜单条固定在头部下方</template>
+  </SelectItem>
+  <NumberFieldItem
+    v-if="preference.showAnchorNav && preference.navMode === 'side'"
     v-model="preference.anchorNavWidth"
     :max="anchorNavWidthMax"
     :min="anchorNavWidthMin"
@@ -129,7 +140,7 @@ const paddingMax = 24;
     导航宽度
   </NumberFieldItem>
   <NumberFieldItem
-    v-if="preference.showAnchorNav"
+    v-if="preference.showAnchorNav && preference.navMode === 'side'"
     v-model="preference.anchorNavMarginLeft"
     :max="anchorNavMarginMax"
     :min="anchorNavMarginMin"
@@ -139,7 +150,7 @@ const paddingMax = 24;
     导航左边距
   </NumberFieldItem>
   <NumberFieldItem
-    v-if="preference.showAnchorNav"
+    v-if="preference.showAnchorNav && preference.navMode === 'side'"
     v-model="preference.anchorNavMarginRight"
     :max="anchorNavMarginMax"
     :min="anchorNavMarginMin"

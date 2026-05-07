@@ -14,6 +14,8 @@ export interface DetailPagePreference {
   fontSize: number;
   /** 是否显示侧边锚点导航 */
   showAnchorNav: boolean;
+  /** 导航模式：side=侧边导航，horizontal=横向菜单条 */
+  navMode: 'horizontal' | 'side';
   /** 侧边导航左外边距(px) */
   anchorNavMarginLeft: number;
   /** 侧边导航右外边距(px) */
@@ -44,6 +46,7 @@ const DEFAULT_PREFERENCE: UserPreference = {
     contentWidth: 0,
     fontSize: 14,
     showAnchorNav: true,
+    navMode: 'side',
     anchorNavMarginLeft: 10,
     anchorNavMarginRight: 20,
     anchorNavWidth: 210,
