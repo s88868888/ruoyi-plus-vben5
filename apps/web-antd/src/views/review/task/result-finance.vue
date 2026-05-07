@@ -706,6 +706,7 @@ onUnmounted(() => {
 
 /* 表格 */
 .card-title { font-size: 15px; font-weight: 600; }
+.card-title-icon { color: hsl(var(--primary)); font-size: 16px; margin-right: 8px; }
 
 .finance-table-wrap { overflow-x: auto; }
 
