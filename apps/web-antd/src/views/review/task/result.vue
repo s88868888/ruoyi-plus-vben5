@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { VxeGridProps } from '#/adapter/vxe-table';
+
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -23,6 +25,7 @@ import {
 import { AnchorNav } from '#/components/anchor-nav';
 import type { AnchorNavItem } from '#/components/anchor-nav';
 import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
+import { useVbenVxeGrid } from '#/adapter/vxe-table';
 
 const router = useRouter();
 const layoutPreference = useDetailPagePreference();
@@ -87,6 +90,41 @@ const versionOptions = computed(() => versionHistory.value.map(v => ({
   label: `第${v.version}次审核 (${v.time.split(' ')[0]})`,
   value: v.version,
 })));
+
+const compareTableData = computed(() => {
+  if (!versionAData.value || !versionBData.value) return [];
+  const a = versionAData.value;
+  const b = versionBData.value;
+  return [
+    { id: 1, metric: '严重问题', valueA: a.errorCount, valueB: b.errorCount, diff: a.errorCount - b.errorCount, type: 'less-better' },
+    { id: 2, metric: '一般问题', valueA: a.warningCount, valueB: b.warningCount, diff: a.warningCount - b.warningCount, type: 'less-better' },
+    { id: 3, metric: '提示信息', valueA: a.infoCount, valueB: b.infoCount, diff: a.infoCount - b.infoCount, type: 'less-better' },
+    { id: 4, metric: '通过率', valueA: Math.round(a.passCount / a.totalRules * 100), valueB: Math.round(b.passCount / b.totalRules * 100), diff: Math.round(a.passCount / a.totalRules * 100) - Math.round(b.passCount / b.totalRules * 100), type: 'more-better' },
+  ];
+});
+
+const compareGridOptions: VxeGridProps = {
+  showOverflow: true,
+  border: true,
+  toolbarConfig: { enabled: false },
+  columns: [
+    { field: 'metric', title: '指标', width: 100, align: 'left' },
+    { field: 'valueA', title: '当前版本', minWidth: 100, align: 'center', slots: { default: 'valueA' } },
+    { field: 'valueB', title: '对比版本', minWidth: 100, align: 'center', slots: { default: 'valueB' } },
+    { field: 'diff', title: '变化', width: 100, align: 'center', slots: { default: 'diff' } },
+  ],
+  rowConfig: { keyField: 'id' },
+  proxyConfig: {
+    ajax: {
+      query: async () => {
+        return compareTableData.value;
+      },
+    },
+  },
+  id: 'review-version-compare',
+};
+
+const [CompareTable] = useVbenVxeGrid({ gridOptions: compareGridOptions } as any);
 
 const issues = ref([
   { id: 1, severity: 'error', title: '大写金额与数字金额不一致', location: '第二章 · 采购金额', description: '大写"叁佰伍拾万元整"与数字¥3,500,000.00不一致，需确认是否笔误。', suggestion: '请核实金额，确保大写与小写完全一致', rule: '规则 R004 · 合同金额大写与小写必须完全一致' },
@@ -456,62 +494,24 @@ onUnmounted(() => {
 
             <!-- 对比结果 -->
             <div v-if="versionAData && versionBData" class="version-compare-table" :style="tableCssVars">
-              <table class="compare-table">
-                <thead>
-                  <tr>
-                    <th>指标</th>
-                    <th>第{{ versionAData.version }}次审核</th>
-                    <th>第{{ versionBData.version }}次审核</th>
-                    <th>变化</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="font-bold">严重问题</td>
-                    <td><span class="text-red-500 font-semibold">{{ versionAData.errorCount }}</span></td>
-                    <td><span class="text-red-500 font-semibold">{{ versionBData.errorCount }}</span></td>
-                    <td>
-                      <Tag v-if="versionAData.errorCount !== versionBData.errorCount" :color="versionAData.errorCount < versionBData.errorCount ? 'success' : 'error'">
-                        {{ versionAData.errorCount < versionBData.errorCount ? '↓' : '↑' }} {{ Math.abs(versionAData.errorCount - versionBData.errorCount) }}
-                      </Tag>
-                      <span v-else class="text-gray-400">-</span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="font-bold">一般问题</td>
-                    <td><span class="text-orange-500 font-semibold">{{ versionAData.warningCount }}</span></td>
-                    <td><span class="text-orange-500 font-semibold">{{ versionBData.warningCount }}</span></td>
-                    <td>
-                      <Tag v-if="versionAData.warningCount !== versionBData.warningCount" :color="versionAData.warningCount < versionBData.warningCount ? 'success' : 'error'">
-                        {{ versionAData.warningCount < versionBData.warningCount ? '↓' : '↑' }} {{ Math.abs(versionAData.warningCount - versionBData.warningCount) }}
-                      </Tag>
-                      <span v-else class="text-gray-400">-</span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="font-bold">提示信息</td>
-                    <td><span class="text-blue-500 font-semibold">{{ versionAData.infoCount }}</span></td>
-                    <td><span class="text-blue-500 font-semibold">{{ versionBData.infoCount }}</span></td>
-                    <td>
-                      <Tag v-if="versionAData.infoCount !== versionBData.infoCount" :color="versionAData.infoCount < versionBData.infoCount ? 'success' : 'error'">
-                        {{ versionAData.infoCount < versionBData.infoCount ? '↓' : '↑' }} {{ Math.abs(versionAData.infoCount - versionBData.infoCount) }}
-                      </Tag>
-                      <span v-else class="text-gray-400">-</span>
-                    </td>
-                  </tr>
-                  <tr class="row-highlight">
-                    <td class="font-bold">通过率</td>
-                    <td><span class="text-green-500 font-semibold">{{ Math.round(versionAData.passCount / versionAData.totalRules * 100) }}%</span></td>
-                    <td><span class="text-green-500 font-semibold">{{ Math.round(versionBData.passCount / versionBData.totalRules * 100) }}%</span></td>
-                    <td>
-                      <Tag v-if="versionAData.passCount !== versionBData.passCount" :color="versionAData.passCount > versionBData.passCount ? 'success' : 'error'">
-                        {{ versionAData.passCount > versionBData.passCount ? '↑' : '↓' }} {{ Math.abs(Math.round(versionAData.passCount / versionAData.totalRules * 100) - Math.round(versionBData.passCount / versionBData.totalRules * 100)) }}%
-                      </Tag>
-                      <span v-else class="text-gray-400">-</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <CompareTable>
+                <template #valueA="{ row }">
+                  <span :class="row.metric === '通过率' ? 'text-green-500 font-semibold' : row.metric === '严重问题' ? 'text-red-500 font-semibold' : row.metric === '一般问题' ? 'text-orange-500 font-semibold' : 'text-blue-500 font-semibold'">
+                    {{ row.valueA }}{{ row.metric === '通过率' ? '%' : '' }}
+                  </span>
+                </template>
+                <template #valueB="{ row }">
+                  <span :class="row.metric === '通过率' ? 'text-green-500 font-semibold' : row.metric === '严重问题' ? 'text-red-500 font-semibold' : row.metric === '一般问题' ? 'text-orange-500 font-semibold' : 'text-blue-500 font-semibold'">
+                    {{ row.valueB }}{{ row.metric === '通过率' ? '%' : '' }}
+                  </span>
+                </template>
+                <template #diff="{ row }">
+                  <Tag v-if="row.diff !== 0" :color="(row.type === 'less-better' && row.diff < 0) || (row.type === 'more-better' && row.diff > 0) ? 'success' : 'error'">
+                    {{ row.diff > 0 ? '↑' : '↓' }} {{ Math.abs(row.diff) }}{{ row.metric === '通过率' ? '%' : '' }}
+                  </Tag>
+                  <span v-else class="text-gray-400">-</span>
+                </template>
+              </CompareTable>
             </div>
 
             <!-- 版本对比表格下方无审核历史 -->
@@ -944,56 +944,23 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.compare-table {
-  width: 100%;
-  border-collapse: collapse;
+.version-compare-table :deep(.vxe-table--header-wrapper),
+.version-compare-table :deep(.vxe-header--column) {
+  background-color: var(--list-header-bg) !important;
 }
 
-.compare-table thead tr {
-  background-color: var(--list-header-bg, #1e1e2d);
+.version-compare-table :deep(.vxe-header--column .vxe-cell) {
+  color: var(--list-header-color) !important;
 }
 
-.compare-table thead th {
-  padding: var(--list-header-padding-y, 10px) 16px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--list-header-color, #fff);
-  text-align: center;
+.version-compare-table :deep(.vxe-header--column) {
+  padding-top: var(--list-header-padding-y) !important;
+  padding-bottom: var(--list-header-padding-y) !important;
 }
 
-.compare-table thead th:first-child {
-  text-align: left;
-}
-
-.compare-table tbody tr {
-  border-bottom: 1px solid #f5f5f5;
-  transition: background 0.2s;
-}
-
-.compare-table tbody tr:last-child {
-  border-bottom: none;
-}
-
-.compare-table tbody tr:hover {
-  background: #fafafa;
-}
-
-.compare-table tbody tr.row-highlight {
-  background: #f6ffed;
-}
-
-.compare-table tbody tr.row-highlight:hover {
-  background: #f0ffe6;
-}
-
-.compare-table tbody td {
-  padding: var(--list-cell-padding-y, 12px) 16px;
-  font-size: 13px;
-  text-align: center;
-}
-
-.compare-table tbody td:first-child {
-  text-align: left;
+.version-compare-table :deep(.vxe-body--column) {
+  padding-top: var(--list-cell-padding-y) !important;
+  padding-bottom: var(--list-cell-padding-y) !important;
 }
 
 </style>
