@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Card, Tag, Button, Space, Select } from 'ant-design-vue';
@@ -100,8 +100,54 @@ const displayData = computed(() => {
   return tableData.value;
 });
 
-// 展开行
-const expandedRowKeys = ref<number[]>([]);
+// 报销明细 vxe-table 配置
+const detailGridOptions: VxeGridProps = {
+  showOverflow: true,
+  border: false,
+  toolbarConfig: { enabled: false },
+  pagerConfig: { enabled: false },
+  expandConfig: {
+    accordion: false,
+    trigger: 'row',
+    toggleMethod: ({ row }) => row.status !== 'pass',
+  },
+  rowConfig: { keyField: 'key', isHover: true },
+  rowClassName: ({ row }: any) => {
+    if (row.status === 'error') return 'row-error';
+    if (row.status === 'warning') return 'row-warning';
+    return '';
+  },
+  columns: [
+    { type: 'expand', width: 1, resizable: false, slots: { content: 'expandContent' } },
+    { field: 'row', title: '行号', width: 60, align: 'center' },
+    { field: 'date', title: '报销日期', width: 110, align: 'center' },
+    { field: 'person', title: '报销人', width: 80, align: 'center' },
+    { field: 'type', title: '费用类型', width: 110, align: 'center' },
+    { field: 'amount', title: '金额(元)', width: 110, align: 'right', slots: { default: 'amount' } },
+    { field: 'invoice', title: '发票编号', width: 150, align: 'center', slots: { default: 'invoice' } },
+    { field: 'approver', title: '审批人', width: 80, align: 'center', slots: { default: 'approver' } },
+    { field: 'remark', title: '备注', minWidth: 140 },
+    { field: 'status', title: '审核结果', width: 140, align: 'center', slots: { default: 'status' } },
+  ],
+  proxyConfig: {
+    ajax: {
+      query: async () => {
+        return { rows: displayData.value, total: displayData.value.length };
+      },
+    },
+  },
+  id: 'review-finance-detail',
+};
+
+const [DetailTable, detailTableApi] = useVbenVxeGrid({ gridOptions: detailGridOptions } as any);
+
+function reloadDetailTable() {
+  detailTableApi?.grid?.commitProxy('query');
+}
+
+watch(showMode, () => {
+  reloadDetailTable();
+});
 
 // 版本对比
 const versionHistory = ref([
@@ -154,20 +200,6 @@ const compareGridOptions: VxeGridProps = {
 
 const [CompareTable] = useVbenVxeGrid({ gridOptions: compareGridOptions } as any);
 
-function toggleExpand(key: number) {
-  const idx = expandedRowKeys.value.indexOf(key);
-  if (idx >= 0) {
-    expandedRowKeys.value.splice(idx, 1);
-  } else {
-    expandedRowKeys.value.push(key);
-  }
-}
-
-function getRowClassName(record: any) {
-  if (record.status === 'error') return 'row-error';
-  if (record.status === 'warning') return 'row-warning';
-  return '';
-}
 
 // 横向导航
 const activeAnchor = ref('overview');
@@ -372,7 +404,7 @@ onUnmounted(() => {
       <Card id="detail-table" class="mb-4" :style="cardRadiusStyle">
         <template #title>
           <span class="card-title">
-            <FileExcelOutlined style="color: #52c41a; margin-right: 8px;" />
+            <FileExcelOutlined style="color: hsl(var(--primary)); margin-right: 8px;" />
             报销明细审核
           </span>
         </template>
@@ -392,57 +424,39 @@ onUnmounted(() => {
         </template>
 
         <div class="finance-table-wrap" :style="tableCssVars">
-          <table class="finance-table">
-            <thead>
-              <tr>
-                <th class="col-row">行号</th>
-                <th class="col-date">报销日期</th>
-                <th class="col-person">报销人</th>
-                <th class="col-type">费用类型</th>
-                <th class="col-amount">金额(元)</th>
-                <th class="col-invoice">发票编号</th>
-                <th class="col-approver">审批人</th>
-                <th class="col-remark">备注</th>
-                <th class="col-status">审核结果</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="record in displayData" :key="record.key">
-                <tr :class="getRowClassName(record)" @click="record.status !== 'pass' && toggleExpand(record.key)">
-                  <td class="cell-row">{{ record.row }}</td>
-                  <td>{{ record.date }}</td>
-                  <td>{{ record.person }}</td>
-                  <td>{{ record.type }}</td>
-                  <td :class="{ 'cell-error': record.status === 'error', 'cell-warning': record.status === 'warning' }">
-                    ¥{{ record.amount.toLocaleString() }}
-                  </td>
-                  <td :class="{ 'cell-missing': !record.invoice }">{{ record.invoice || '缺失' }}</td>
-                  <td :class="{ 'cell-missing': !record.approver }">{{ record.approver || '—' }}</td>
-                  <td>{{ record.remark }}</td>
-                  <td>
-                    <Tag v-if="record.status === 'pass'" color="success">通过</Tag>
-                    <Tag v-else-if="record.status === 'error'" color="error">{{ record.issue }}</Tag>
-                    <Tag v-else color="warning">{{ record.issue }}</Tag>
-                  </td>
-                </tr>
-                <!-- 展开的问题详情 -->
-                <tr v-if="record.status !== 'pass' && expandedRowKeys.includes(record.key)" class="expand-row">
-                  <td colspan="9">
-                    <div :class="['issue-tooltip', record.status === 'warning' ? 'issue-tooltip-warning' : '']">
-                      <div class="issue-tooltip-title">{{ record.issue }}</div>
-                      <div class="issue-tooltip-desc">{{ record.issueDetail }}</div>
-                      <div class="issue-tooltip-rule">{{ record.rule }}</div>
-                      <div class="issue-tooltip-suggest"><CheckCircleOutlined /> {{ record.suggestion }}</div>
-                    </div>
-                  </td>
-                </tr>
-              </template>
-              <tr v-if="showMode === 'all'" class="row-summary">
-                <td class="cell-row">...</td>
-                <td colspan="8" style="text-align: center; color: #909399;">其余 {{ docInfo.totalRows - tableData.length }} 行均通过审核</td>
-              </tr>
-            </tbody>
-          </table>
+          <DetailTable>
+            <template #amount="{ row }">
+              <span :class="{ 'cell-error': row.status === 'error', 'cell-warning': row.status === 'warning' }">
+                ¥{{ row.amount.toLocaleString() }}
+              </span>
+            </template>
+            <template #invoice="{ row }">
+              <span :class="{ 'cell-missing': !row.invoice }">{{ row.invoice || '缺失' }}</span>
+            </template>
+            <template #approver="{ row }">
+              <span :class="{ 'cell-missing': !row.approver }">{{ row.approver || '—' }}</span>
+            </template>
+            <template #status="{ row }">
+              <Tag v-if="row.status === 'pass'" color="success">通过</Tag>
+              <Tag v-else-if="row.status === 'error'" color="error">{{ row.issue }}</Tag>
+              <Tag v-else color="warning">{{ row.issue }}</Tag>
+            </template>
+            <template #expandContent="{ row }">
+              <div v-if="row.status !== 'pass'" :class="['issue-tooltip', row.status === 'warning' ? 'issue-tooltip-warning' : '']">
+                <div class="issue-tooltip-title">{{ row.issue }}</div>
+                <div class="issue-tooltip-desc">{{ row.issueDetail }}</div>
+                <div class="issue-tooltip-suggest">
+                  <CheckCircleOutlined class="issue-tooltip-suggest-icon" />
+                  <span>{{ row.suggestion }}</span>
+                </div>
+                <div class="issue-tooltip-rule">{{ row.rule }}</div>
+              </div>
+              <div v-else class="issue-tooltip-empty">该行审核通过，无问题详情</div>
+            </template>
+          </DetailTable>
+          <div v-if="showMode === 'all'" class="row-summary-footer">
+            其余 {{ docInfo.totalRows - tableData.length }} 行均通过审核
+          </div>
         </div>
       </Card>
 
@@ -708,59 +722,78 @@ onUnmounted(() => {
 .card-title { font-size: 15px; font-weight: 600; }
 .card-title-icon { color: hsl(var(--primary)); font-size: 16px; margin-right: 8px; }
 
-.finance-table-wrap { overflow-x: auto; }
+.finance-table-wrap { overflow-x: auto; border-radius: 8px; overflow: hidden; }
 
-.finance-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  min-width: 900px;
+/* 表头样式 & 底部边框 */
+.finance-table-wrap :deep(.vxe-table--header-wrapper),
+.finance-table-wrap :deep(.vxe-header--column) {
+  background-color: var(--list-header-bg, #fafafa) !important;
 }
 
-.finance-table th {
-  background: var(--list-header-bg, #fafafa);
-  padding: var(--list-header-padding-y, 10px) 12px;
-  text-align: left;
-  font-weight: 600;
-  border-bottom: 2px solid #e8e8e8;
-  white-space: nowrap;
-  color: var(--list-header-color, #606266);
-  font-size: 12px;
+.finance-table-wrap :deep(.vxe-header--column .vxe-cell) {
+  color: var(--list-header-color, #606266) !important;
 }
 
-.finance-table td {
-  padding: var(--list-cell-padding-y, 10px) 12px;
-  border-bottom: 1px solid #f0f0f0;
+.finance-table-wrap :deep(.vxe-header--column) {
+  padding-top: var(--list-header-padding-y, 10px) !important;
+  padding-bottom: var(--list-header-padding-y, 10px) !important;
+  border-bottom: 2px solid #e8e8e8 !important;
 }
 
-.finance-table tbody tr { cursor: default; transition: background 0.15s; }
-.finance-table tbody tr:hover { background: #fafafa; }
+.finance-table-wrap :deep(.vxe-body--column) {
+  padding-top: var(--list-cell-padding-y, 10px) !important;
+  padding-bottom: var(--list-cell-padding-y, 10px) !important;
+}
 
-.finance-table .row-error { background: #fff1f0; }
-.finance-table .row-error:hover { background: #ffccc7; }
-.finance-table .row-warning { background: #fffbe6; }
-.finance-table .row-warning:hover { background: #fff1b8; }
+/* 隐藏展开列的箭头图标和列宽 */
+.finance-table-wrap :deep(.col--expand) {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden;
+}
 
-.finance-table .row-error,
-.finance-table .row-warning { cursor: pointer; }
+.finance-table-wrap :deep(.col--expand .vxe-cell) {
+  display: none;
+}
 
-.cell-row { color: #909399; font-family: monospace; font-size: 12px; }
+/* 行状态颜色 */
+.finance-table-wrap :deep(.row-error) {
+  background-color: #fff1f0 !important;
+}
+
+.finance-table-wrap :deep(.row-error:hover td) {
+  background-color: #ffccc7 !important;
+}
+
+.finance-table-wrap :deep(.row-warning) {
+  background-color: #fffbe6 !important;
+}
+
+.finance-table-wrap :deep(.row-warning:hover td) {
+  background-color: #fff1b8 !important;
+}
+
+/* 问题行可点击 */
+.finance-table-wrap :deep(.row-error),
+.finance-table-wrap :deep(.row-warning) {
+  cursor: pointer;
+}
+
 .cell-error { color: #f5222d; font-weight: 600; }
 .cell-warning { color: #fa8c16; font-weight: 500; }
 .cell-missing { color: #f5222d; font-weight: 600; }
 
-.col-row { width: 50px; }
-.col-date { width: 100px; }
-.col-person { width: 70px; }
-.col-type { width: 90px; }
-.col-amount { width: 100px; }
-.col-invoice { width: 140px; }
-.col-approver { width: 70px; }
-.col-status { width: 100px; }
-
-.expand-row td { padding: 0 !important; border-bottom: 1px solid #f0f0f0; }
-
-.row-summary td { color: #909399; }
+.row-summary-footer {
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
+  padding: 10px 0;
+  border-top: 1px solid #f0f0f0;
+  background: #fafafa;
+}
 
 /* 问题提示 */
 .issue-tooltip {
@@ -789,15 +822,39 @@ onUnmounted(() => {
   margin-bottom: 4px;
 }
 
-.issue-tooltip-rule {
-  font-size: 12px;
-  color: #1890ff;
-  margin-bottom: 4px;
-}
-
 .issue-tooltip-suggest {
   font-size: 12px;
+  color: #515a6e;
+  background: #f7f8fa;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.issue-tooltip-suggest-icon {
   color: #52c41a;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.issue-tooltip-rule {
+  font-size: 11px;
+  color: #8c8c8c;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.issue-tooltip-empty {
+  padding: 12px 16px;
+  margin: 0 12px 8px;
+  font-size: 12px;
+  color: #909399;
+  text-align: center;
 }
 
 /* 版本对比 */

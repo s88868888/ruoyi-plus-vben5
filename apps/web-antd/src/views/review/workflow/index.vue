@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 
 import { Page } from '@vben/common-ui';
 
-import { Card, Tag, Button, Space, Select, Switch, Checkbox, Form, FormItem, Input, message } from 'ant-design-vue';
+import { Card, Tag, Button, Space, Select, Switch, Checkbox, Form, FormItem, Input, Divider, message } from 'ant-design-vue';
 import {
   PlayCircleOutlined,
   RobotOutlined,
@@ -162,43 +162,56 @@ function handleSave() {
       <!-- AI审核节点配置 -->
       <div v-if="selectedNode.type === 'ai-review'" class="node-config">
         <Form layout="vertical">
-          <FormItem label="审核标准">
-            <Select
-              v-model:value="selectedNode.config.standardId"
-              :options="standardOptions"
-              placeholder="选择审核标准"
-              style="width: 100%; max-width: 400px;"
-            />
-            <div class="form-tip">AI将按照所选标准中的规则逐条检查文档</div>
-          </FormItem>
-          <FormItem label="自动通过条件">
-            <Select
-              v-model:value="selectedNode.config.passCondition"
-              :options="passConditionOptions"
-              placeholder="选择自动通过条件"
-              style="width: 100%; max-width: 400px;"
-            />
-            <div class="form-tip">满足条件时文档自动流转至下一环节，无需人工干预</div>
-          </FormItem>
-          <FormItem label="启用自动通过">
-            <Switch v-model:checked="selectedNode.config.autoPass" />
-            <span class="ml-2 text-gray-500 text-sm">{{ selectedNode.config.autoPass ? '满足条件自动流转' : '所有文档需人工确认' }}</span>
-          </FormItem>
-          <FormItem label="超时时间（秒）">
-            <Input
-              v-model:value="selectedNode.config.timeout"
-              type="number"
-              style="width: 200px;"
-              addon-after="秒"
-            />
-            <div class="form-tip">AI审核超过此时间未完成，将自动转人工处理</div>
-          </FormItem>
+          <Divider orientation="left" class="section-title-divider">
+            <span class="section-title">审核配置</span>
+          </Divider>
+          <div class="form-grid">
+            <FormItem label="审核标准">
+              <Select
+                v-model:value="selectedNode.config.standardId"
+                :options="standardOptions"
+                placeholder="选择审核标准"
+                style="width: 100%;"
+              />
+              <div class="form-tip">AI将按照所选标准中的规则逐条检查文档</div>
+            </FormItem>
+            <FormItem label="自动通过条件">
+              <Select
+                v-model:value="selectedNode.config.passCondition"
+                :options="passConditionOptions"
+                placeholder="选择自动通过条件"
+                style="width: 100%;"
+              />
+              <div class="form-tip">满足条件时文档自动流转至下一环节，无需人工干预</div>
+            </FormItem>
+          </div>
+          <Divider orientation="left" class="section-title-divider">
+            <span class="section-title">自动化设置</span>
+          </Divider>
+          <div class="form-grid">
+            <FormItem label="启用自动通过">
+              <Switch v-model:checked="selectedNode.config.autoPass" />
+              <span class="ml-2 text-gray-500 text-sm">{{ selectedNode.config.autoPass ? '满足条件自动流转' : '所有文档需人工确认' }}</span>
+            </FormItem>
+            <FormItem label="超时时间（秒）">
+              <Input
+                v-model:value="selectedNode.config.timeout"
+                type="number"
+                style="width: 200px;"
+                addon-after="秒"
+              />
+              <div class="form-tip">AI审核超过此时间未完成，将自动转人工处理</div>
+            </FormItem>
+          </div>
         </Form>
       </div>
 
       <!-- 一审/二审节点配置 -->
       <div v-if="selectedNode.type === 'first-review' || selectedNode.type === 'second-review'" class="node-config">
         <Form layout="vertical">
+          <Divider orientation="left" class="section-title-divider">
+            <span class="section-title">审核人设置</span>
+          </Divider>
           <FormItem label="审核人">
             <Select
               v-model:value="selectedNode.config.assignee"
@@ -211,25 +224,33 @@ function handleSave() {
             </Select>
             <div class="form-tip">审核人将收到待办通知，可查看AI审核结果作为参考</div>
           </FormItem>
-          <FormItem label="处理时限（天）">
-            <Input
-              v-model:value="selectedNode.config.timeoutDays"
-              type="number"
-              style="width: 200px;"
-              addon-after="天"
-            />
-            <div class="form-tip">超过时限未处理将触发催办提醒</div>
-          </FormItem>
-          <FormItem label="超时自动升级">
-            <Switch v-model:checked="selectedNode.config.autoEscalate" />
-            <span class="ml-2 text-gray-500 text-sm">{{ selectedNode.config.autoEscalate ? '超时后自动通知上级' : '仅发送催办提醒' }}</span>
-          </FormItem>
+          <Divider orientation="left" class="section-title-divider">
+            <span class="section-title">时效配置</span>
+          </Divider>
+          <div class="form-grid">
+            <FormItem label="处理时限（天）">
+              <Input
+                v-model:value="selectedNode.config.timeoutDays"
+                type="number"
+                style="width: 200px;"
+                addon-after="天"
+              />
+              <div class="form-tip">超过时限未处理将触发催办提醒</div>
+            </FormItem>
+            <FormItem label="超时自动升级">
+              <Switch v-model:checked="selectedNode.config.autoEscalate" />
+              <span class="ml-2 text-gray-500 text-sm">{{ selectedNode.config.autoEscalate ? '超时后自动通知上级' : '仅发送催办提醒' }}</span>
+            </FormItem>
+          </div>
         </Form>
       </div>
 
       <!-- 开始节点配置 -->
       <div v-if="selectedNode.type === 'start'" class="node-config">
         <Form layout="vertical">
+          <Divider orientation="left" class="section-title-divider">
+            <span class="section-title">触发设置</span>
+          </Divider>
           <FormItem label="触发方式">
             <Select
               v-model:value="selectedNode.config.trigger"
@@ -239,6 +260,9 @@ function handleSave() {
               <Select.Option value="auto">自动触发（文档上传后自动进入审核）</Select.Option>
             </Select>
           </FormItem>
+          <Divider orientation="left" class="section-title-divider">
+            <span class="section-title">文档类型</span>
+          </Divider>
           <FormItem label="支持的文档类型">
             <Checkbox.Group v-model:value="selectedNode.config.docTypes">
               <Checkbox value="contract">合同</Checkbox>
@@ -254,14 +278,19 @@ function handleSave() {
       <!-- 结束节点配置 -->
       <div v-if="selectedNode.type === 'end'" class="node-config">
         <Form layout="vertical">
-          <FormItem label="自动归档">
-            <Switch v-model:checked="selectedNode.config.autoArchive" />
-            <span class="ml-2 text-gray-500 text-sm">审核通过后自动归档至知识库</span>
-          </FormItem>
-          <FormItem label="通知提交人">
-            <Switch v-model:checked="selectedNode.config.notifySubmitter" />
-            <span class="ml-2 text-gray-500 text-sm">审核完成后自动通知文档提交人</span>
-          </FormItem>
+          <Divider orientation="left" class="section-title-divider">
+            <span class="section-title">完成设置</span>
+          </Divider>
+          <div class="form-grid">
+            <FormItem label="自动归档">
+              <Switch v-model:checked="selectedNode.config.autoArchive" />
+              <span class="ml-2 text-gray-500 text-sm">审核通过后自动归档至知识库</span>
+            </FormItem>
+            <FormItem label="通知提交人">
+              <Switch v-model:checked="selectedNode.config.notifySubmitter" />
+              <span class="ml-2 text-gray-500 text-sm">审核完成后自动通知文档提交人</span>
+            </FormItem>
+          </div>
         </Form>
       </div>
     </Card>
@@ -349,6 +378,32 @@ function handleSave() {
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   border-left: 8px solid #d9d9d9;
+}
+
+.section-title-divider {
+  margin: 4px 0 12px;
+}
+
+.section-title-divider :deep(.ant-divider-inner-text) {
+  padding-left: 0;
+}
+
+.section-title-divider::before {
+  display: none !important;
+}
+
+.section-title {
+  padding-left: 8px;
+  border-left: 3px solid hsl(var(--primary));
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 24px;
 }
 
 .node-config {

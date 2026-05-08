@@ -66,7 +66,7 @@ const filterData = ref([
     options: [
       { label: '通过', value: 'pass' },
       { label: '不通过', value: 'reject' },
-      { label: '人工审核中', value: 'manual' },
+      { label: '跳过', value: 'manual' },
     ],
     isCommon: true,
   },
@@ -147,7 +147,7 @@ const passResultColors: Record<string, string> = {
 const passResultLabels: Record<string, string> = {
   pass: '通过',
   reject: '不通过',
-  manual: '人工审核中',
+  manual: '跳过',
 };
 
 // Mock 数据
@@ -353,8 +353,9 @@ function handleTransferManual(row: any) {
           </template>
 
           <template #issueCount="{ row }">
-            <span v-if="row.issueCount > 0" class="text-red-500 font-semibold">
-              {{ row.issueCount }}个
+            <span v-if="row.issueCount > 0" class="text-red-500">
+              <span class="text-base font-semibold">{{ row.issueCount }}</span>
+              <span class="text-xs font-normal ml-0.5">个</span>
             </span>
             <span v-else-if="row.status === 'completed'" class="text-green-500 font-semibold">
               无
@@ -363,8 +364,14 @@ function handleTransferManual(row: any) {
           </template>
 
           <template #reviewVersion="{ row }">
-            <span v-if="row.reviewVersion > 1" class="font-bold text-black">{{ row.reviewVersion }}</span>
-            <span v-else class="text-gray-400">{{ row.reviewVersion }}</span>
+            <span v-if="row.reviewVersion > 1" class="text-black">
+              <span class="text-base font-semibold">{{ row.reviewVersion }}</span>
+              <span class="text-xs font-normal text-gray-400 ml-0.5">次</span>
+            </span>
+            <span v-else class="text-gray-400">
+              <span class="text-base">{{ row.reviewVersion }}</span>
+              <span class="text-xs ml-0.5">次</span>
+            </span>
           </template>
 
           <template #action="{ row }">

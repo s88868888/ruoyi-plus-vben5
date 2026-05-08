@@ -458,9 +458,11 @@ onUnmounted(() => {
                     <div class="issue-card-location">{{ issue.location }}</div>
                     <p class="issue-card-desc">{{ issue.description }}</p>
                     <div class="issue-card-suggestion">
-                      <CheckCircleOutlined /> {{ issue.suggestion }}
+                      <CheckCircleOutlined class="issue-card-suggestion-icon" /> {{ issue.suggestion }}
                     </div>
-                    <span class="issue-card-rule">{{ issue.rule }}</span>
+                    <div class="issue-card-rule">
+                      <FileTextOutlined class="issue-card-rule-icon" /> {{ issue.rule }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -894,21 +896,35 @@ onUnmounted(() => {
 
 .issue-card-suggestion {
   font-size: 12px;
-  color: #389e0d;
-  background: #f6ffed;
+  color: #515a6e;
+  background: #f7f8fa;
   padding: 6px 10px;
   border-radius: 4px;
   margin-bottom: 6px;
   line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.issue-card-suggestion-icon {
+  color: #52c41a;
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 .issue-card-rule {
   font-size: 11px;
-  color: #1890ff;
-  background: #e6f7ff;
-  padding: 2px 8px;
-  border-radius: 3px;
-  display: inline-block;
+  color: #8c8c8c;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.issue-card-rule-icon {
+  font-size: 12px;
+  color: #bfbfbf;
 }
 
 /* ===== 版本对比 ===== */

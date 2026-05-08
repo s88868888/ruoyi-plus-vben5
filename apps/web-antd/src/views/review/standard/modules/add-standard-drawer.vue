@@ -2,9 +2,9 @@
 import { ref, computed } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import {
-  message, Steps, Upload, Select, Input, Form, FormItem, Alert, Tag, Card, Textarea,
+  message, Steps, Upload, Select, Input, Form, FormItem, Alert, Tag, Card, Textarea, Button, Divider,
 } from 'ant-design-vue';
-import { InboxOutlined } from '@ant-design/icons-vue';
+import { InboxOutlined, DownloadOutlined } from '@ant-design/icons-vue';
 
 const emit = defineEmits<{ reload: [] }>();
 
@@ -32,9 +32,13 @@ const severityMap: Record<string, { label: string; color: string }> = {
   suggest: { label: '建议', color: 'blue' },
 };
 
+function handleDownloadTemplate() {
+  message.success('模板下载中...');
+}
+
 const [BasicDrawer, drawerApi] = useVbenDrawer({
   title: computed(() => {
-    const stepNames = ['基本信息', '上传规范文件', 'AI解析确认'];
+    const stepNames = ['填写信息并上传规范', 'AI解析确认'];
     return `新增审核标准 - ${stepNames[currentStep.value]}`;
   }),
   onOpenChange: (visible) => {
@@ -54,10 +58,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         message.warning('请选择适用文档类型');
         return;
       }
-      currentStep.value = 1;
-      return;
-    }
-    if (currentStep.value === 1) {
       if (fileList.value.length === 0) {
         message.warning('请上传规范文件');
         return;
@@ -66,17 +66,15 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       setTimeout(() => {
         message.success({ content: '解析完成，已提取 6 条规则', key: 'parse' });
       }, 1500);
-      currentStep.value = 2;
+      currentStep.value = 1;
       return;
     }
-    // 最后一步：确认发布
     message.success('审核标准已创建并发布');
     drawerApi.close();
     emit('reload');
   },
   confirmText: computed(() => {
-    if (currentStep.value === 0) return '下一步';
-    if (currentStep.value === 1) return '上传并解析';
+    if (currentStep.value === 0) return '上传并解析';
     return '确认发布';
   }),
   cancelText: computed(() => currentStep.value === 0 ? '取消' : '上一步'),
@@ -91,59 +89,74 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
 </script>
 
 <template>
-  <BasicDrawer class="w-[700px]">
+  <BasicDrawer class="w-[860px]">
     <Steps :current="currentStep" size="small" style="margin-bottom: 24px;">
-      <Steps.Step title="基本信息" />
-      <Steps.Step title="上传规范" />
+      <Steps.Step title="填写信息并上传规范" />
       <Steps.Step title="AI解析确认" />
     </Steps>
 
-    <!-- Step 1: 基本信息 -->
+    <!-- Step 1: 基本信息 + 上传规范文件 -->
     <div v-show="currentStep === 0">
       <Form layout="vertical">
-        <FormItem label="规范名称" required>
-          <Input v-model:value="formData.name" placeholder="如：政府采购合同审核标准" />
-        </FormItem>
-        <FormItem label="适用文档类型" required>
-          <Select
-            v-model:value="formData.type"
-            placeholder="请选择"
-            style="width: 100%;"
-            :options="[
-              { label: '合同', value: 'contract' },
-              { label: '财务账单', value: 'finance' },
-              { label: '表单', value: 'form' },
-              { label: '标书', value: 'bid' },
-            ]"
-          />
-        </FormItem>
-        <FormItem label="补充说明（可选）">
-          <Textarea v-model:value="formData.description" placeholder="对规范的额外说明，如适用范围、特殊注意事项等..." :rows="3" />
-        </FormItem>
+        <!-- 基本信息分区 -->
+        <Divider orientation="left" class="section-title-divider">
+          <span class="section-title">基本信息</span>
+        </Divider>
+        <div class="form-grid">
+          <FormItem label="规范名称" required>
+            <Input v-model:value="formData.name" placeholder="如：政府采购合同审核标准" />
+          </FormItem>
+          <FormItem label="适用文档类型" required>
+            <Select
+              v-model:value="formData.type"
+              placeholder="请选择"
+              style="width: 100%;"
+              :options="[
+                { label: '合同', value: 'contract' },
+                { label: '财务账单', value: 'finance' },
+                { label: '表单', value: 'form' },
+                { label: '标书', value: 'bid' },
+              ]"
+            />
+          </FormItem>
+          <FormItem label="补充说明（可选）" class="col-span-2">
+            <Textarea v-model:value="formData.description" placeholder="对规范的额外说明，如适用范围、特殊注意事项等..." :rows="3" />
+          </FormItem>
+        </div>
+
+        <!-- 上传规范分区 -->
+        <Divider orientation="left" class="section-title-divider">
+          <span class="section-title">上传规范文件</span>
+        </Divider>
+        <div class="form-grid">
+          <FormItem required class="col-span-2" style="margin-bottom: 0;">
+            <Upload.Dragger
+              v-model:file-list="fileList"
+              :multiple="false"
+              :before-upload="() => false"
+            >
+              <p class="ant-upload-drag-icon"><InboxOutlined /></p>
+              <p class="ant-upload-text">点击或拖拽规范文件到此区域</p>
+              <p class="ant-upload-hint">支持 Word、PDF、TXT 格式</p>
+            </Upload.Dragger>
+            <div style="margin-top: 8px;">
+              <Button type="link" size="small" style="padding: 0;" @click="handleDownloadTemplate">
+                <DownloadOutlined /> 下载模板
+              </Button>
+            </div>
+            <Alert
+              message="上传后 AI 将自动提取审核要点并生成结构化规则"
+              type="info"
+              show-icon
+              style="margin-top: 12px;"
+            />
+          </FormItem>
+        </div>
       </Form>
     </div>
 
-    <!-- Step 2: 上传规范文件 -->
+    <!-- Step 2: AI解析确认 -->
     <div v-show="currentStep === 1">
-      <Alert
-        message="上传规范文件后，AI将自动提取其中的审核要点并生成结构化规则"
-        type="info"
-        show-icon
-        style="margin-bottom: 16px;"
-      />
-      <Upload.Dragger
-        v-model:file-list="fileList"
-        :multiple="false"
-        :before-upload="() => false"
-      >
-        <p class="ant-upload-drag-icon"><InboxOutlined /></p>
-        <p class="ant-upload-text">点击或拖拽规范文件到此区域</p>
-        <p class="ant-upload-hint">支持 Word、PDF、TXT 格式</p>
-      </Upload.Dragger>
-    </div>
-
-    <!-- Step 3: AI解析确认 -->
-    <div v-show="currentStep === 2">
       <Alert
         message="以下规则由AI自动提取，请确认或调整后发布"
         type="success"
@@ -171,3 +184,35 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
     </div>
   </BasicDrawer>
 </template>
+
+<style scoped>
+.section-title-divider {
+  margin: 4px 0 12px;
+}
+
+.section-title-divider :deep(.ant-divider-inner-text) {
+  padding-left: 0;
+}
+
+.section-title-divider::before {
+  display: none !important;
+}
+
+.section-title {
+  padding-left: 8px;
+  border-left: 3px solid hsl(var(--primary));
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 24px;
+}
+
+.col-span-2 {
+  grid-column: span 2;
+}
+</style>

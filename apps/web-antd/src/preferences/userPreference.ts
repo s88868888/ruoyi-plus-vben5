@@ -52,10 +52,10 @@ const DEFAULT_PREFERENCE: UserPreference = {
     anchorNavWidth: 210,
   },
   listTable: {
-    headerBgColor: '#f6f6f6',
-    headerTextColor: '#2b3445',
+    headerBgColor: '#2b3445',
+    headerTextColor: '#f6f6f6',
     headerPaddingY: 8,
-    cellPaddingY: 8,
+    cellPaddingY: 5,
   },
 };
 

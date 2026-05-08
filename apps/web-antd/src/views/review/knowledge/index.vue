@@ -2,16 +2,19 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
 import { computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
-import { Page } from '@vben/common-ui';
+import { Page, useVbenDrawer } from '@vben/common-ui';
 
-import { Button, Card, Col, Dropdown, Menu, MenuItem, Modal, Row, Space, Statistic, Tag, Tabs, TabPane, message } from 'ant-design-vue';
+import { Badge, Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
 import CommonFilter from '#/components/CommonFilter/index.vue';
+import AddKnowledgeDrawer from './modules/add-knowledge-drawer.vue';
 
+const router = useRouter();
 const tablePreference = useListTablePreference();
 
 const tableCssVars = computed(() => ({
@@ -21,195 +24,134 @@ const tableCssVars = computed(() => ({
   '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
 }));
 
-const activeTab = ref('cases');
-
-const stats = ref({
-  totalCases: 256,
-  totalPatterns: 42,
-  lastUpdate: '2024-12-20',
-  accuracy: '92%',
-});
-
-// 筛选条件
-const caseFilterData = ref([
-  {
-    field: 'docName',
-    label: '文档名称',
-    type: 'a-input',
-    data: '',
-    isCommon: true,
-  },
-  {
-    field: 'source',
-    label: '来源',
-    type: 'a-select',
-    data: '',
-    options: [
-      { label: '审核反馈', value: 'feedback' },
-      { label: '人工标注', value: 'manual' },
-      { label: '业务回传', value: 'business' },
-    ],
-    isCommon: true,
-  },
-  {
-    field: 'result',
-    label: '结论',
-    type: 'a-select',
-    data: '',
-    options: [
-      { label: '确认问题', value: 'confirmed' },
-      { label: '忽略', value: 'ignored' },
-    ],
-    isCommon: true,
-  },
-]);
-
-const patternFilterData = ref([
+const filterData = ref([
   {
     field: 'name',
-    label: '模式名称',
+    label: '知识库名称',
     type: 'a-input',
     data: '',
     isCommon: true,
   },
   {
-    field: 'category',
-    label: '分类',
+    field: 'type',
+    label: '类型',
     type: 'a-select',
     data: '',
     options: [
-      { label: '金额类', value: '金额类' },
-      { label: '期限类', value: '期限类' },
-      { label: '完整性', value: '完整性' },
-      { label: '格式类', value: '格式类' },
-      { label: '主体类', value: '主体类' },
+      { label: '合同类', value: 'contract' },
+      { label: '财务类', value: 'finance' },
+      { label: '表单类', value: 'form' },
+      { label: '标书类', value: 'bid' },
+      { label: '综合类', value: 'general' },
+    ],
+    isCommon: true,
+  },
+  {
+    field: 'status',
+    label: '状态',
+    type: 'a-select',
+    data: '',
+    options: [
+      { label: '启用中', value: 'active' },
+      { label: '已停用', value: 'disabled' },
     ],
     isCommon: true,
   },
 ]);
 
-// Mock 数据
-const caseMockData = [
-  { id: 1, docName: '某市采购合同审核', issue: '金额大写小写不一致', result: '确认问题', source: '审核反馈', time: '2024-12-20' },
-  { id: 2, docName: '物业租赁合同', issue: '缺少违约责任条款', result: '确认问题', source: '审核反馈', time: '2024-12-19' },
-  { id: 3, docName: '服务合同审核', issue: '服务期限表述模糊', result: '确认问题', source: '人工标注', time: '2024-12-18' },
-  { id: 4, docName: '财务报销单', issue: '发票金额超出标准', result: '确认问题', source: '审核反馈', time: '2024-12-17' },
-  { id: 5, docName: '项目立项表', issue: '缺少预算明细', result: '忽略（非必须）', source: '审核反馈', time: '2024-12-16' },
-  { id: 6, docName: '设备采购合同', issue: '验收标准不明确', result: '确认问题', source: '审核反馈', time: '2024-12-15' },
-  { id: 7, docName: '劳务派遣合同', issue: '缺少社保条款', result: '确认问题', source: '人工标注', time: '2024-12-14' },
-  { id: 8, docName: '软件开发合同', issue: '知识产权归属不清', result: '确认问题', source: '审核反馈', time: '2024-12-13' },
-  { id: 9, docName: '物流运输合同', issue: '保险责任未约定', result: '确认问题', source: '业务回传', time: '2024-12-12' },
-  { id: 10, docName: '广告投放合同', issue: '效果评估标准缺失', result: '忽略（非必须）', source: '审核反馈', time: '2024-12-11' },
-  { id: 11, docName: '房屋租赁合同', issue: '押金退还条件模糊', result: '确认问题', source: '审核反馈', time: '2024-12-10' },
-  { id: 12, docName: '咨询服务合同', issue: '保密期限未约定', result: '确认问题', source: '人工标注', time: '2024-12-09' },
-];
+const searchParams = ref<Record<string, any>>({});
 
-const patternMockData = [
-  { id: 1, name: '金额一致性问题', frequency: 38, accuracy: '98%', category: '金额类' },
-  { id: 2, name: '期限表述不明确', frequency: 25, accuracy: '95%', category: '期限类' },
-  { id: 3, name: '条款缺失', frequency: 20, accuracy: '90%', category: '完整性' },
-  { id: 4, name: '格式不规范', frequency: 18, accuracy: '88%', category: '格式类' },
-  { id: 5, name: '主体信息不完整', frequency: 15, accuracy: '96%', category: '主体类' },
-  { id: 6, name: '签章位置错误', frequency: 12, accuracy: '92%', category: '格式类' },
-  { id: 7, name: '付款条件不清晰', frequency: 10, accuracy: '87%', category: '金额类' },
-  { id: 8, name: '违约责任不对等', frequency: 9, accuracy: '91%', category: '完整性' },
-  { id: 9, name: '保密条款缺失', frequency: 8, accuracy: '94%', category: '完整性' },
-  { id: 10, name: '争议解决方式未约定', frequency: 7, accuracy: '89%', category: '完整性' },
-  { id: 11, name: '交付标准模糊', frequency: 6, accuracy: '85%', category: '期限类' },
-];
-
-// 历史案例表格配置
-const caseGridOptions: VxeGridProps = {
-  height: 'auto',
-  columns: [
-    { type: 'checkbox', width: 50 },
-    {
-      field: 'docName',
-      title: '文档',
-      minWidth: 220,
-      headerAlign: 'left',
-      align: 'left',
-      slots: { default: 'docName' },
-    },
-    {
-      field: 'issue',
-      title: '问题',
-      minWidth: 200,
-      headerAlign: 'left',
-      align: 'left',
-    },
-    {
-      field: 'result',
-      title: '最终结论',
-      width: 130,
-      slots: { default: 'result' },
-    },
-    {
-      field: 'time',
-      title: '时间',
-      width: 120,
-      headerAlign: 'left',
-      align: 'left',
-    },
-    {
-      field: 'action',
-      title: '操作',
-      width: 100,
-      fixed: 'right',
-      slots: { default: 'caseAction' },
-    },
-  ],
-  keepSource: true,
-  pagerConfig: {},
-  proxyConfig: {
-    ajax: {
-      query: async ({ page }) => {
-        const start = (page.currentPage - 1) * page.pageSize;
-        const end = start + page.pageSize;
-        return {
-          rows: caseMockData.slice(start, end),
-          total: caseMockData.length,
-        };
-      },
-    },
-  },
-  rowConfig: { keyField: 'id' },
-  id: 'knowledge-case-index',
+const handleFilterQuery = (conditions: any[]) => {
+  const queryParams: Record<string, any> = {};
+  conditions.forEach((item) => {
+    queryParams[item.key] = item.value;
+  });
+  searchParams.value = queryParams;
+  tableApi.query();
 };
 
-// 问题模式表格配置
-const patternGridOptions: VxeGridProps = {
+const typeMap: Record<string, { label: string; color: string }> = {
+  contract: { label: '合同类', color: 'blue' },
+  finance: { label: '财务类', color: 'green' },
+  form: { label: '表单类', color: 'orange' },
+  bid: { label: '标书类', color: 'purple' },
+  general: { label: '综合类', color: 'cyan' },
+};
+
+const mockData = [
+  { id: 1, name: '政府采购合同案例库', type: 'contract', caseCount: 128, patternCount: 23, accuracy: 95, linkedStandardCount: 2, status: 'active', updateTime: '2024-12-18', description: '政府采购服务、货物合同的历史审核案例及常见问题模式' },
+  { id: 2, name: '合同纠纷判例库', type: 'contract', caseCount: 86, patternCount: 15, accuracy: 91, linkedStandardCount: 1, status: 'active', updateTime: '2024-12-15', description: '合同纠纷相关判例，用于增强违约、争议条款的审核能力' },
+  { id: 3, name: '财政审计问题库', type: 'finance', caseCount: 42, patternCount: 8, accuracy: 88, linkedStandardCount: 1, status: 'active', updateTime: '2024-12-10', description: '财政审计中发现的常见问题及整改案例' },
+  { id: 4, name: '企业服务合同案例库', type: 'contract', caseCount: 64, patternCount: 12, accuracy: 87, linkedStandardCount: 0, status: 'active', updateTime: '2024-11-28', description: '企业服务外包、咨询服务合同审核案例' },
+  { id: 5, name: '物业租赁合同案例库', type: 'contract', caseCount: 53, patternCount: 9, accuracy: 90, linkedStandardCount: 1, status: 'active', updateTime: '2024-11-20', description: '物业租赁合同的历史审核案例，含租金、押金、维修条款等' },
+  { id: 6, name: '劳动合同合规案例库', type: 'general', caseCount: 71, patternCount: 18, accuracy: 93, linkedStandardCount: 0, status: 'active', updateTime: '2024-11-15', description: '劳动合同合规审查相关案例，涵盖社保、工时、解除条件等' },
+  { id: 7, name: '标书格式规范案例库', type: 'bid', caseCount: 35, patternCount: 6, accuracy: 82, linkedStandardCount: 1, status: 'active', updateTime: '2024-10-20', description: '投标文件格式审查案例' },
+  { id: 8, name: '旧版财务报销库（已废弃）', type: 'finance', caseCount: 20, patternCount: 3, accuracy: 75, linkedStandardCount: 0, status: 'disabled', updateTime: '2024-06-01', description: '旧版报销规范案例，已被新规范替代' },
+];
+
+const gridOptions: VxeGridProps = {
+  checkboxConfig: {
+    highlight: true,
+    reserve: true,
+  },
   height: 'auto',
   columns: [
     { type: 'checkbox', width: 50 },
     {
       field: 'name',
-      title: '模式名称',
-      minWidth: 220,
+      title: '知识库名称',
+      minWidth: 280,
       headerAlign: 'left',
       align: 'left',
-      slots: { default: 'patternName' },
+      slots: { default: 'name' },
     },
     {
-      field: 'frequency',
-      title: '出现频次',
-      width: 100,
+      field: 'caseCount',
+      title: '案例数',
+      width: 90,
       align: 'center',
-      slots: { default: 'frequency' },
+      slots: { default: 'caseCount' },
+    },
+    {
+      field: 'patternCount',
+      title: '模式数',
+      width: 90,
+      align: 'center',
+      slots: { default: 'patternCount' },
     },
     {
       field: 'accuracy',
-      title: '识别准确率',
-      width: 120,
+      title: '准确率',
+      width: 90,
       align: 'center',
       slots: { default: 'accuracy' },
     },
     {
+      field: 'linkedStandardCount',
+      title: '关联标准',
+      width: 100,
+      align: 'center',
+      slots: { default: 'linkedStandard' },
+    },
+    {
+      field: 'status',
+      title: '状态',
+      width: 80,
+      slots: { default: 'status' },
+    },
+    {
+      field: 'updateTime',
+      title: '更新时间',
+      width: 120,
+      headerAlign: 'left',
+      align: 'left',
+    },
+    {
       field: 'action',
       title: '操作',
-      width: 100,
+      width: 140,
       fixed: 'right',
-      slots: { default: 'patternAction' },
+      slots: { default: 'action' },
     },
   ],
   keepSource: true,
@@ -220,49 +162,54 @@ const patternGridOptions: VxeGridProps = {
         const start = (page.currentPage - 1) * page.pageSize;
         const end = start + page.pageSize;
         return {
-          rows: patternMockData.slice(start, end),
-          total: patternMockData.length,
+          rows: mockData.slice(start, end),
+          total: mockData.length,
         };
       },
     },
   },
-  rowConfig: { keyField: 'id' },
-  id: 'knowledge-pattern-index',
+  rowConfig: {
+    keyField: 'id',
+  },
+  rowClassName: 'cursor-pointer',
+  id: 'review-knowledge-index',
 };
 
-const [CaseTable, caseTableApi] = useVbenVxeGrid({ gridOptions: caseGridOptions } as any);
-const [PatternTable, patternTableApi] = useVbenVxeGrid({ gridOptions: patternGridOptions } as any);
-
-const handleCaseFilterQuery = (_conditions: any[]) => {
-  caseTableApi.query();
-};
-
-const handlePatternFilterQuery = (_conditions: any[]) => {
-  patternTableApi.query();
-};
-
-function handleDeleteCase(row: any) {
-  Modal.confirm({
-    title: `确认删除案例【${row.docName}】吗？`,
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
-    onOk() {
-      message.success('删除成功');
-      caseTableApi.query();
+const [BasicTable, tableApi] = useVbenVxeGrid({
+  gridOptions,
+  gridEvents: {
+    cellDblclick: ({ row }: any) => {
+      handleViewDetail(row);
     },
-  });
+  },
+} as any);
+
+const [AddDrawerComp, addDrawerApi] = useVbenDrawer({
+  connectedComponent: AddKnowledgeDrawer,
+});
+
+function handleAdd() {
+  addDrawerApi.open();
 }
 
-function handleDeletePattern(row: any) {
+async function handleReload() {
+  await tableApi.query();
+}
+
+function handleViewDetail(row: any) {
+  router.push(`/review/knowledge/detail?id=${row.id}`);
+}
+
+function handleDisable(row: any) {
   Modal.confirm({
-    title: `确认删除模式【${row.name}】吗？`,
-    okText: '删除',
+    title: `确认停用知识库【${row.name}】吗？`,
+    content: '停用后关联的审核标准将不再使用该知识库进行增强',
+    okText: '停用',
     okType: 'danger',
     cancelText: '取消',
     onOk() {
-      message.success('删除成功');
-      patternTableApi.query();
+      message.success('已停用');
+      tableApi.query();
     },
   });
 }
@@ -271,128 +218,94 @@ function handleDeletePattern(row: any) {
 <template>
   <Page :auto-content-height="true">
     <div class="flex h-full flex-col gap-4">
-      <!-- 统计卡片 -->
-      <Row :gutter="16" class="shrink-0">
-        <Col :span="6">
-          <Card><Statistic title="历史案例数" :value="stats.totalCases" /></Card>
-        </Col>
-        <Col :span="6">
-          <Card><Statistic title="问题模式数" :value="stats.totalPatterns" /></Card>
-        </Col>
-        <Col :span="6">
-          <Card><Statistic title="识别准确率" :value="stats.accuracy" :value-style="{ color: '#52c41a' }" /></Card>
-        </Col>
-        <Col :span="6">
-          <Card><Statistic title="最近更新" :value="stats.lastUpdate" :value-style="{ fontSize: '20px' }" /></Card>
-        </Col>
-      </Row>
+      <!-- 筛选条件区域 -->
+      <div class="shrink-0 bg-white p-4 rounded shadow-sm">
+        <div class="flex items-center justify-between">
+          <CommonFilter
+            :filter-data="filterData"
+            type="both"
+            @handle-query="handleFilterQuery"
+          />
+          <Space>
+            <Button type="primary" @click="handleAdd">
+              <PlusOutlined />
+              新建知识库
+            </Button>
+          </Space>
+        </div>
+      </div>
 
-      <!-- Tab + 表格区域 -->
-      <div class="flex-1 overflow-hidden bg-white rounded shadow-sm flex flex-col">
-        <Tabs v-model:activeKey="activeTab" class="flex-1 overflow-hidden px-4 pt-2 knowledge-tabs">
-          <TabPane key="cases" tab="历史案例" class="h-full">
-            <div class="flex h-full flex-col gap-3">
-              <div class="shrink-0 flex items-center justify-between">
-                <CommonFilter
-                  :filter-data="caseFilterData"
-                  type="both"
-                  @handle-query="handleCaseFilterQuery"
-                />
-                <Button type="primary">
-                  <PlusOutlined />
-                  新增案例
-                </Button>
+      <!-- 表格区域 -->
+      <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
+        <BasicTable class="h-full" table-title="知识库列表">
+          <template #name="{ row }">
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <span
+                  class="doc-name-text cursor-pointer hover:underline"
+                  @click="handleViewDetail(row)"
+                >{{ row.name }}</span>
               </div>
-              <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
-                <CaseTable class="h-full" table-title="历史案例">
-                  <template #docName="{ row }">
-                    <div class="flex flex-col gap-1">
-                      <span class="doc-name-text">{{ row.docName }}</span>
-                      <div class="flex items-center gap-1">
-                        <Tag :color="row.source === '审核反馈' ? 'blue' : row.source === '人工标注' ? 'orange' : 'cyan'" :bordered="false" class="tag-sm">
-                          {{ row.source }}
-                        </Tag>
-                      </div>
-                    </div>
-                  </template>
-                  <template #result="{ row }">
-                    <Tag :color="row.result.includes('确认') ? 'green' : 'default'">{{ row.result }}</Tag>
-                  </template>
-                  <template #caseAction="{ row }">
-                    <Space>
-                      <ghost-button @click.stop>查看</ghost-button>
-                      <Dropdown placement="bottomRight">
-                        <template #overlay>
-                          <Menu @click="({ key }: any) => { if (key === 'delete') handleDeleteCase(row); }">
-                            <MenuItem key="delete">
-                              <span class="text-red-500">删除</span>
-                            </MenuItem>
-                          </Menu>
-                        </template>
-                        <a-button size="small" type="link">
-                          <EllipsisOutlined />
-                        </a-button>
-                      </Dropdown>
-                    </Space>
-                  </template>
-                </CaseTable>
+              <div class="flex items-center gap-1">
+                <Tag :color="typeMap[row.type]?.color" :bordered="false" class="tag-sm">
+                  {{ typeMap[row.type]?.label || row.type }}
+                </Tag>
+                <span class="text-xs text-gray-400 truncate" style="max-width: 240px;">{{ row.description }}</span>
               </div>
             </div>
-          </TabPane>
-          <TabPane key="patterns" tab="问题模式" class="h-full">
-            <div class="flex h-full flex-col gap-3">
-              <div class="shrink-0 flex items-center justify-between">
-                <CommonFilter
-                  :filter-data="patternFilterData"
-                  type="both"
-                  @handle-query="handlePatternFilterQuery"
-                />
-                <Button type="primary">
-                  <PlusOutlined />
-                  新增模式
-                </Button>
-              </div>
-              <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
-                <PatternTable class="h-full" table-title="问题模式">
-                  <template #patternName="{ row }">
-                    <div class="flex flex-col gap-1">
-                      <span class="doc-name-text">{{ row.name }}</span>
-                      <div class="flex items-center gap-1">
-                        <Tag :color="row.category === '金额类' ? 'red' : row.category === '期限类' ? 'orange' : row.category === '完整性' ? 'blue' : row.category === '格式类' ? 'purple' : 'cyan'" :bordered="false" class="tag-sm">{{ row.category }}</Tag>
-                      </div>
-                    </div>
-                  </template>
-                  <template #frequency="{ row }">
-                    <span v-if="row.frequency > 1" class="font-bold text-black">{{ row.frequency }}</span>
-                    <span v-else class="text-gray-400">{{ row.frequency }}</span>
-                  </template>
-                  <template #accuracy="{ row }">
-                    <span class="font-semibold text-green-500">{{ row.accuracy }}</span>
-                  </template>
-                  <template #patternAction="{ row }">
-                    <Space>
-                      <ghost-button @click.stop>查看</ghost-button>
-                      <Dropdown placement="bottomRight">
-                        <template #overlay>
-                          <Menu @click="({ key }: any) => { if (key === 'delete') handleDeletePattern(row); }">
-                            <MenuItem key="delete">
-                              <span class="text-red-500">删除</span>
-                            </MenuItem>
-                          </Menu>
-                        </template>
-                        <a-button size="small" type="link">
-                          <EllipsisOutlined />
-                        </a-button>
-                      </Dropdown>
-                    </Space>
-                  </template>
-                </PatternTable>
-              </div>
-            </div>
-          </TabPane>
-        </Tabs>
+          </template>
+
+          <template #caseCount="{ row }">
+            <span class="text-blue-500 font-semibold">{{ row.caseCount }}</span>
+          </template>
+
+          <template #patternCount="{ row }">
+            <span class="text-purple-500 font-semibold">{{ row.patternCount }}</span>
+          </template>
+
+          <template #accuracy="{ row }">
+            <span
+              class="font-semibold"
+              :style="{ color: row.accuracy >= 90 ? '#52c41a' : row.accuracy >= 80 ? '#faad14' : '#ff4d4f' }"
+            >{{ row.accuracy }}%</span>
+          </template>
+
+          <template #linkedStandard="{ row }">
+            <span v-if="row.linkedStandardCount > 0" class="text-blue-500">{{ row.linkedStandardCount }} 个</span>
+            <span v-else class="text-gray-400">未关联</span>
+          </template>
+
+          <template #status="{ row }">
+            <Badge v-if="row.status === 'active'" status="success" text="启用" />
+            <Badge v-else status="default" text="已停用" />
+          </template>
+
+          <template #action="{ row }">
+            <Space>
+              <ghost-button @click.stop="handleViewDetail(row)">
+                查看详情
+              </ghost-button>
+              <Dropdown placement="bottomRight">
+                <template #overlay>
+                  <Menu>
+                    <MenuItem key="edit" @click="handleViewDetail(row)">
+                      编辑
+                    </MenuItem>
+                    <MenuItem key="disable" @click="handleDisable(row)">
+                      <span class="text-red-500">停用</span>
+                    </MenuItem>
+                  </Menu>
+                </template>
+                <a-button size="small" type="link">
+                  <EllipsisOutlined />
+                </a-button>
+              </Dropdown>
+            </Space>
+          </template>
+        </BasicTable>
       </div>
     </div>
+    <AddDrawerComp @reload="handleReload" />
   </Page>
 </template>
 
@@ -408,10 +321,6 @@ function handleDeletePattern(row: any) {
   padding: 0 4px !important;
   line-height: 18px !important;
   margin-inline-end: 0 !important;
-}
-
-.knowledge-tabs :deep(.ant-tabs-content) {
-  height: 100%;
 }
 
 .table-style-wrapper :deep(.vxe-table--header-wrapper),
