@@ -4,7 +4,7 @@ import type { VxeGridProps } from '#/adapter/vxe-table';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { Card, Tag, Button, Space, Select } from 'ant-design-vue';
+import { Card, Tag, Button, Space, Select, Modal, Input, message } from 'ant-design-vue';
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
@@ -20,6 +20,8 @@ import {
   AuditOutlined,
   SwapOutlined,
   HistoryOutlined,
+  StopOutlined,
+  UndoOutlined,
 } from '@ant-design/icons-vue';
 
 import { AnchorNav } from '#/components/anchor-nav';
@@ -128,13 +130,13 @@ const compareGridOptions: VxeGridProps = {
 const [CompareTable] = useVbenVxeGrid({ gridOptions: compareGridOptions } as any);
 
 const issues = ref([
-  { id: 1, severity: 'error', title: '大写金额与数字金额不一致', location: '第二章 · 采购金额', description: '大写"叁佰伍拾万元整"与数字¥3,500,000.00不一致，需确认是否笔误。', suggestion: '请核实金额，确保大写与小写完全一致', rule: '规则 R004 · 合同金额大写与小写必须完全一致' },
-  { id: 2, severity: 'error', title: '服务期限缺少具体起止日期', location: '第三章 · 服务期限', description: '仅写"12个月"，未明确起止日期。', suggestion: '建议修改为"自2024年12月15日起至2025年12月14日止"', rule: '规则 R005 · 服务期限必须明确起止日期' },
-  { id: 3, severity: 'error', title: '违约责任条款不完整', location: '第五章 · 违约责任', description: '仅约定了乙方违约责任，缺少甲方违约条款。', suggestion: '建议补充甲方违约条款', rule: '规则 R015 · 违约责任条款应双向约定' },
-  { id: 4, severity: 'warning', title: '验收方式描述不够具体', location: '第四章 · 验收标准', description: '仅写"由甲方组织验收"，未明确验收时限和标准文件编号。', suggestion: '建议补充验收时限和验收依据文件', rule: '规则 R012 · 验收条款应明确验收方式、时限和标准文件' },
-  { id: 5, severity: 'warning', title: '知识产权条款不完整', location: '第六章 · 知识产权', description: '未明确第三方开源组件的知识产权处理方式。', suggestion: '建议补充第三方组件清单及其许可证说明', rule: '规则 R018 · 知识产权条款应覆盖第三方组件' },
-  { id: 6, severity: 'info', title: '建议补充仲裁作为争议解决备选', location: '第七章 · 争议解决', description: '当前仅约定诉讼方式，建议增加仲裁作为备选。', suggestion: '可补充"或提交XX仲裁委员会仲裁"', rule: '规则 R020 · 争议解决方式建议多元化' },
-  { id: 7, severity: 'info', title: '合同份数建议增加备案份', location: '第八章 · 其他约定', description: '当前约定"一式肆份"，建议增加财政部门备案份数。', suggestion: '建议修改为"一式陆份，甲乙双方各执贰份，财政部门备案贰份"', rule: '规则 R022 · 政府采购合同应预留备案份数' },
+  { id: 1, severity: 'error', title: '大写金额与数字金额不一致', location: '第二章 · 采购金额', description: '大写"叁佰伍拾万元整"与数字¥3,500,000.00不一致，需确认是否笔误。', suggestion: '请核实金额，确保大写与小写完全一致', rule: '规则 R004 · 合同金额大写与小写必须完全一致', misjudged: false, misjudgmentReason: '' },
+  { id: 2, severity: 'error', title: '服务期限缺少具体起止日期', location: '第三章 · 服务期限', description: '仅写"12个月"，未明确起止日期。', suggestion: '建议修改为"自2024年12月15日起至2025年12月14日止"', rule: '规则 R005 · 服务期限必须明确起止日期', misjudged: false, misjudgmentReason: '' },
+  { id: 3, severity: 'error', title: '违约责任条款不完整', location: '第五章 · 违约责任', description: '仅约定了乙方违约责任，缺少甲方违约条款。', suggestion: '建议补充甲方违约条款', rule: '规则 R015 · 违约责任条款应双向约定', misjudged: false, misjudgmentReason: '' },
+  { id: 4, severity: 'warning', title: '验收方式描述不够具体', location: '第四章 · 验收标准', description: '仅写"由甲方组织验收"，未明确验收时限和标准文件编号。', suggestion: '建议补充验收时限和验收依据文件', rule: '规则 R012 · 验收条款应明确验收方式、时限和标准文件', misjudged: false, misjudgmentReason: '' },
+  { id: 5, severity: 'warning', title: '知识产权条款不完整', location: '第六章 · 知识产权', description: '未明确第三方开源组件的知识产权处理方式。', suggestion: '建议补充第三方组件清单及其许可证说明', rule: '规则 R018 · 知识产权条款应覆盖第三方组件', misjudged: false, misjudgmentReason: '' },
+  { id: 6, severity: 'info', title: '建议补充仲裁作为争议解决备选', location: '第七章 · 争议解决', description: '当前仅约定诉讼方式，建议增加仲裁作为备选。', suggestion: '可补充"或提交XX仲裁委员会仲裁"', rule: '规则 R020 · 争议解决方式建议多元化', misjudged: false, misjudgmentReason: '' },
+  { id: 7, severity: 'info', title: '合同份数建议增加备案份', location: '第八章 · 其他约定', description: '当前约定"一式肆份"，建议增加财政部门备案份数。', suggestion: '建议修改为"一式陆份，甲乙双方各执贰份，财政部门备案贰份"', rule: '规则 R022 · 政府采购合同应预留备案份数', misjudged: false, misjudgmentReason: '' },
 ]);
 
 const severityConfig: Record<string, { tagColor: string; label: string }> = {
@@ -151,8 +153,45 @@ const docPreviewRef = ref<HTMLElement | null>(null);
 const issueFilter = ref<string>('all');
 const filteredIssues = computed(() => {
   if (issueFilter.value === 'all') return issues.value;
+  if (issueFilter.value === 'misjudged') return issues.value.filter(i => i.misjudged);
   return issues.value.filter(i => i.severity === issueFilter.value);
 });
+
+// 误判矫正
+const misjudgmentModalVisible = ref(false);
+const misjudgmentReason = ref('');
+const currentMisjudgmentId = ref<number | null>(null);
+
+const misjudgedCount = computed(() => issues.value.filter(i => i.misjudged).length);
+
+function openMisjudgmentModal(issueId: number) {
+  currentMisjudgmentId.value = issueId;
+  misjudgmentReason.value = '';
+  misjudgmentModalVisible.value = true;
+}
+
+function confirmMisjudgment() {
+  if (!misjudgmentReason.value.trim()) {
+    message.warning('请填写误判原因');
+    return;
+  }
+  const issue = issues.value.find(i => i.id === currentMisjudgmentId.value);
+  if (issue) {
+    issue.misjudged = true;
+    issue.misjudgmentReason = misjudgmentReason.value.trim();
+    message.success('已标记为误判，记录将沉淀到知识库');
+  }
+  misjudgmentModalVisible.value = false;
+}
+
+function undoMisjudgment(issueId: number) {
+  const issue = issues.value.find(i => i.id === issueId);
+  if (issue) {
+    issue.misjudged = false;
+    issue.misjudgmentReason = '';
+    message.info('已撤销误判标记');
+  }
+}
 
 function selectIssue(issueId: number) {
   activeIssueId.value = issueId;
@@ -207,6 +246,22 @@ function isParaHighlighted(para: any) {
   return para.issueIds?.includes(activeIssueId.value);
 }
 
+// 手工通过
+const manualPassed = ref(false);
+
+function handleManualPass() {
+  Modal.confirm({
+    title: '确认手工通过该文档？',
+    content: 'AI审核结果将保留作为参考记录，文档将标记为"人工通过"并流转到下一环节。',
+    okText: '确认通过',
+    cancelText: '取消',
+    onOk() {
+      manualPassed.value = true;
+      message.success('已手工通过，文档将流转到下一审核环节');
+    },
+  });
+}
+
 function goBack() { router.push('/review/task'); }
 
 onMounted(() => {
@@ -247,7 +302,18 @@ onUnmounted(() => {
             </span>
             <Space>
               <Button type="default" size="small" @click="goBack"><ArrowLeftOutlined /> 返回</Button>
-              <Button type="primary" size="small"><DownloadOutlined /> 导出报告</Button>
+              <Button type="default" size="small"><DownloadOutlined /> 导出报告</Button>
+              <Button
+                v-if="!manualPassed"
+                type="primary"
+                size="small"
+                @click="handleManualPass"
+              >
+                <CheckCircleOutlined /> 通过
+              </Button>
+              <Tag v-else color="success" style="margin: 0; line-height: 24px;">
+                <CheckCircleOutlined /> 已人工通过
+              </Tag>
             </Space>
           </div>
           <!-- 指标行 -->
@@ -375,6 +441,15 @@ onUnmounted(() => {
                 <div class="overview-value overview-value-rate">{{ Math.round(docInfo.passCount / docInfo.totalRules * 100) }}<span class="overview-unit">%</span></div>
               </div>
             </div>
+            <div v-if="misjudgedCount > 0" class="overview-item">
+              <div class="overview-icon overview-icon-misjudged">
+                <StopOutlined />
+              </div>
+              <div class="overview-content">
+                <div class="overview-label">已标记误判</div>
+                <div class="overview-value overview-value-misjudged">{{ misjudgedCount }}<span class="overview-unit">个</span></div>
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -408,6 +483,12 @@ onUnmounted(() => {
                   class="cursor-pointer"
                   @click="issueFilter = 'info'"
                 >提示 {{ docInfo.infoCount }}</Tag>
+                <Tag
+                  v-if="misjudgedCount > 0"
+                  :color="issueFilter === 'misjudged' ? 'default' : 'default'"
+                  :class="['cursor-pointer', { 'misjudged-filter-active': issueFilter === 'misjudged' }]"
+                  @click="issueFilter = 'misjudged'"
+                >误判 {{ misjudgedCount }}</Tag>
               </Space>
             </template>
 
@@ -448,20 +529,45 @@ onUnmounted(() => {
                   <div
                     v-for="issue in filteredIssues"
                     :key="issue.id"
-                    :class="['issue-card', { 'issue-card-active': activeIssueId === issue.id }]"
+                    :class="['issue-card', { 'issue-card-active': activeIssueId === issue.id, 'issue-card-misjudged': issue.misjudged }]"
                     @click="selectIssue(issue.id)"
                   >
                     <div class="issue-card-top">
                       <Tag :color="severityConfig[issue.severity]?.tagColor" size="small">{{ severityConfig[issue.severity]?.label }}</Tag>
-                      <span class="issue-card-title">{{ issue.title }}</span>
+                      <span :class="['issue-card-title', { 'issue-title-misjudged': issue.misjudged }]">{{ issue.title }}</span>
+                      <Tag v-if="issue.misjudged" color="default" size="small" class="misjudged-tag">误判</Tag>
                     </div>
                     <div class="issue-card-location">{{ issue.location }}</div>
-                    <p class="issue-card-desc">{{ issue.description }}</p>
-                    <div class="issue-card-suggestion">
+                    <p :class="['issue-card-desc', { 'issue-desc-misjudged': issue.misjudged }]">{{ issue.description }}</p>
+                    <div v-if="issue.misjudged" class="issue-card-misjudgment-reason">
+                      <StopOutlined class="misjudgment-reason-icon" /> 误判原因：{{ issue.misjudgmentReason }}
+                    </div>
+                    <div v-if="!issue.misjudged" class="issue-card-suggestion">
                       <CheckCircleOutlined class="issue-card-suggestion-icon" /> {{ issue.suggestion }}
                     </div>
-                    <div class="issue-card-rule">
-                      <FileTextOutlined class="issue-card-rule-icon" /> {{ issue.rule }}
+                    <div class="issue-card-bottom">
+                      <div class="issue-card-rule">
+                        <FileTextOutlined class="issue-card-rule-icon" /> {{ issue.rule }}
+                      </div>
+                      <div class="issue-card-actions" @click.stop>
+                        <Button
+                          v-if="!issue.misjudged"
+                          type="text"
+                          size="small"
+                          danger
+                          @click="openMisjudgmentModal(issue.id)"
+                        >
+                          <StopOutlined /> 标记误判
+                        </Button>
+                        <Button
+                          v-else
+                          type="text"
+                          size="small"
+                          @click="undoMisjudgment(issue.id)"
+                        >
+                          <UndoOutlined /> 撤销
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -523,6 +629,27 @@ onUnmounted(() => {
       </div>
 
     </div>
+
+    <!-- 误判原因弹窗 -->
+    <Modal
+      v-model:open="misjudgmentModalVisible"
+      title="标记为误判"
+      ok-text="确认标记"
+      cancel-text="取消"
+      @ok="confirmMisjudgment"
+      :width="480"
+    >
+      <div class="misjudgment-modal-body">
+        <p class="misjudgment-modal-tip">请说明该条问题为何属于误判，原因将记录到知识库用于优化AI审核规则。</p>
+        <Input.TextArea
+          v-model:value="misjudgmentReason"
+          placeholder="例如：该条款已在附件中体现 / 此处为行业惯例无需修改 / 金额已经过特殊审批..."
+          :rows="3"
+          :maxlength="200"
+          show-count
+        />
+      </div>
+    </Modal>
   </div>
 </template>
 
@@ -978,6 +1105,83 @@ onUnmounted(() => {
 .version-compare-table :deep(.vxe-body--column) {
   padding-top: var(--list-cell-padding-y) !important;
   padding-bottom: var(--list-cell-padding-y) !important;
+}
+
+/* ===== 误判矫正相关样式 ===== */
+.overview-icon-misjudged { background: #f5f5f5; color: #8c8c8c; }
+.overview-value-misjudged { color: #8c8c8c; }
+
+.issue-card-misjudged {
+  opacity: 0.6;
+  border-color: #d9d9d9;
+  background: #fafafa;
+}
+
+.issue-card-misjudged:hover {
+  background: #f5f5f5;
+}
+
+.issue-title-misjudged {
+  text-decoration: line-through;
+  color: #8c8c8c;
+}
+
+.issue-desc-misjudged {
+  text-decoration: line-through;
+  color: #bfbfbf;
+}
+
+.issue-card-misjudgment-reason {
+  font-size: 12px;
+  color: #8c8c8c;
+  background: #f5f5f5;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.misjudgment-reason-icon {
+  color: #8c8c8c;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.misjudged-tag {
+  background: #f5f5f5;
+  color: #8c8c8c;
+  border-color: #d9d9d9;
+}
+
+.issue-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.issue-card-actions {
+  flex-shrink: 0;
+}
+
+.misjudged-filter-active {
+  background: #f5f5f5 !important;
+  color: #8c8c8c !important;
+  border-color: #8c8c8c !important;
+}
+
+.misjudgment-modal-body {
+  padding: 8px 0;
+}
+
+.misjudgment-modal-tip {
+  font-size: 13px;
+  color: #606266;
+  margin-bottom: 12px;
+  line-height: 1.6;
 }
 
 </style>

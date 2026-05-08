@@ -152,14 +152,14 @@ const passResultLabels: Record<string, string> = {
 
 // Mock 数据
 const mockData = [
-  { id: 1, docName: 'XX市政府采购服务合同-2024.docx', docType: 'contract', standard: '政府采购合同标准 v2.1', status: 'completed', passResult: 'reject', issueCount: 7, reviewVersion: 3, submitter: '李四', submitTime: '2024-12-20 14:30', reviewTime: '18秒' },
-  { id: 2, docName: '2024年Q4财务报销汇总表.xlsx', docType: 'finance', standard: '企业财务报销规范 v1.3', status: 'completed', passResult: 'pass', issueCount: 3, reviewVersion: 1, submitter: '王五', submitTime: '2024-12-20 13:15', reviewTime: '12秒' },
-  { id: 3, docName: '项目立项审批表-智慧城市.pdf', docType: 'form', standard: '内部审批表单规范 v3.0', status: 'completed', passResult: 'reject', issueCount: 4, reviewVersion: 2, submitter: '赵六', submitTime: '2024-12-20 10:00', reviewTime: '15秒' },
-  { id: 4, docName: 'XX区城市更新项目可行性报告.docx', docType: 'form', standard: '项目申报材料审核标准 v1.2', status: 'processing', passResult: '', issueCount: 0, reviewVersion: 1, submitter: '赵六', submitTime: '2024-12-20 09:50', reviewTime: '-' },
-  { id: 5, docName: 'XX物业租赁合同-商铺A区.docx', docType: 'contract', standard: '租赁合同审核标准 v1.0', status: 'completed', passResult: 'pass', issueCount: 2, reviewVersion: 2, submitter: '张三', submitTime: '2024-12-19 16:20', reviewTime: '20秒' },
-  { id: 6, docName: '12月份差旅报销单-批量.zip', docType: 'finance', standard: '企业财务报销规范 v1.3', status: 'pending', passResult: '', issueCount: 0, reviewVersion: 1, submitter: '李四', submitTime: '2024-12-20 15:00', reviewTime: '-' },
-  { id: 7, docName: 'XX市智慧停车项目投标文件.docx', docType: 'bid', standard: '标书格式规范 v2.0', status: 'completed', passResult: 'manual', issueCount: 5, reviewVersion: 4, submitter: '钱七', submitTime: '2024-12-19 11:30', reviewTime: '25秒' },
-  { id: 8, docName: '物业服务合同-XX花园.docx', docType: 'contract', standard: '企业服务合同标准 v1.0', status: 'completed', passResult: 'pass', issueCount: 1, reviewVersion: 1, submitter: '张三', submitTime: '2024-12-18 09:00', reviewTime: '16秒' },
+  { id: 1, docName: 'XX市政府采购服务合同-2024.docx', docType: 'contract', standard: '政府采购合同标准 v2.1', status: 'completed', passResult: 'reject', issueCount: 7, misjudgedCount: 2, reviewVersion: 3, submitter: '李四', submitTime: '2024-12-20 14:30', reviewTime: '18秒' },
+  { id: 2, docName: '2024年Q4财务报销汇总表.xlsx', docType: 'finance', standard: '企业财务报销规范 v1.3', status: 'completed', passResult: 'pass', issueCount: 3, misjudgedCount: 1, reviewVersion: 1, submitter: '王五', submitTime: '2024-12-20 13:15', reviewTime: '12秒' },
+  { id: 3, docName: '项目立项审批表-智慧城市.pdf', docType: 'form', standard: '内部审批表单规范 v3.0', status: 'completed', passResult: 'reject', issueCount: 4, misjudgedCount: 0, reviewVersion: 2, submitter: '赵六', submitTime: '2024-12-20 10:00', reviewTime: '15秒' },
+  { id: 4, docName: 'XX区城市更新项目可行性报告.docx', docType: 'form', standard: '项目申报材料审核标准 v1.2', status: 'processing', passResult: '', issueCount: 0, misjudgedCount: 0, reviewVersion: 1, submitter: '赵六', submitTime: '2024-12-20 09:50', reviewTime: '-' },
+  { id: 5, docName: 'XX物业租赁合同-商铺A区.docx', docType: 'contract', standard: '租赁合同审核标准 v1.0', status: 'completed', passResult: 'pass', issueCount: 2, misjudgedCount: 1, reviewVersion: 2, submitter: '张三', submitTime: '2024-12-19 16:20', reviewTime: '20秒' },
+  { id: 6, docName: '12月份差旅报销单-批量.zip', docType: 'finance', standard: '企业财务报销规范 v1.3', status: 'pending', passResult: '', issueCount: 0, misjudgedCount: 0, reviewVersion: 1, submitter: '李四', submitTime: '2024-12-20 15:00', reviewTime: '-' },
+  { id: 7, docName: 'XX市智慧停车项目投标文件.docx', docType: 'bid', standard: '标书格式规范 v2.0', status: 'completed', passResult: 'manual', issueCount: 5, misjudgedCount: 3, reviewVersion: 4, submitter: '钱七', submitTime: '2024-12-19 11:30', reviewTime: '25秒' },
+  { id: 8, docName: '物业服务合同-XX花园.docx', docType: 'contract', standard: '企业服务合同标准 v1.0', status: 'completed', passResult: 'pass', issueCount: 1, misjudgedCount: 0, reviewVersion: 1, submitter: '张三', submitTime: '2024-12-18 09:00', reviewTime: '16秒' },
 ];
 
 const gridOptions: VxeGridProps = {
@@ -205,6 +205,13 @@ const gridOptions: VxeGridProps = {
       width: 90,
       align: 'center',
       slots: { default: 'issueCount' },
+    },
+    {
+      field: 'misjudgedCount',
+      title: '误判数',
+      width: 90,
+      align: 'center',
+      slots: { default: 'misjudgedCount' },
     },
     {
       field: 'submitTime',
@@ -363,6 +370,15 @@ function handleTransferManual(row: any) {
             <span v-else class="text-gray-400">-</span>
           </template>
 
+          <template #misjudgedCount="{ row }">
+            <span v-if="row.misjudgedCount > 0" class="misjudged-count">
+              <span class="text-base font-semibold">{{ row.misjudgedCount }}</span>
+              <span class="text-xs font-normal ml-0.5">个</span>
+            </span>
+            <span v-else-if="row.status === 'completed'" class="text-gray-300">0</span>
+            <span v-else class="text-gray-400">-</span>
+          </template>
+
           <template #reviewVersion="{ row }">
             <span v-if="row.reviewVersion > 1" class="text-black">
               <span class="text-base font-semibold">{{ row.reviewVersion }}</span>
@@ -434,5 +450,9 @@ function handleTransferManual(row: any) {
 .table-style-wrapper :deep(.vxe-body--column) {
   padding-top: var(--list-cell-padding-y) !important;
   padding-bottom: var(--list-cell-padding-y) !important;
+}
+
+.misjudged-count {
+  color: #8c8c8c;
 }
 </style>

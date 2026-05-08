@@ -114,7 +114,7 @@ const gridOptions: VxeGridProps = {
     },
     {
       field: 'patternCount',
-      title: '模式数',
+      title: '问题数',
       width: 90,
       align: 'center',
       slots: { default: 'patternCount' },

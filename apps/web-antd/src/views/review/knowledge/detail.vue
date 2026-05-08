@@ -19,6 +19,7 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
   LinkOutlined,
+  StopOutlined,
 } from '@ant-design/icons-vue';
 
 import { AnchorNav } from '#/components/anchor-nav';
@@ -61,6 +62,7 @@ const knowledgeInfo = ref({
   type: '合同类',
   caseCount: 128,
   patternCount: 23,
+  misjudgedCount: 15,
   accuracy: 95,
   updateTime: '2024-12-18',
   description: '政府采购服务、货物合同的历史审核案例及常见问题模式。包含多年积累的审核经验，覆盖合同要素、金额条款、期限条款、违约责任等核心审核维度。',
@@ -104,6 +106,18 @@ const patternMockData = [
   { id: 9, name: '保密条款缺失', frequency: 8, accuracy: '94%', category: '完整性' },
   { id: 10, name: '争议解决方式未约定', frequency: 7, accuracy: '89%', category: '完整性' },
   { id: 11, name: '交付标准模糊', frequency: 6, accuracy: '85%', category: '期限类' },
+];
+
+// 误判记录 mock 数据
+const misjudgedMockData = [
+  { id: 1, rule: '规则 R005 · 服务期限必须明确起止日期', reason: '合同附件中已有补充协议明确了起止日期', docName: 'XX市政府采购服务合同-2024.docx', marker: '李四', time: '2024-12-20', ruleId: 'R005', totalTriggered: 32, misjudgedTimes: 5 },
+  { id: 2, rule: '规则 R022 · 政府采购合同应预留备案份数', reason: '本合同为内部协议，无需财政部门备案', docName: 'XX市政府采购服务合同-2024.docx', marker: '李四', time: '2024-12-20', ruleId: 'R022', totalTriggered: 18, misjudgedTimes: 8 },
+  { id: 3, rule: '规则 R018 · 知识产权条款应覆盖第三方组件', reason: '该项目为纯咨询服务，不涉及软件交付和第三方组件', docName: '咨询服务合同-XX项目.docx', marker: '张三', time: '2024-12-19', ruleId: 'R018', totalTriggered: 24, misjudgedTimes: 6 },
+  { id: 4, rule: '规则 R012 · 验收条款应明确验收方式、时限和标准文件', reason: '验收标准已在招标文件中详细约定，合同引用即可', docName: 'XX物业租赁合同-商铺A区.docx', marker: '张三', time: '2024-12-19', ruleId: 'R012', totalTriggered: 28, misjudgedTimes: 3 },
+  { id: 5, rule: '规则 R020 · 争议解决方式建议多元化', reason: '政府采购合同按规定只能走诉讼途径，不适用仲裁', docName: 'XX市政府采购服务合同-2024.docx', marker: '王五', time: '2024-12-18', ruleId: 'R020', totalTriggered: 20, misjudgedTimes: 12 },
+  { id: 6, rule: '规则 R006 · 住宿费不得超过对应级别标准', reason: '该员工已有总经理特批的住宿标准上浮审批', docName: '2024年Q4财务报销汇总表.xlsx', marker: '王五', time: '2024-12-18', ruleId: 'R006', totalTriggered: 45, misjudgedTimes: 4 },
+  { id: 7, rule: '规则 R009 · 单笔交通费超出历史均值3倍需说明', reason: '当天为机场接送往返，距离远属正常费用', docName: '2024年Q4财务报销汇总表.xlsx', marker: '王五', time: '2024-12-17', ruleId: 'R009', totalTriggered: 15, misjudgedTimes: 7 },
+  { id: 8, rule: '规则 R015 · 违约责任条款应双向约定', reason: '此为政府采购格式合同，甲方违约责任由上位法规定，合同中不重复约定', docName: '设备采购合同-XX学校.docx', marker: '赵六', time: '2024-12-16', ruleId: 'R015', totalTriggered: 30, misjudgedTimes: 9 },
 ];
 
 // 筛选条件
@@ -160,6 +174,23 @@ const patternFilterData = ref([
       { label: '格式类', value: '格式类' },
       { label: '主体类', value: '主体类' },
     ],
+    isCommon: true,
+  },
+]);
+
+const misjudgedFilterData = ref([
+  {
+    field: 'rule',
+    label: '规则',
+    type: 'a-input',
+    data: '',
+    isCommon: true,
+  },
+  {
+    field: 'docName',
+    label: '来源文档',
+    type: 'a-input',
+    data: '',
     isCommon: true,
   },
 ]);
@@ -274,8 +305,94 @@ const patternGridOptions: VxeGridProps = {
   id: 'knowledge-detail-pattern',
 };
 
+// 误判记录表格
+const misjudgedGridOptions: VxeGridProps = {
+  columns: [
+    {
+      field: 'rule',
+      title: '触发规则',
+      minWidth: 240,
+      headerAlign: 'left',
+      align: 'left',
+      slots: { default: 'misjudgedRule' },
+    },
+    {
+      field: 'reason',
+      title: '误判原因',
+      minWidth: 200,
+      headerAlign: 'left',
+      align: 'left',
+      slots: { default: 'misjudgedReason' },
+    },
+    {
+      field: 'totalTriggered',
+      title: '触发次数',
+      width: 90,
+      align: 'center',
+    },
+    {
+      field: 'misjudgedTimes',
+      title: '误判次数',
+      width: 90,
+      align: 'center',
+      slots: { default: 'misjudgedTimes' },
+    },
+    {
+      field: 'misjudgedRate',
+      title: '误判率',
+      width: 100,
+      align: 'center',
+      slots: { default: 'misjudgedRate' },
+    },
+    {
+      field: 'docName',
+      title: '来源文档',
+      width: 200,
+      headerAlign: 'left',
+      align: 'left',
+    },
+    {
+      field: 'marker',
+      title: '标记人',
+      width: 80,
+      align: 'center',
+    },
+    {
+      field: 'time',
+      title: '时间',
+      width: 110,
+      headerAlign: 'left',
+      align: 'left',
+    },
+    {
+      field: 'action',
+      title: '操作',
+      width: 100,
+      fixed: 'right',
+      slots: { default: 'misjudgedAction' },
+    },
+  ],
+  keepSource: true,
+  pagerConfig: {},
+  proxyConfig: {
+    ajax: {
+      query: async ({ page }) => {
+        const start = (page.currentPage - 1) * page.pageSize;
+        const end = start + page.pageSize;
+        return {
+          rows: misjudgedMockData.slice(start, end),
+          total: misjudgedMockData.length,
+        };
+      },
+    },
+  },
+  rowConfig: { keyField: 'id' },
+  id: 'knowledge-detail-misjudged',
+};
+
 const [CaseTable, caseTableApi] = useVbenVxeGrid({ gridOptions: caseGridOptions } as any);
 const [PatternTable, patternTableApi] = useVbenVxeGrid({ gridOptions: patternGridOptions } as any);
+const [MisjudgedTable, misjudgedTableApi] = useVbenVxeGrid({ gridOptions: misjudgedGridOptions } as any);
 
 const handleCaseFilterQuery = (_conditions: any[]) => {
   caseTableApi.query();
@@ -283,6 +400,10 @@ const handleCaseFilterQuery = (_conditions: any[]) => {
 
 const handlePatternFilterQuery = (_conditions: any[]) => {
   patternTableApi.query();
+};
+
+const handleMisjudgedFilterQuery = (_conditions: any[]) => {
+  misjudgedTableApi.query();
 };
 
 function handleDeleteCase(row: any) {
@@ -307,6 +428,20 @@ function handleDeletePattern(row: any) {
     onOk() {
       message.success('删除成功');
       patternTableApi.query();
+    },
+  });
+}
+
+function handleDeleteMisjudged(row: any) {
+  Modal.confirm({
+    title: '确认删除该条误判记录吗？',
+    content: `规则：${row.ruleId}，来源：${row.docName}`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk() {
+      message.success('删除成功');
+      misjudgedTableApi.query();
     },
   });
 }
@@ -403,6 +538,16 @@ onUnmounted(() => {
               <div class="header-metric-body">
                 <div class="header-metric-label">问题模式</div>
                 <div class="header-metric-value">{{ knowledgeInfo.patternCount }} 个</div>
+              </div>
+            </div>
+            <div class="header-metric-divider" />
+            <div class="header-metric">
+              <div class="header-metric-icon-wrap header-metric-icon-orange">
+                <StopOutlined />
+              </div>
+              <div class="header-metric-body">
+                <div class="header-metric-label">误判记录</div>
+                <div class="header-metric-value">{{ knowledgeInfo.misjudgedCount }} 条</div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -588,6 +733,62 @@ onUnmounted(() => {
                         </Space>
                       </template>
                     </PatternTable>
+                  </div>
+                </div>
+              </TabPane>
+
+              <TabPane key="misjudged" class="tab-pane-content">
+                <template #tab>
+                  <span>误判记录</span>
+                  <Tag v-if="knowledgeInfo.misjudgedCount > 0" color="default" :bordered="false" class="tag-sm" style="margin-left: 6px;">{{ knowledgeInfo.misjudgedCount }}</Tag>
+                </template>
+                <div class="flex flex-col gap-3">
+                  <div class="shrink-0 flex items-center justify-between">
+                    <CommonFilter
+                      :filter-data="misjudgedFilterData"
+                      type="both"
+                      @handle-query="handleMisjudgedFilterQuery"
+                    />
+                  </div>
+                  <div class="table-style-wrapper" :style="tableCssVars">
+                    <MisjudgedTable table-title="误判记录明细">
+                      <template #misjudgedRule="{ row }">
+                        <div class="flex flex-col gap-1">
+                          <span class="doc-name-text">{{ row.ruleId }}</span>
+                          <span class="text-xs text-gray-500">{{ row.rule.replace(`${row.ruleId} · `, '').replace(`规则 ${row.ruleId} · `, '') }}</span>
+                        </div>
+                      </template>
+                      <template #misjudgedReason="{ row }">
+                        <span class="misjudged-reason-text">{{ row.reason }}</span>
+                      </template>
+                      <template #misjudgedTimes="{ row }">
+                        <span class="font-semibold" style="color: #8c8c8c;">{{ row.misjudgedTimes }}</span>
+                      </template>
+                      <template #misjudgedRate="{ row }">
+                        <Tag
+                          :color="(row.misjudgedTimes / row.totalTriggered) >= 0.4 ? 'error' : (row.misjudgedTimes / row.totalTriggered) >= 0.2 ? 'warning' : 'default'"
+                          size="small"
+                        >
+                          {{ Math.round(row.misjudgedTimes / row.totalTriggered * 100) }}%
+                        </Tag>
+                      </template>
+                      <template #misjudgedAction="{ row }">
+                        <Space>
+                          <Dropdown placement="bottomRight">
+                            <template #overlay>
+                              <Menu @click="({ key }: any) => { if (key === 'delete') handleDeleteMisjudged(row); }">
+                                <MenuItem key="delete">
+                                  <span class="text-red-500">删除</span>
+                                </MenuItem>
+                              </Menu>
+                            </template>
+                            <a-button size="small" type="link">
+                              <EllipsisOutlined />
+                            </a-button>
+                          </Dropdown>
+                        </Space>
+                      </template>
+                    </MisjudgedTable>
                   </div>
                 </div>
               </TabPane>
@@ -850,5 +1051,14 @@ onUnmounted(() => {
 .table-style-wrapper :deep(.vxe-body--column) {
   padding-top: var(--list-cell-padding-y) !important;
   padding-bottom: var(--list-cell-padding-y) !important;
+}
+
+/* 误判 */
+.header-metric-icon-orange { background: #fff7e6; color: #fa8c16; }
+
+.misjudged-reason-text {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.5;
 }
 </style>

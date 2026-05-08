@@ -4,7 +4,7 @@ import type { VxeGridProps } from '#/adapter/vxe-table';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { Card, Tag, Button, Space, Select } from 'ant-design-vue';
+import { Card, Tag, Button, Space, Select, Modal, Input, message } from 'ant-design-vue';
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
@@ -21,6 +21,8 @@ import {
   DatabaseOutlined,
   HistoryOutlined,
   SwapOutlined,
+  StopOutlined,
+  UndoOutlined,
 } from '@ant-design/icons-vue';
 
 import { AnchorNav } from '#/components/anchor-nav';
@@ -81,17 +83,53 @@ const docInfo = ref({
 const showMode = ref<'all' | 'issues'>('all');
 
 const tableData = ref([
-  { key: 1, row: 1, date: '2024-10-05', person: '张三', type: '差旅-交通', amount: 1280, invoice: 'FP20241005001', approver: '李总', remark: '北京出差高铁', status: 'pass' },
-  { key: 2, row: 2, date: '2024-10-05', person: '张三', type: '差旅-住宿', amount: 850, invoice: 'FP20241005002', approver: '李总', remark: '北京住宿2晚', status: 'pass' },
-  { key: 3, row: 3, date: '2024-10-08', person: '李四', type: '差旅-住宿', amount: 2800, invoice: 'FP20241008003', approver: '王总', remark: '上海出差3晚', status: 'error', issue: '住宿费超出标准', issueDetail: '单晚金额 ¥933 超出标准上限 ¥800/晚（普通员工标准）', rule: '规则 R06 · 住宿费不得超过对应级别标准', suggestion: '超出部分 ¥400 需个人承担或提供特殊审批说明' },
-  { key: 4, row: 4, date: '2024-10-12', person: '王五', type: '办公用品', amount: 3200, invoice: 'FP20241012004', approver: '李总', remark: '采购打印纸等', status: 'pass' },
-  { key: 5, row: 5, date: '2024-10-15', person: '赵六', type: '招待费', amount: 5600, invoice: '', approver: '李总', remark: '客户晚宴', status: 'error', issue: '缺少发票附件', issueDetail: '金额 ¥5,600 的招待费未提供对应发票编号和扫描件', rule: '规则 R02 · 所有报销项必须附有效发票', suggestion: '补充发票或提供情况说明' },
-  { key: 6, row: 6, date: '2024-10-18', person: '张三', type: '差旅-交通', amount: 680, invoice: 'FP20241018006', approver: '李总', remark: '打车费', status: 'warning', issue: '单次打车费异常偏高', issueDetail: '单次打车 ¥680，历史同类出差平均打车费为 ¥120-200', rule: '规则 R09 · 单笔交通费超出历史均值3倍需说明', suggestion: '请补充行程说明（如机场接送、跨城等）' },
-  { key: 7, row: 7, date: '2024-10-20', person: '孙七', type: '招待费', amount: 2900, invoice: '', approver: '', remark: '部门聚餐', status: 'error', issue: '多项违规', issueDetail: '缺少发票附件；审批人为空；"部门聚餐"不属于招待费范畴', rule: '规则 R02、R01、R11', suggestion: '补充发票、填写审批人、修改费用类型为"团建费"' },
-  { key: 8, row: 8, date: '2024-10-22', person: '李四', type: '办公用品', amount: 560, invoice: 'FP20241022008', approver: '王总', remark: '键盘鼠标', status: 'pass' },
-  { key: 9, row: 9, date: '2024-10-25', person: '张三', type: '差旅-住宿', amount: 1800, invoice: 'FP20241025009', approver: '李总', remark: '深圳出差2晚', status: 'error', issue: '住宿费超出标准', issueDetail: '单晚 ¥900 超出标准上限 ¥800/晚', rule: '规则 R06 · 住宿费不得超过对应级别标准', suggestion: '超出部分需个人承担或提供特殊审批' },
-  { key: 10, row: 10, date: '2024-10-28', person: '王五', type: '通讯费', amount: 450, invoice: 'FP20241028010', approver: '李总', remark: '10月话费', status: 'warning', issue: '通讯费超额', issueDetail: '月度通讯费 ¥450 超出标准 ¥300/月', rule: '规则 R08 · 通讯费不得超过岗位标准', suggestion: '超出部分 ¥150 需说明原因' },
+  { key: 1, row: 1, date: '2024-10-05', person: '张三', type: '差旅-交通', amount: 1280, invoice: 'FP20241005001', approver: '李总', remark: '北京出差高铁', status: 'pass', misjudged: false, misjudgmentReason: '' },
+  { key: 2, row: 2, date: '2024-10-05', person: '张三', type: '差旅-住宿', amount: 850, invoice: 'FP20241005002', approver: '李总', remark: '北京住宿2晚', status: 'pass', misjudged: false, misjudgmentReason: '' },
+  { key: 3, row: 3, date: '2024-10-08', person: '李四', type: '差旅-住宿', amount: 2800, invoice: 'FP20241008003', approver: '王总', remark: '上海出差3晚', status: 'error', issue: '住宿费超出标准', issueDetail: '单晚金额 ¥933 超出标准上限 ¥800/晚（普通员工标准）', rule: '规则 R06 · 住宿费不得超过对应级别标准', suggestion: '超出部分 ¥400 需个人承担或提供特殊审批说明', misjudged: false, misjudgmentReason: '' },
+  { key: 4, row: 4, date: '2024-10-12', person: '王五', type: '办公用品', amount: 3200, invoice: 'FP20241012004', approver: '李总', remark: '采购打印纸等', status: 'pass', misjudged: false, misjudgmentReason: '' },
+  { key: 5, row: 5, date: '2024-10-15', person: '赵六', type: '招待费', amount: 5600, invoice: '', approver: '李总', remark: '客户晚宴', status: 'error', issue: '缺少发票附件', issueDetail: '金额 ¥5,600 的招待费未提供对应发票编号和扫描件', rule: '规则 R02 · 所有报销项必须附有效发票', suggestion: '补充发票或提供情况说明', misjudged: false, misjudgmentReason: '' },
+  { key: 6, row: 6, date: '2024-10-18', person: '张三', type: '差旅-交通', amount: 680, invoice: 'FP20241018006', approver: '李总', remark: '打车费', status: 'warning', issue: '单次打车费异常偏高', issueDetail: '单次打车 ¥680，历史同类出差平均打车费为 ¥120-200', rule: '规则 R09 · 单笔交通费超出历史均值3倍需说明', suggestion: '请补充行程说明（如机场接送、跨城等）', misjudged: false, misjudgmentReason: '' },
+  { key: 7, row: 7, date: '2024-10-20', person: '孙七', type: '招待费', amount: 2900, invoice: '', approver: '', remark: '部门聚餐', status: 'error', issue: '多项违规', issueDetail: '缺少发票附件；审批人为空；"部门聚餐"不属于招待费范畴', rule: '规则 R02、R01、R11', suggestion: '补充发票、填写审批人、修改费用类型为"团建费"', misjudged: false, misjudgmentReason: '' },
+  { key: 8, row: 8, date: '2024-10-22', person: '李四', type: '办公用品', amount: 560, invoice: 'FP20241022008', approver: '王总', remark: '键盘鼠标', status: 'pass', misjudged: false, misjudgmentReason: '' },
+  { key: 9, row: 9, date: '2024-10-25', person: '张三', type: '差旅-住宿', amount: 1800, invoice: 'FP20241025009', approver: '李总', remark: '深圳出差2晚', status: 'error', issue: '住宿费超出标准', issueDetail: '单晚 ¥900 超出标准上限 ¥800/晚', rule: '规则 R06 · 住宿费不得超过对应级别标准', suggestion: '超出部分需个人承担或提供特殊审批', misjudged: false, misjudgmentReason: '' },
+  { key: 10, row: 10, date: '2024-10-28', person: '王五', type: '通讯费', amount: 450, invoice: 'FP20241028010', approver: '李总', remark: '10月话费', status: 'warning', issue: '通讯费超额', issueDetail: '月度通讯费 ¥450 超出标准 ¥300/月', rule: '规则 R08 · 通讯费不得超过岗位标准', suggestion: '超出部分 ¥150 需说明原因', misjudged: false, misjudgmentReason: '' },
 ]);
+
+// 误判矫正
+const misjudgmentModalVisible = ref(false);
+const misjudgmentReason = ref('');
+const currentMisjudgmentKey = ref<number | null>(null);
+
+const misjudgedCount = computed(() => tableData.value.filter(r => r.misjudged).length);
+
+function openMisjudgmentModal(key: number) {
+  currentMisjudgmentKey.value = key;
+  misjudgmentReason.value = '';
+  misjudgmentModalVisible.value = true;
+}
+
+function confirmMisjudgment() {
+  if (!misjudgmentReason.value.trim()) {
+    message.warning('请填写误判原因');
+    return;
+  }
+  const row = tableData.value.find(r => r.key === currentMisjudgmentKey.value);
+  if (row) {
+    row.misjudged = true;
+    row.misjudgmentReason = misjudgmentReason.value.trim();
+    message.success('已标记为误判，记录将沉淀到知识库');
+  }
+  misjudgmentModalVisible.value = false;
+}
+
+function undoMisjudgment(key: number) {
+  const row = tableData.value.find(r => r.key === key);
+  if (row) {
+    row.misjudged = false;
+    row.misjudgmentReason = '';
+    message.info('已撤销误判标记');
+  }
+}
 
 const displayData = computed(() => {
   if (showMode.value === 'issues') {
@@ -113,6 +151,7 @@ const detailGridOptions: VxeGridProps = {
   },
   rowConfig: { keyField: 'key', isHover: true },
   rowClassName: ({ row }: any) => {
+    if (row.misjudged) return 'row-misjudged';
     if (row.status === 'error') return 'row-error';
     if (row.status === 'warning') return 'row-warning';
     return '';
@@ -225,6 +264,22 @@ function handleScroll() {
   activeAnchor.value = current;
 }
 
+// 手工通过
+const manualPassed = ref(false);
+
+function handleManualPass() {
+  Modal.confirm({
+    title: '确认手工通过该文档？',
+    content: 'AI审核结果将保留作为参考记录，文档将标记为"人工通过"并流转到下一环节。',
+    okText: '确认通过',
+    cancelText: '取消',
+    onOk() {
+      manualPassed.value = true;
+      message.success('已手工通过，文档将流转到下一审核环节');
+    },
+  });
+}
+
 onMounted(() => {
   scrollContainer.value?.addEventListener('scroll', handleScroll, { passive: true });
 });
@@ -264,7 +319,18 @@ onUnmounted(() => {
             <Space>
               <Button type="default" size="small" @click="router.push('/review/task')"><ArrowLeftOutlined /> 返回</Button>
               <Button type="default" size="small"><DownloadOutlined /> 导出报告</Button>
-              <Button type="primary" size="small"><FileExcelOutlined /> 下载标注表格</Button>
+              <Button type="default" size="small"><FileExcelOutlined /> 下载标注表格</Button>
+              <Button
+                v-if="!manualPassed"
+                type="primary"
+                size="small"
+                @click="handleManualPass"
+              >
+                <CheckCircleOutlined /> 通过
+              </Button>
+              <Tag v-else color="success" style="margin: 0; line-height: 24px;">
+                <CheckCircleOutlined /> 已人工通过
+              </Tag>
             </Space>
           </div>
           <div class="header-metrics-row">
@@ -378,6 +444,13 @@ onUnmounted(() => {
               <div class="overview-value">¥{{ docInfo.totalAmount.toLocaleString() }}</div>
             </div>
           </div>
+          <div v-if="misjudgedCount > 0" class="overview-item" :style="cardRadiusStyle">
+            <div class="overview-icon overview-icon-misjudged"><StopOutlined /></div>
+            <div class="overview-body">
+              <div class="overview-label">已标记误判</div>
+              <div class="overview-value overview-value-misjudged">{{ misjudgedCount }}</div>
+            </div>
+          </div>
         </div>
 
         <!-- 金额汇总 -->
@@ -438,14 +511,42 @@ onUnmounted(() => {
             </template>
             <template #status="{ row }">
               <Tag v-if="row.status === 'pass'" color="success">通过</Tag>
+              <template v-else-if="row.misjudged">
+                <Tag color="default"><span style="text-decoration: line-through;">{{ row.issue }}</span></Tag>
+                <Tag color="default" size="small" style="margin-left: 4px;">误判</Tag>
+              </template>
               <Tag v-else-if="row.status === 'error'" color="error">{{ row.issue }}</Tag>
               <Tag v-else color="warning">{{ row.issue }}</Tag>
             </template>
             <template #expandContent="{ row }">
-              <div v-if="row.status !== 'pass'" :class="['issue-tooltip', row.status === 'warning' ? 'issue-tooltip-warning' : '']">
-                <div class="issue-tooltip-title">{{ row.issue }}</div>
-                <div class="issue-tooltip-desc">{{ row.issueDetail }}</div>
-                <div class="issue-tooltip-suggest">
+              <div v-if="row.status !== 'pass'" :class="['issue-tooltip', row.status === 'warning' ? 'issue-tooltip-warning' : '', row.misjudged ? 'issue-tooltip-misjudged' : '']">
+                <div class="issue-tooltip-header">
+                  <div :class="['issue-tooltip-title', { 'issue-tooltip-title-misjudged': row.misjudged }]">{{ row.issue }}</div>
+                  <div class="issue-tooltip-actions">
+                    <Button
+                      v-if="!row.misjudged"
+                      type="text"
+                      size="small"
+                      danger
+                      @click="openMisjudgmentModal(row.key)"
+                    >
+                      <StopOutlined /> 标记误判
+                    </Button>
+                    <Button
+                      v-else
+                      type="text"
+                      size="small"
+                      @click="undoMisjudgment(row.key)"
+                    >
+                      <UndoOutlined /> 撤销
+                    </Button>
+                  </div>
+                </div>
+                <div v-if="row.misjudged" class="issue-tooltip-misjudgment-reason">
+                  <StopOutlined class="misjudgment-reason-icon" /> 误判原因：{{ row.misjudgmentReason }}
+                </div>
+                <div :class="['issue-tooltip-desc', { 'issue-tooltip-desc-misjudged': row.misjudged }]">{{ row.issueDetail }}</div>
+                <div v-if="!row.misjudged" class="issue-tooltip-suggest">
                   <CheckCircleOutlined class="issue-tooltip-suggest-icon" />
                   <span>{{ row.suggestion }}</span>
                 </div>
@@ -508,6 +609,27 @@ onUnmounted(() => {
       </Card>
     </div>
     </div>
+
+    <!-- 误判原因弹窗 -->
+    <Modal
+      v-model:open="misjudgmentModalVisible"
+      title="标记为误判"
+      ok-text="确认标记"
+      cancel-text="取消"
+      @ok="confirmMisjudgment"
+      :width="480"
+    >
+      <div class="misjudgment-modal-body">
+        <p class="misjudgment-modal-tip">请说明该条问题为何属于误判，原因将记录到知识库用于优化AI审核规则。</p>
+        <Input.TextArea
+          v-model:value="misjudgmentReason"
+          placeholder="例如：该员工已有特殊审批 / 此为项目紧急出差已报备 / 发票已邮寄财务部待归档..."
+          :rows="3"
+          :maxlength="200"
+          show-count
+        />
+      </div>
+    </Modal>
   </div>
 </template>
 
@@ -908,6 +1030,79 @@ onUnmounted(() => {
 .version-compare-table :deep(.vxe-body--column) {
   padding-top: var(--list-cell-padding-y) !important;
   padding-bottom: var(--list-cell-padding-y) !important;
+}
+
+/* ===== 误判矫正相关样式 ===== */
+.overview-icon-misjudged { background: #f5f5f5; color: #8c8c8c; }
+.overview-value-misjudged { color: #8c8c8c; }
+
+.finance-table-wrap :deep(.row-misjudged) {
+  background-color: #fafafa !important;
+  opacity: 0.6;
+}
+
+.finance-table-wrap :deep(.row-misjudged:hover td) {
+  background-color: #f5f5f5 !important;
+}
+
+.finance-table-wrap :deep(.row-misjudged) {
+  cursor: pointer;
+}
+
+.issue-tooltip-misjudged {
+  border-left-color: #d9d9d9 !important;
+  background: #fafafa;
+}
+
+.issue-tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.issue-tooltip-title-misjudged {
+  text-decoration: line-through;
+  color: #8c8c8c !important;
+}
+
+.issue-tooltip-desc-misjudged {
+  text-decoration: line-through;
+  color: #bfbfbf;
+}
+
+.issue-tooltip-actions {
+  flex-shrink: 0;
+}
+
+.issue-tooltip-misjudgment-reason {
+  font-size: 12px;
+  color: #8c8c8c;
+  background: #f0f0f0;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.misjudgment-reason-icon {
+  color: #8c8c8c;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.misjudgment-modal-body {
+  padding: 8px 0;
+}
+
+.misjudgment-modal-tip {
+  font-size: 13px;
+  color: #606266;
+  margin-bottom: 12px;
+  line-height: 1.6;
 }
 
 </style>
