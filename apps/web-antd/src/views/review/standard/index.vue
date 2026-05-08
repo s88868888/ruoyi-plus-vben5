@@ -80,14 +80,14 @@ const typeMap: Record<string, { label: string; color: string }> = {
 
 // Mock 数据
 const mockData = [
-  { id: 1, name: '政府采购合同审核标准', version: 'v2.1', type: 'contract', ruleCount: 38, usageCount: 56, status: 'active', updateTime: '2024-12-15' },
-  { id: 2, name: '企业财务报销规范', version: 'v1.3', type: 'finance', ruleCount: 25, usageCount: 134, status: 'active', updateTime: '2024-12-10' },
-  { id: 3, name: '合同通用条款检查', version: 'v3.0', type: 'contract', ruleCount: 15, usageCount: 89, status: 'active', updateTime: '2024-11-20' },
-  { id: 4, name: '内部审批表单规范', version: 'v3.0', type: 'form', ruleCount: 20, usageCount: 67, status: 'active', updateTime: '2024-11-15' },
-  { id: 5, name: '租赁合同审核标准', version: 'v1.0', type: 'contract', ruleCount: 32, usageCount: 42, status: 'active', updateTime: '2024-12-01' },
-  { id: 6, name: '标书格式规范', version: 'v2.0', type: 'bid', ruleCount: 28, usageCount: 22, status: 'active', updateTime: '2024-10-20' },
-  { id: 7, name: '企业服务合同标准', version: 'v1.0', type: 'contract', ruleCount: 18, usageCount: 42, status: 'active', updateTime: '2024-09-10' },
-  { id: 8, name: '通用规范（违规/敏感词/格式）', version: 'v4.0', type: 'universal', ruleCount: 12, usageCount: 300, status: 'active', updateTime: '2024-12-18' },
+  { id: 1, name: '政府采购合同审核标准', version: 'v2.1', type: 'contract', ruleCount: 38, usageCount: 56, status: 'active', updater: '张明', updateTime: '2024-12-15' },
+  { id: 2, name: '企业财务报销规范', version: 'v1.3', type: 'finance', ruleCount: 25, usageCount: 134, status: 'active', updater: '李华', updateTime: '2024-12-10' },
+  { id: 3, name: '合同通用条款检查', version: 'v3.0', type: 'contract', ruleCount: 15, usageCount: 89, status: 'active', updater: '王芳', updateTime: '2024-11-20' },
+  { id: 4, name: '内部审批表单规范', version: 'v3.0', type: 'form', ruleCount: 20, usageCount: 67, status: 'active', updater: '赵强', updateTime: '2024-11-15' },
+  { id: 5, name: '租赁合同审核标准', version: 'v1.0', type: 'contract', ruleCount: 32, usageCount: 42, status: 'active', updater: '张明', updateTime: '2024-12-01' },
+  { id: 6, name: '标书格式规范', version: 'v2.0', type: 'bid', ruleCount: 28, usageCount: 22, status: 'active', updater: '李华', updateTime: '2024-10-20' },
+  { id: 7, name: '企业服务合同标准', version: 'v1.0', type: 'contract', ruleCount: 18, usageCount: 42, status: 'active', updater: '王芳', updateTime: '2024-09-10' },
+  { id: 8, name: '通用规范（违规/敏感词/格式）', version: 'v4.0', type: 'universal', ruleCount: 12, usageCount: 300, status: 'active', updater: '赵强', updateTime: '2024-12-18' },
 ];
 
 const gridOptions: VxeGridProps = {
@@ -125,6 +125,12 @@ const gridOptions: VxeGridProps = {
       title: '状态',
       width: 80,
       slots: { default: 'status' },
+    },
+    {
+      field: 'updater',
+      title: '更新人',
+      width: 100,
+      align: 'center',
     },
     {
       field: 'updateTime',
@@ -244,11 +250,11 @@ function handleDisable(row: any) {
           </template>
 
           <template #ruleCount="{ row }">
-            <span class="text-blue-500 font-semibold">{{ row.ruleCount }}</span>
+            <span class="text-blue-500 font-semibold"><span class="text-base">{{ row.ruleCount }}</span><span class="text-xs ml-0.5">条</span></span>
           </template>
 
           <template #usageCount="{ row }">
-            <span class="text-gray-600">{{ row.usageCount }}次</span>
+            <span class="text-gray-600"><span class="text-base font-semibold">{{ row.usageCount }}</span><span class="text-xs ml-0.5">次</span></span>
           </template>
 
           <template #status="{ row }">

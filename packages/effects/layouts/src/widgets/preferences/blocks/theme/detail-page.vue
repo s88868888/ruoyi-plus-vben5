@@ -31,18 +31,18 @@ interface ListTablePreference {
 
 const DEFAULT_DETAIL: DetailPagePreference = {
   cardRadius: 16,
-  contentWidth: 0,
+  contentWidth: 1500,
   fontSize: 14,
   showAnchorNav: true,
-  navMode: 'side',
+  navMode: 'horizontal',
   anchorNavMarginLeft: 20,
   anchorNavMarginRight: 0,
   anchorNavWidth: 210,
 };
 
 const DEFAULT_LIST: ListTablePreference = {
-  headerBgColor: '#f6f6f6',
-  headerTextColor: '#2b3445',
+  headerBgColor: '#2b3445',
+  headerTextColor: '#f6f6f6',
   headerPaddingY: 8,
   cellPaddingY: 8,
 };
@@ -75,7 +75,10 @@ function getListPreference(): ListTablePreference {
 }
 
 // 保存偏好设置
-function savePreference(detail: DetailPagePreference, list: ListTablePreference) {
+function savePreference(
+  detail: DetailPagePreference,
+  list: ListTablePreference,
+) {
   try {
     const existing = localStorage.getItem(STORAGE_KEY);
     const current = existing ? JSON.parse(existing) : {};
@@ -125,7 +128,10 @@ const paddingMax = 24;
   <SelectItem
     v-if="preference.showAnchorNav"
     v-model="preference.navMode"
-    :items="[{ label: '侧边导航', value: 'side' }, { label: '横向菜单条', value: 'horizontal' }]"
+    :items="[
+      { label: '侧边导航', value: 'side' },
+      { label: '横向菜单条', value: 'horizontal' },
+    ]"
   >
     导航模式
     <template #tip>侧边导航在左侧显示，横向菜单条固定在头部下方</template>

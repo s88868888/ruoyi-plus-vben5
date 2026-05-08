@@ -256,11 +256,11 @@ function handleDisable(row: any) {
           </template>
 
           <template #caseCount="{ row }">
-            <span class="text-blue-500 font-semibold">{{ row.caseCount }}</span>
+            <span class="text-gray-900 font-semibold"><span class="text-base">{{ row.caseCount }}</span><span class="text-xs ml-0.5">条</span></span>
           </template>
 
           <template #patternCount="{ row }">
-            <span class="text-purple-500 font-semibold">{{ row.patternCount }}</span>
+            <span class="text-gray-900 font-semibold"><span class="text-base">{{ row.patternCount }}</span><span class="text-xs ml-0.5">个</span></span>
           </template>
 
           <template #accuracy="{ row }">
@@ -271,7 +271,7 @@ function handleDisable(row: any) {
           </template>
 
           <template #linkedStandard="{ row }">
-            <span v-if="row.linkedStandardCount > 0" class="text-blue-500">{{ row.linkedStandardCount }} 个</span>
+            <span v-if="row.linkedStandardCount > 0" class="text-blue-500"><span class="text-base font-semibold">{{ row.linkedStandardCount }}</span><span class="text-xs ml-0.5">个</span></span>
             <span v-else class="text-gray-400">未关联</span>
           </template>
 

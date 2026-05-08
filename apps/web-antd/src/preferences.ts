@@ -30,6 +30,8 @@ export const overridesPreferences = defineOverridesPreferences({
      * 2. 切换租户登录后不会重新加载菜单
      */
     // loginExpiredMode: 'modal',
+    layout: 'header-nav',
+    contentCompact: 'wide',
   },
   footer: {
     /**

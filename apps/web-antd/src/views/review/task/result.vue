@@ -740,11 +740,11 @@ onUnmounted(() => {
   margin-left: 2px;
 }
 
-.overview-value-error { color: #f5222d; }
-.overview-value-warning { color: #fa8c16; }
-.overview-value-info { color: #1890ff; }
-.overview-value-success { color: #52c41a; }
-.overview-value-rate { color: #722ed1; }
+.overview-value-error { color: #1f2937; }
+.overview-value-warning { color: #1f2937; }
+.overview-value-info { color: #1f2937; }
+.overview-value-success { color: #1f2937; }
+.overview-value-rate { color: #1f2937; }
 
 .detail-card { overflow: hidden; }
 .detail-card :deep(.ant-card-head) {

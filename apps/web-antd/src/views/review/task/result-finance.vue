@@ -354,28 +354,28 @@ onUnmounted(() => {
             <div class="overview-icon overview-icon-pass"><CheckCircleOutlined /></div>
             <div class="overview-body">
               <div class="overview-label">通过</div>
-              <div class="overview-value text-green-500">{{ docInfo.passRows }}</div>
+              <div class="overview-value">{{ docInfo.passRows }}</div>
             </div>
           </div>
           <div class="overview-item" :style="cardRadiusStyle">
             <div class="overview-icon overview-icon-error"><CloseCircleOutlined /></div>
             <div class="overview-body">
               <div class="overview-label">严重问题</div>
-              <div class="overview-value text-red-500">{{ docInfo.errorCount }}</div>
+              <div class="overview-value">{{ docInfo.errorCount }}</div>
             </div>
           </div>
           <div class="overview-item" :style="cardRadiusStyle">
             <div class="overview-icon overview-icon-warning"><ExclamationCircleOutlined /></div>
             <div class="overview-body">
               <div class="overview-label">一般问题</div>
-              <div class="overview-value text-orange-500">{{ docInfo.warningCount }}</div>
+              <div class="overview-value">{{ docInfo.warningCount }}</div>
             </div>
           </div>
           <div class="overview-item" :style="cardRadiusStyle">
             <div class="overview-icon overview-icon-amount"><DollarOutlined /></div>
             <div class="overview-body">
               <div class="overview-label">报销总金额</div>
-              <div class="overview-value text-blue-500">¥{{ docInfo.totalAmount.toLocaleString() }}</div>
+              <div class="overview-value">¥{{ docInfo.totalAmount.toLocaleString() }}</div>
             </div>
           </div>
         </div>

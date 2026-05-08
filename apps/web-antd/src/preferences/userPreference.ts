@@ -43,10 +43,10 @@ export interface UserPreference {
 const DEFAULT_PREFERENCE: UserPreference = {
   detailPage: {
     cardRadius: 16,
-    contentWidth: 0,
+    contentWidth: 1500,
     fontSize: 14,
     showAnchorNav: true,
-    navMode: 'side',
+    navMode: 'horizontal',
     anchorNavMarginLeft: 10,
     anchorNavMarginRight: 20,
     anchorNavWidth: 210,
