@@ -3,10 +3,13 @@ import { ref, computed, watch } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import { Form, FormItem, Input, Select, AutoComplete, Slider, InputNumber, Progress, Tooltip, Divider, message } from 'ant-design-vue';
 import { InfoCircleOutlined } from '@ant-design/icons-vue';
+import { reviewStandardRuleAdd, reviewStandardRuleUpdate } from '#/api/review/standard';
 
 const emit = defineEmits<{ reload: [] }>();
 
 const isEdit = ref(false);
+const ruleId = ref<number | string | undefined>(undefined);
+const standardId = ref<number | string | undefined>(undefined);
 
 const formData = ref({
   content: '',
@@ -59,8 +62,13 @@ const [BasicDrawer] = useVbenDrawer({
     }
   },
   onData: (data: any) => {
+    if (data && data.standardId) {
+      standardId.value = data.standardId;
+    }
     if (data && data.content) {
       isEdit.value = true;
+      ruleId.value = data.id;
+      standardId.value = data.standardId;
       formData.value = {
         content: data.content,
         severity: data.severity,
@@ -85,7 +93,24 @@ const [BasicDrawer] = useVbenDrawer({
       message.warning('请选择或输入分类');
       return;
     }
-    message.success(isEdit.value ? '规则修改成功' : '规则添加成功');
+    if (isEdit.value) {
+      await reviewStandardRuleUpdate({
+        id: ruleId.value as any,
+        standardId: standardId.value as any,
+        content: formData.value.content,
+        severity: formData.value.severity,
+        category: formData.value.category,
+        weight: formData.value.weight,
+      });
+    } else {
+      await reviewStandardRuleAdd({
+        standardId: standardId.value as any,
+        content: formData.value.content,
+        severity: formData.value.severity,
+        category: formData.value.category,
+        weight: formData.value.weight,
+      });
+    }
     emit('reload');
   },
 });

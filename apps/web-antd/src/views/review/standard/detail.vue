@@ -2,7 +2,7 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
@@ -10,17 +10,14 @@ import { Card, Tag, Button, Space, Dropdown, Menu, MenuItem, Progress, Tooltip, 
 import {
   ArrowLeftOutlined,
   PlusOutlined,
-  EditOutlined,
   EllipsisOutlined,
   FileTextOutlined,
   FieldNumberOutlined,
   BarChartOutlined,
   ClockCircleOutlined,
   ImportOutlined,
-  BulbOutlined,
   BookOutlined,
   LinkOutlined,
-  DeleteOutlined,
   DatabaseOutlined,
   InfoCircleOutlined,
 } from '@ant-design/icons-vue';
@@ -29,11 +26,24 @@ import type { AnchorNavItem } from '#/components/anchor-nav';
 import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import CommonFilter from '#/components/CommonFilter/index.vue';
+import {
+  reviewStandardInfo,
+  reviewStandardRuleList,
+  reviewStandardRuleRemove,
+  reviewStandardKnowledges,
+  reviewStandardLinkKnowledge,
+  reviewStandardUnlinkKnowledge,
+} from '#/api/review/standard';
+import { reviewKnowledgeList } from '#/api/review/knowledge';
+import type { ReviewStandard, ReviewStandardRule } from '#/api/review/standard/model';
+import type { ReviewKnowledge } from '#/api/review/knowledge/model';
 import AddRuleDrawer from './modules/add-rule-drawer.vue';
 import ImportRuleDrawer from './modules/import-rule-drawer.vue';
 import SmartParseDrawer from './modules/smart-parse-drawer.vue';
 
+const route = useRoute();
 const router = useRouter();
+const standardId = computed(() => route.query.id as string);
 const layoutPreference = useDetailPagePreference();
 const tablePreference = useListTablePreference();
 const scrollContainer = ref<HTMLElement | null>(null);
@@ -62,51 +72,41 @@ const tableCssVars = computed(() => ({
   '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
 }));
 
-const standardInfo = ref({
-  name: '政府采购合同审核标准',
-  version: 'v2.1',
-  type: '合同类',
-  ruleCount: 38,
-  usageCount: 56,
-  updateTime: '2024-12-15',
-  description: '适用于政府采购服务合同、货物合同的审核，涵盖合同要素完整性、金额一致性、条款合规性等检查项。',
-});
-
-// 关联知识库 mock 数据
-const linkedKnowledgeBases = ref([
-  { id: 1, name: '政府采购合同案例库', caseCount: 128, patternCount: 23, accuracy: 95, lastSync: '2024-12-18', status: 'synced' },
-  { id: 2, name: '合同纠纷判例库', caseCount: 86, patternCount: 15, accuracy: 91, lastSync: '2024-12-15', status: 'synced' },
-  { id: 3, name: '财政审计问题库', caseCount: 42, patternCount: 8, accuracy: 88, lastSync: '2024-12-10', status: 'outdated' },
-]);
-
-const availableKnowledgeBases = ref([
-  { id: 4, name: '企业服务合同案例库', caseCount: 64, patternCount: 12 },
-  { id: 5, name: '物业租赁合同案例库', caseCount: 53, patternCount: 9 },
-  { id: 6, name: '劳动合同合规案例库', caseCount: 71, patternCount: 18 },
-]);
+const standardInfo = ref<Partial<ReviewStandard>>({});
+const ruleList = ref<ReviewStandardRule[]>([]);
+const linkedKnowledgeBases = ref<ReviewKnowledge[]>([]);
+const availableKnowledgeBases = ref<ReviewKnowledge[]>([]);
 
 const showKnowledgeSelectModal = ref(false);
 const selectedKnowledgeIds = ref<number[]>([]);
 
 function handleLinkKnowledge() {
   selectedKnowledgeIds.value = [];
+  loadAvailableKnowledges();
   showKnowledgeSelectModal.value = true;
 }
 
-function handleConfirmLinkKnowledge() {
+async function loadAvailableKnowledges() {
+  try {
+    const res = await reviewKnowledgeList({ pageNum: 1, pageSize: 100 });
+    const linkedIds = new Set(linkedKnowledgeBases.value.map((kb: any) => Number(kb.id)));
+    availableKnowledgeBases.value = (res.rows || []).filter((kb: any) => !linkedIds.has(Number(kb.id)));
+  } catch {
+    availableKnowledgeBases.value = [];
+  }
+}
+
+async function handleConfirmLinkKnowledge() {
   if (selectedKnowledgeIds.value.length === 0) {
     message.warning('请选择至少一个知识库');
     return;
   }
-  const newLinks = availableKnowledgeBases.value
-    .filter(kb => selectedKnowledgeIds.value.includes(kb.id))
-    .map(kb => ({ ...kb, accuracy: 0, lastSync: '-', status: 'pending' as const }));
-  linkedKnowledgeBases.value.push(...newLinks);
-  availableKnowledgeBases.value = availableKnowledgeBases.value.filter(
-    kb => !selectedKnowledgeIds.value.includes(kb.id),
-  );
+  for (const kid of selectedKnowledgeIds.value) {
+    await reviewStandardLinkKnowledge(standardId.value, kid);
+  }
   showKnowledgeSelectModal.value = false;
-  message.success(`已关联 ${newLinks.length} 个知识库`);
+  message.success(`已关联 ${selectedKnowledgeIds.value.length} 个知识库`);
+  await loadKnowledges();
 }
 
 function handleUnlinkKnowledge(kb: any) {
@@ -116,10 +116,10 @@ function handleUnlinkKnowledge(kb: any) {
     okText: '解除',
     okType: 'danger',
     cancelText: '取消',
-    onOk() {
-      linkedKnowledgeBases.value = linkedKnowledgeBases.value.filter((k: any) => k.id !== kb.id);
-      availableKnowledgeBases.value.push({ id: kb.id, name: kb.name, caseCount: kb.caseCount, patternCount: kb.patternCount });
+    async onOk() {
+      await reviewStandardUnlinkKnowledge(standardId.value, kb.id);
       message.success('已解除关联');
+      await loadKnowledges();
     },
   });
 }
@@ -133,35 +133,45 @@ function handleSyncKnowledge(kb: any) {
   }, 1500);
 }
 
-function toggleKnowledgeSelect(id: number) {
-  const idx = selectedKnowledgeIds.value.indexOf(id);
+function toggleKnowledgeSelect(id: number | string) {
+  const numId = Number(id);
+  const idx = selectedKnowledgeIds.value.indexOf(numId);
   if (idx >= 0) {
     selectedKnowledgeIds.value.splice(idx, 1);
   } else {
-    selectedKnowledgeIds.value.push(id);
+    selectedKnowledgeIds.value.push(numId);
   }
 }
 
-const mockRules = [
-  { id: 1, content: '合同必须包含甲方（采购人）全称及统一社会信用代码', severity: 'must', category: '主体信息', weight: 95, confidence: 98, hitCount: 52, missCount: 1 },
-  { id: 2, content: '合同必须包含乙方（供应商）全称及统一社会信用代码', severity: 'must', category: '主体信息', weight: 95, confidence: 97, hitCount: 50, missCount: 2 },
-  { id: 3, content: '合同编号格式必须符合单位编号规范', severity: 'must', category: '基本信息', weight: 85, confidence: 92, hitCount: 45, missCount: 4 },
-  { id: 4, content: '合同金额大写与小写必须完全一致', severity: 'must', category: '金额条款', weight: 100, confidence: 99, hitCount: 56, missCount: 0 },
-  { id: 5, content: '服务期限必须明确起止日期，不得仅写"X个月"', severity: 'must', category: '期限条款', weight: 90, confidence: 88, hitCount: 40, missCount: 5 },
-  { id: 6, content: '付款方式必须明确各期比例及触发条件', severity: 'must', category: '付款条款', weight: 88, confidence: 85, hitCount: 38, missCount: 7 },
-  { id: 7, content: '必须包含验收条款', severity: 'must', category: '验收条款', weight: 90, confidence: 94, hitCount: 48, missCount: 3 },
-  { id: 8, content: '必须包含违约责任条款', severity: 'must', category: '违约条款', weight: 92, confidence: 96, hitCount: 49, missCount: 2 },
-  { id: 9, content: '合同签订日期不得晚于服务开始日期', severity: 'must', category: '期限条款', weight: 85, confidence: 90, hitCount: 42, missCount: 5 },
-  { id: 10, content: '采购金额不得超过预算金额', severity: 'must', category: '金额条款', weight: 100, confidence: 99, hitCount: 55, missCount: 1 },
-  { id: 11, content: '验收条款应明确验收方式、时限和标准文件', severity: 'should', category: '验收条款', weight: 70, confidence: 82, hitCount: 30, missCount: 7 },
-  { id: 12, content: '违约责任条款应双向约定（甲方和乙方）', severity: 'should', category: '违约条款', weight: 72, confidence: 80, hitCount: 28, missCount: 7 },
-  { id: 13, content: '应包含知识产权归属条款', severity: 'should', category: '知识产权', weight: 65, confidence: 78, hitCount: 22, missCount: 6 },
-  { id: 14, content: '应包含保密条款', severity: 'should', category: '保密条款', weight: 68, confidence: 83, hitCount: 25, missCount: 5 },
-  { id: 15, content: '应明确争议解决方式及管辖法院', severity: 'should', category: '争议解决', weight: 70, confidence: 85, hitCount: 32, missCount: 6 },
-  { id: 16, content: '争议解决方式建议多元化（诉讼+仲裁）', severity: 'suggest', category: '争议解决', weight: 40, confidence: 72, hitCount: 15, missCount: 6 },
-  { id: 17, content: '政府采购合同应预留财政部门备案份数', severity: 'suggest', category: '其他', weight: 35, confidence: 68, hitCount: 10, missCount: 5 },
-  { id: 18, content: '建议附加合同变更和解除条件', severity: 'suggest', category: '其他', weight: 38, confidence: 70, hitCount: 12, missCount: 5 },
-];
+async function loadStandardInfo() {
+  if (!standardId.value) return;
+  try {
+    const data = await reviewStandardInfo(standardId.value);
+    standardInfo.value = data;
+  } catch {
+    message.error('加载标准信息失败');
+  }
+}
+
+async function loadRules() {
+  if (!standardId.value) return;
+  try {
+    const data = await reviewStandardRuleList(standardId.value);
+    ruleList.value = data || [];
+  } catch {
+    ruleList.value = [];
+  }
+}
+
+async function loadKnowledges() {
+  if (!standardId.value) return;
+  try {
+    const data = await reviewStandardKnowledges(standardId.value);
+    linkedKnowledgeBases.value = data || [];
+  } catch {
+    linkedKnowledgeBases.value = [];
+  }
+}
 
 const severityMap: Record<string, { label: string; color: string }> = {
   must: { label: '严重', color: 'red' },
@@ -266,13 +276,25 @@ const gridOptions: VxeGridProps = {
   proxyConfig: {
     ajax: {
       query: async ({ page }) => {
-        const data = mockRules;
-        const start = (page.currentPage - 1) * page.pageSize;
-        const end = start + page.pageSize;
-        return {
-          rows: data.slice(start, end),
-          total: data.length,
-        };
+        if (!standardId.value) return { rows: [], total: 0 };
+        try {
+          const data = await reviewStandardRuleList(standardId.value);
+          ruleList.value = (data || []).map((r: any) => ({
+            ...r,
+            weight: r.weight ?? 0,
+            confidence: r.confidence ?? 0,
+            hitCount: r.hitCount ?? 0,
+            missCount: r.missCount ?? 0,
+          }));
+          const start = (page.currentPage - 1) * page.pageSize;
+          const end = start + page.pageSize;
+          return {
+            rows: ruleList.value.slice(start, end),
+            total: ruleList.value.length,
+          };
+        } catch {
+          return { rows: [], total: 0 };
+        }
       },
     },
   },
@@ -310,12 +332,28 @@ async function handleSmartParseReload() {
 }
 
 function handleAddRule() {
+  addRuleDrawerApi.setData({ standardId: standardId.value });
   addRuleDrawerApi.open();
 }
 
 function handleEditRule(row: any) {
-  addRuleDrawerApi.setData(row);
+  addRuleDrawerApi.setData({ ...row, standardId: standardId.value });
   addRuleDrawerApi.open();
+}
+
+function handleDeleteRule(row: any) {
+  Modal.confirm({
+    title: `确认删除规则吗？`,
+    content: row.content,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await reviewStandardRuleRemove([row.id]);
+      message.success('删除成功');
+      await tableApi.query();
+    },
+  });
 }
 
 function handleImportRule() {
@@ -356,8 +394,9 @@ function handleScroll() {
 
 function goBack() { router.push('/review/standard'); }
 
-onMounted(() => {
+onMounted(async () => {
   scrollContainer.value?.addEventListener('scroll', handleScroll, { passive: true });
+  await Promise.all([loadStandardInfo(), loadKnowledges()]);
 });
 
 onUnmounted(() => {
@@ -407,7 +446,7 @@ onUnmounted(() => {
               </div>
               <div class="header-metric-body">
                 <div class="header-metric-label">规则总数</div>
-                <div class="header-metric-value">{{ standardInfo.ruleCount }} 条</div>
+                <div class="header-metric-value">{{ standardInfo.ruleCount ?? 0 }} 条</div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -417,7 +456,7 @@ onUnmounted(() => {
               </div>
               <div class="header-metric-body">
                 <div class="header-metric-label">使用次数</div>
-                <div class="header-metric-value">{{ standardInfo.usageCount }} 次</div>
+                <div class="header-metric-value">{{ standardInfo.useCount ?? 0 }} 次</div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -502,36 +541,33 @@ onUnmounted(() => {
                 <div class="knowledge-card-stats">
                   <div class="knowledge-stat-item">
                     <span class="knowledge-stat-label">案例数</span>
-                    <span class="knowledge-stat-value">{{ kb.caseCount }}</span>
+                    <span class="knowledge-stat-value">{{ kb.caseCount ?? 0 }}</span>
                   </div>
                   <div class="knowledge-stat-item">
                     <span class="knowledge-stat-label">模式数</span>
-                    <span class="knowledge-stat-value">{{ kb.patternCount }}</span>
+                    <span class="knowledge-stat-value">{{ kb.patternCount ?? 0 }}</span>
                   </div>
                   <div class="knowledge-stat-item">
                     <span class="knowledge-stat-label">准确率</span>
-                    <span class="knowledge-stat-value" :style="{ color: kb.accuracy >= 90 ? '#52c41a' : kb.accuracy >= 80 ? '#faad14' : '#ff4d4f' }">
-                      {{ kb.accuracy }}%
+                    <span class="knowledge-stat-value" :style="{ color: (kb.accuracy ?? 0) >= 90 ? '#52c41a' : (kb.accuracy ?? 0) >= 80 ? '#faad14' : '#ff4d4f' }">
+                      {{ kb.accuracy ?? 0 }}%
                     </span>
                   </div>
                 </div>
                 <div class="knowledge-card-footer">
                   <span class="knowledge-sync-info">
                     <ClockCircleOutlined style="margin-right: 4px;" />
-                    {{ kb.lastSync === '-' ? '待同步' : `同步于 ${kb.lastSync}` }}
+                    {{ kb.updateTime ? `更新于 ${kb.updateTime}` : '未更新' }}
                   </span>
                   <Tag
-                    v-if="kb.status === 'synced'" color="green" :bordered="false"
-                  >已同步</Tag>
+                    v-if="kb.status === '1'" color="green" :bordered="false"
+                  >正常</Tag>
                   <Tag
-                    v-else-if="kb.status === 'syncing'" color="blue" :bordered="false"
-                  >同步中...</Tag>
+                    v-else-if="kb.status === '0'" color="default" :bordered="false"
+                  >未启用</Tag>
                   <Tag
-                    v-else-if="kb.status === 'outdated'" color="orange" :bordered="false"
-                  >待更新</Tag>
-                  <Tag
-                    v-else color="default" :bordered="false"
-                  >待同步</Tag>
+                    v-else color="orange" :bordered="false"
+                  >{{ kb.status || '未知' }}</Tag>
                 </div>
               </div>
             </div>
@@ -555,17 +591,17 @@ onUnmounted(() => {
             <div
               v-for="kb in availableKnowledgeBases"
               :key="kb.id"
-              :class="['knowledge-select-item', { 'knowledge-select-item-active': selectedKnowledgeIds.includes(kb.id) }]"
+              :class="['knowledge-select-item', { 'knowledge-select-item-active': selectedKnowledgeIds.includes(Number(kb.id)) }]"
               @click="toggleKnowledgeSelect(kb.id)"
             >
               <div class="knowledge-select-item-left">
                 <BookOutlined style="color: #1677ff; margin-right: 8px; font-size: 16px;" />
                 <div>
                   <div class="knowledge-select-item-name">{{ kb.name }}</div>
-                  <div class="knowledge-select-item-meta">{{ kb.caseCount }} 案例 · {{ kb.patternCount }} 模式</div>
+                  <div class="knowledge-select-item-meta">{{ kb.caseCount ?? 0 }} 案例 · {{ kb.patternCount ?? 0 }} 模式</div>
                 </div>
               </div>
-              <div class="knowledge-select-check" v-if="selectedKnowledgeIds.includes(kb.id)">✓</div>
+              <div class="knowledge-select-check" v-if="selectedKnowledgeIds.includes(Number(kb.id))">✓</div>
             </div>
           </div>
         </Modal>
@@ -581,9 +617,9 @@ onUnmounted(() => {
             </template>
             <template #extra>
               <Space>
-                <Tag color="red">严重 {{ mockRules.filter(r => r.severity === 'must').length }}</Tag>
-                <Tag color="orange">一般 {{ mockRules.filter(r => r.severity === 'should').length }}</Tag>
-                <Tag color="blue">提示 {{ mockRules.filter(r => r.severity === 'suggest').length }}</Tag>
+                <Tag color="red">严重 {{ ruleList.filter(r => r.severity === 'must').length }}</Tag>
+                <Tag color="orange">一般 {{ ruleList.filter(r => r.severity === 'should').length }}</Tag>
+                <Tag color="blue">提示 {{ ruleList.filter(r => r.severity === 'suggest').length }}</Tag>
               </Space>
             </template>
 
@@ -655,7 +691,7 @@ onUnmounted(() => {
                     <Dropdown placement="bottomRight">
                       <template #overlay>
                         <Menu>
-                          <MenuItem key="delete">
+                          <MenuItem key="delete" @click="handleDeleteRule(row)">
                             <span class="text-red-500">删除</span>
                           </MenuItem>
                         </Menu>

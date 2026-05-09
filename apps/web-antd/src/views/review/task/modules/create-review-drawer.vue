@@ -6,22 +6,69 @@ import {
 } from 'ant-design-vue';
 import { InboxOutlined } from '@ant-design/icons-vue';
 
+import { reviewTaskAdd } from '#/api/review/task';
+import type { CreateTaskParams } from '#/api/review/task/model';
+import { reviewStandardList } from '#/api/review/standard';
+
 const emit = defineEmits<{ reload: [] }>();
 
 const currentStep = ref(0);
 const fileList = ref<any[]>([]);
+const submitting = ref(false);
 const formData = ref({
-  standardIds: [] as string[],
+  standardIds: [] as (number | string)[],
 });
 
-const standardOptions = [
-  { value: '1', label: '政府采购合同审核标准 v2.1', ruleCount: 38 },
-  { value: '2', label: '企业财务报销规范 v1.3', ruleCount: 25 },
-  { value: '3', label: '合同通用条款检查 v3.0', ruleCount: 15 },
-  { value: '4', label: '内部审批表单规范 v3.0', ruleCount: 20 },
-  { value: '5', label: '租赁合同审核标准 v1.0', ruleCount: 32 },
-  { value: '6', label: '标书格式规范 v2.0', ruleCount: 28 },
-];
+/** 标准选项列表 - 从 API 加载 */
+const standardOptions = ref<{ value: number | string; label: string; ruleCount?: number }[]>([]);
+const standardLoading = ref(false);
+
+/** 加载审核标准列表 */
+async function loadStandardOptions() {
+  standardLoading.value = true;
+  try {
+    const res = await reviewStandardList({ pageSize: 100 });
+    standardOptions.value = (res.rows || []).map((item) => ({
+      value: item.id,
+      label: item.name + (item.version ? ` ${item.version}` : ''),
+      ruleCount: item.ruleCount,
+    }));
+  } catch {
+    message.error('加载审核标准失败');
+  } finally {
+    standardLoading.value = false;
+  }
+}
+
+/** 自动生成任务名称 */
+function generateTaskName(): string {
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+  return `审核任务_${ts}`;
+}
+
+/** 提交审核任务 */
+async function handleSubmit() {
+  submitting.value = true;
+  drawerApi.setState({ confirmLoading: true });
+  try {
+    const params: CreateTaskParams = {
+      taskName: generateTaskName(),
+      taskType: 'company_info',
+      standardIds: formData.value.standardIds.map(Number),
+      formSnapshot: '{}',
+    };
+    await reviewTaskAdd(params);
+    message.success('审核任务已提交，AI正在审核中...');
+    drawerApi.close();
+    emit('reload');
+  } catch {
+    message.error('提交审核任务失败，请重试');
+  } finally {
+    submitting.value = false;
+    drawerApi.setState({ confirmLoading: false });
+  }
+}
 
 const [BasicDrawer, drawerApi] = useVbenDrawer({
   title: computed(() => {
@@ -29,7 +76,11 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
     return `新建审核 - ${stepNames[currentStep.value]}`;
   }),
   onOpenChange: (visible) => {
-    if (!visible) {
+    if (visible) {
+      // 抽屉打开时加载标准列表
+      loadStandardOptions();
+    } else {
+      // 抽屉关闭时重置表单
       currentStep.value = 0;
       fileList.value = [];
       formData.value = { standardIds: [] };
@@ -48,9 +99,8 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       currentStep.value = 1;
       return;
     }
-    message.success('审核任务已提交，AI正在审核中...');
-    drawerApi.close();
-    emit('reload');
+    // 最终步骤：调用 API 提交
+    await handleSubmit();
   },
   confirmText: computed(() => currentStep.value < 1 ? '下一步' : '提交审核'),
   cancelText: computed(() => currentStep.value === 0 ? '取消' : '上一步'),
@@ -96,6 +146,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         style="width: 100%; margin-bottom: 12px;"
         :options="standardOptions"
         :option-label-prop="'label'"
+        :loading="standardLoading"
       />
       <Alert
         message="系统会自动附加通用规范（违法违规检测、敏感词检测、基础格式检查）"

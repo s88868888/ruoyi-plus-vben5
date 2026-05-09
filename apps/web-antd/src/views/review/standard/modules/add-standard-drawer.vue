@@ -5,6 +5,7 @@ import {
   message, Steps, Upload, Select, Input, Form, FormItem, Alert, Tag, Card, Textarea, Button, Divider,
 } from 'ant-design-vue';
 import { InboxOutlined, DownloadOutlined } from '@ant-design/icons-vue';
+import { reviewStandardAdd } from '#/api/review/standard';
 
 const emit = defineEmits<{ reload: [] }>();
 
@@ -16,15 +17,7 @@ const formData = ref({
   description: '',
 });
 
-// AI 解析后的规则预览（Mock）
-const parsedRules = ref([
-  { id: 1, content: '合同必须包含甲方全称及统一社会信用代码', severity: 'must' },
-  { id: 2, content: '合同金额大写与小写必须完全一致', severity: 'must' },
-  { id: 3, content: '服务期限必须明确起止日期', severity: 'must' },
-  { id: 4, content: '违约责任条款应双向约定', severity: 'should' },
-  { id: 5, content: '验收条款应明确验收方式和时限', severity: 'should' },
-  { id: 6, content: '建议补充仲裁作为争议解决备选', severity: 'suggest' },
-]);
+const parsedRules = ref<any[]>([]);
 
 const severityMap: Record<string, { label: string; color: string }> = {
   must: { label: '必须', color: 'red' },
@@ -46,6 +39,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       currentStep.value = 0;
       fileList.value = [];
       formData.value = { name: '', type: undefined, description: '' };
+      parsedRules.value = [];
     }
   },
   onConfirm: async () => {
@@ -58,24 +52,23 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         message.warning('请选择适用文档类型');
         return;
       }
-      if (fileList.value.length === 0) {
-        message.warning('请上传规范文件');
-        return;
-      }
-      message.loading({ content: 'AI正在解析规范文件...', key: 'parse', duration: 1.5 });
-      setTimeout(() => {
-        message.success({ content: '解析完成，已提取 6 条规则', key: 'parse' });
-      }, 1500);
+      // 先创建标准（文件解析功能后续接入AI）
       currentStep.value = 1;
       return;
     }
-    message.success('审核标准已创建并发布');
+    await reviewStandardAdd({
+      name: formData.value.name,
+      type: formData.value.type,
+      description: formData.value.description,
+      version: 'v1.0',
+      status: '0',
+    });
     drawerApi.close();
     emit('reload');
   },
   confirmText: computed(() => {
-    if (currentStep.value === 0) return '上传并解析';
-    return '确认发布';
+    if (currentStep.value === 0) return '下一步';
+    return '确认创建';
   }),
   cancelText: computed(() => currentStep.value === 0 ? '取消' : '上一步'),
   onCancel: () => {

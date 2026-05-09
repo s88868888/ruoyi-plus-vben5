@@ -1,48 +1,42 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 
 import { Card, Col, Row, Select, Space, Statistic } from 'ant-design-vue';
+import { requestClient } from '#/api/request';
 
 const timeRange = ref('month');
 
 const stats = ref({
-  total: 148,
-  passRate: '68%',
-  avgTime: '18s',
-  issueRate: '32%',
+  total: 0,
+  passRate: '0%',
+  avgTime: '0s',
+  issueRate: '0%',
 });
 
-const docTypeData = [
-  { type: '合同', count: 56, percent: 75 },
-  { type: '财务账单', count: 42, percent: 55 },
-  { type: '表单', count: 28, percent: 35 },
-  { type: '标书', count: 22, percent: 25 },
-];
+const docTypeData = ref<any[]>([]);
+const issueTypeData = ref<any[]>([]);
+const standardRank = ref<any[]>([]);
+const submitterRank = ref<any[]>([]);
 
-const issueTypeData = [
-  { type: '缺少必备条款', count: 38, percent: 65, color: '#f5222d' },
-  { type: '格式不规范', count: 29, percent: 50, color: '#fa8c16' },
-  { type: '金额/数值错误', count: 18, percent: 30, color: '#1890ff' },
-  { type: '表述模糊', count: 12, percent: 20, color: '#52c41a' },
-];
+async function loadStats() {
+  try {
+    const data = await requestClient.get<any>('/review/statistics/overview');
+    if (data) {
+      stats.value = {
+        total: data.total ?? 0,
+        passRate: data.passRate ?? '0%',
+        avgTime: data.avgTime ?? '0s',
+        issueRate: data.issueRate ?? '0%',
+      };
+    }
+  } catch { /* empty */ }
+}
 
-const standardRank = [
-  { name: '企业财务报销规范 v1.3', count: 134 },
-  { name: '合同通用条款检查 v3.0', count: 89 },
-  { name: '内部审批表单规范 v3.0', count: 67 },
-  { name: '政府采购合同审核标准 v2.1', count: 56 },
-  { name: '租赁合同审核标准 v1.0', count: 42 },
-];
-
-const submitterRank = [
-  { name: '李四（合同管理部）', count: 32 },
-  { name: '王五（财务部）', count: 28 },
-  { name: '赵六（征地办）', count: 24 },
-  { name: '张三（综合部）', count: 18 },
-  { name: '钱七（采购部）', count: 15 },
-];
+onMounted(() => {
+  loadStats();
+});
 </script>
 
 <template>
@@ -85,6 +79,7 @@ const submitterRank = [
       <Row :gutter="16" class="shrink-0">
         <Col :span="12">
           <Card title="各类型文档审核量">
+            <div v-if="docTypeData.length === 0" class="text-center text-gray-400 py-8">暂无数据</div>
             <div
               v-for="item in docTypeData"
               :key="item.type"
@@ -104,6 +99,7 @@ const submitterRank = [
         </Col>
         <Col :span="12">
           <Card title="问题类型分布">
+            <div v-if="issueTypeData.length === 0" class="text-center text-gray-400 py-8">暂无数据</div>
             <div
               v-for="item in issueTypeData"
               :key="item.type"
@@ -127,6 +123,7 @@ const submitterRank = [
       <Row :gutter="16" class="shrink-0">
         <Col :span="12">
           <Card title="审核标准使用排行">
+            <div v-if="standardRank.length === 0" class="text-center text-gray-400 py-8">暂无数据</div>
             <div
               v-for="(item, index) in standardRank"
               :key="item.name"
@@ -148,6 +145,7 @@ const submitterRank = [
         </Col>
         <Col :span="12">
           <Card title="提交人审核量排行">
+            <div v-if="submitterRank.length === 0" class="text-center text-gray-400 py-8">暂无数据</div>
             <div
               v-for="(item, index) in submitterRank"
               :key="item.name"

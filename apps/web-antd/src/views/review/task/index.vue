@@ -13,6 +13,10 @@ import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import CreateReviewDrawer from './modules/create-review-drawer.vue';
+import { reviewTaskList, reviewTaskRemove, reviewTaskExecute } from '#/api/review/task';
+import { DictEnum } from '@vben/constants';
+import { getDictOptions } from '#/utils/dict';
+import { renderDict } from '#/utils/render';
 
 const router = useRouter();
 const tablePreference = useListTablePreference();
@@ -37,12 +41,7 @@ const filterData = ref([
     label: '文档类型',
     type: 'a-select',
     data: '',
-    options: [
-      { label: '合同', value: 'contract' },
-      { label: '财务账单', value: 'finance' },
-      { label: '表单', value: 'form' },
-      { label: '标书', value: 'bid' },
-    ],
+    options: getDictOptions(DictEnum.REVIEW_TASK_TYPE),
     isCommon: true,
   },
   {
@@ -50,12 +49,7 @@ const filterData = ref([
     label: '状态',
     type: 'a-select',
     data: '',
-    options: [
-      { label: '待审核', value: 'pending' },
-      { label: '审核中', value: 'processing' },
-      { label: '已完成', value: 'completed' },
-      { label: '审核失败', value: 'failed' },
-    ],
+    options: getDictOptions(DictEnum.REVIEW_TASK_STATUS),
     isCommon: true,
   },
   {
@@ -63,11 +57,7 @@ const filterData = ref([
     label: '通过状态',
     type: 'a-select',
     data: '',
-    options: [
-      { label: '通过', value: 'pass' },
-      { label: '不通过', value: 'reject' },
-      { label: '跳过', value: 'manual' },
-    ],
+    options: getDictOptions(DictEnum.REVIEW_PASS_STATUS),
     isCommon: true,
   },
   {
@@ -110,57 +100,16 @@ const handleFilterQuery = (conditions: any[]) => {
   tableApi.query();
 };
 
-const docTypeColors: Record<string, string> = {
-  contract: 'blue',
-  finance: 'green',
-  form: 'orange',
-  bid: 'purple',
-};
+const taskTypeOptions = getDictOptions(DictEnum.REVIEW_TASK_TYPE);
+const taskStatusOptions = getDictOptions(DictEnum.REVIEW_TASK_STATUS);
+const passStatusOptions = getDictOptions(DictEnum.REVIEW_PASS_STATUS);
 
-const docTypeLabels: Record<string, string> = {
-  contract: '合同',
-  finance: '财务账单',
-  form: '表单',
-  bid: '标书',
-};
+function getDictLabel(options: any[], value: string) {
+  const item = options.find((o: any) => o.value === value);
+  return item?.label || value;
+}
 
-const statusColors: Record<string, string> = {
-  pending: 'default',
-  processing: 'processing',
-  completed: 'success',
-  failed: 'error',
-};
-
-const statusLabels: Record<string, string> = {
-  pending: '待审核',
-  processing: '审核中',
-  completed: '已完成',
-  failed: '审核失败',
-};
-
-const passResultColors: Record<string, string> = {
-  pass: 'success',
-  reject: 'error',
-  manual: 'warning',
-};
-
-const passResultLabels: Record<string, string> = {
-  pass: '通过',
-  reject: '不通过',
-  manual: '跳过',
-};
-
-// Mock 数据
-const mockData = [
-  { id: 1, docName: 'XX市政府采购服务合同-2024.docx', docType: 'contract', standard: '政府采购合同标准 v2.1', status: 'completed', passResult: 'reject', issueCount: 7, misjudgedCount: 2, reviewVersion: 3, submitter: '李四', submitTime: '2024-12-20 14:30', reviewTime: '18秒' },
-  { id: 2, docName: '2024年Q4财务报销汇总表.xlsx', docType: 'finance', standard: '企业财务报销规范 v1.3', status: 'completed', passResult: 'pass', issueCount: 3, misjudgedCount: 1, reviewVersion: 1, submitter: '王五', submitTime: '2024-12-20 13:15', reviewTime: '12秒' },
-  { id: 3, docName: '项目立项审批表-智慧城市.pdf', docType: 'form', standard: '内部审批表单规范 v3.0', status: 'completed', passResult: 'reject', issueCount: 4, misjudgedCount: 0, reviewVersion: 2, submitter: '赵六', submitTime: '2024-12-20 10:00', reviewTime: '15秒' },
-  { id: 4, docName: 'XX区城市更新项目可行性报告.docx', docType: 'form', standard: '项目申报材料审核标准 v1.2', status: 'processing', passResult: '', issueCount: 0, misjudgedCount: 0, reviewVersion: 1, submitter: '赵六', submitTime: '2024-12-20 09:50', reviewTime: '-' },
-  { id: 5, docName: 'XX物业租赁合同-商铺A区.docx', docType: 'contract', standard: '租赁合同审核标准 v1.0', status: 'completed', passResult: 'pass', issueCount: 2, misjudgedCount: 1, reviewVersion: 2, submitter: '张三', submitTime: '2024-12-19 16:20', reviewTime: '20秒' },
-  { id: 6, docName: '12月份差旅报销单-批量.zip', docType: 'finance', standard: '企业财务报销规范 v1.3', status: 'pending', passResult: '', issueCount: 0, misjudgedCount: 0, reviewVersion: 1, submitter: '李四', submitTime: '2024-12-20 15:00', reviewTime: '-' },
-  { id: 7, docName: 'XX市智慧停车项目投标文件.docx', docType: 'bid', standard: '标书格式规范 v2.0', status: 'completed', passResult: 'manual', issueCount: 5, misjudgedCount: 3, reviewVersion: 4, submitter: '钱七', submitTime: '2024-12-19 11:30', reviewTime: '25秒' },
-  { id: 8, docName: '物业服务合同-XX花园.docx', docType: 'contract', standard: '企业服务合同标准 v1.0', status: 'completed', passResult: 'pass', issueCount: 1, misjudgedCount: 0, reviewVersion: 1, submitter: '张三', submitTime: '2024-12-18 09:00', reviewTime: '16秒' },
-];
+const loading = ref(false);
 
 const gridOptions: VxeGridProps = {
   checkboxConfig: {
@@ -239,12 +188,17 @@ const gridOptions: VxeGridProps = {
   proxyConfig: {
     ajax: {
       query: async ({ page }) => {
-        const start = (page.currentPage - 1) * page.pageSize;
-        const end = start + page.pageSize;
-        return {
-          rows: mockData.slice(start, end),
-          total: mockData.length,
-        };
+        loading.value = true;
+        try {
+          const params = {
+            pageNum: page.currentPage,
+            pageSize: page.pageSize,
+            ...searchParams.value,
+          };
+          return await reviewTaskList(params);
+        } finally {
+          loading.value = false;
+        }
       },
     },
   },
@@ -291,9 +245,23 @@ function handleDelete(row: any) {
     okText: '删除',
     okType: 'danger',
     cancelText: '取消',
-    onOk() {
+    async onOk() {
+      await reviewTaskRemove([row.id]);
       message.success('删除成功');
-      tableApi.query();
+      await tableApi.query();
+    },
+  });
+}
+
+function handleExecute(row: any) {
+  Modal.confirm({
+    title: `确认执行审核【${row.docName}】吗？`,
+    okText: '确认',
+    cancelText: '取消',
+    async onOk() {
+      await reviewTaskExecute(row.id);
+      message.success('审核任务已提交执行');
+      await tableApi.query();
     },
   });
 }
@@ -334,28 +302,21 @@ function handleTransferManual(row: any) {
 
       <!-- 表格区域 -->
       <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
-        <BasicTable class="h-full" table-title="审核任务列表">
+        <BasicTable class="h-full" table-title="审核任务列表" :loading="loading">
           <template #docName="{ row }">
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
-                <span class="doc-name-text">{{ row.docName }}</span>
-                <Tag :color="statusColors[row.status]" :bordered="false" class="tag-sm">
-                  {{ statusLabels[row.status] || row.status }}
-                </Tag>
+                <span class="doc-name-text">{{ row.taskName }}</span>
+                <component :is="renderDict(row.status, DictEnum.REVIEW_TASK_STATUS)" />
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-400">
-                <Tag :color="docTypeColors[row.docType]" :bordered="false" class="tag-sm">
-                  {{ docTypeLabels[row.docType] || row.docType }}
-                </Tag>
-                <span>{{ row.submitter }}</span>
+                <component :is="renderDict(row.taskType, DictEnum.REVIEW_TASK_TYPE)" />
               </div>
             </div>
           </template>
 
           <template #passResult="{ row }">
-            <Tag v-if="row.passResult" :color="passResultColors[row.passResult]">
-              {{ passResultLabels[row.passResult] || row.passResult }}
-            </Tag>
+            <component v-if="row.passStatus" :is="renderDict(row.passStatus, DictEnum.REVIEW_PASS_STATUS)" />
             <span v-else class="text-gray-400">-</span>
           </template>
 
@@ -394,6 +355,9 @@ function handleTransferManual(row: any) {
             <Space>
               <ghost-button v-if="row.status === 'completed'" @click.stop="handleView(row)">
                 查看
+              </ghost-button>
+              <ghost-button v-if="row.status === 'pending'" @click.stop="handleExecute(row)">
+                执行审核
               </ghost-button>
               <Dropdown placement="bottomRight">
                 <template #overlay>

@@ -13,6 +13,10 @@ import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import AddStandardDrawer from './modules/add-standard-drawer.vue';
+import { reviewStandardList, reviewStandardRemove } from '#/api/review/standard';
+import { DictEnum } from '@vben/constants';
+import { getDictOptions } from '#/utils/dict';
+import { renderDict } from '#/utils/render';
 
 const router = useRouter();
 const tablePreference = useListTablePreference();
@@ -37,13 +41,7 @@ const filterData = ref([
     label: '类型',
     type: 'a-select',
     data: '',
-    options: [
-      { label: '合同类', value: 'contract' },
-      { label: '财务类', value: 'finance' },
-      { label: '表单类', value: 'form' },
-      { label: '标书类', value: 'bid' },
-      { label: '通用', value: 'universal' },
-    ],
+    options: getDictOptions(DictEnum.REVIEW_STANDARD_TYPE),
     isCommon: true,
   },
   {
@@ -70,25 +68,7 @@ const handleFilterQuery = (conditions: any[]) => {
   tableApi.query();
 };
 
-const typeMap: Record<string, { label: string; color: string }> = {
-  contract: { label: '合同类', color: 'blue' },
-  finance: { label: '财务类', color: 'green' },
-  form: { label: '表单类', color: 'orange' },
-  bid: { label: '标书类', color: 'purple' },
-  universal: { label: '通用', color: 'cyan' },
-};
-
-// Mock 数据
-const mockData = [
-  { id: 1, name: '政府采购合同审核标准', version: 'v2.1', type: 'contract', ruleCount: 38, usageCount: 56, status: 'active', updater: '张明', updateTime: '2024-12-15' },
-  { id: 2, name: '企业财务报销规范', version: 'v1.3', type: 'finance', ruleCount: 25, usageCount: 134, status: 'active', updater: '李华', updateTime: '2024-12-10' },
-  { id: 3, name: '合同通用条款检查', version: 'v3.0', type: 'contract', ruleCount: 15, usageCount: 89, status: 'active', updater: '王芳', updateTime: '2024-11-20' },
-  { id: 4, name: '内部审批表单规范', version: 'v3.0', type: 'form', ruleCount: 20, usageCount: 67, status: 'active', updater: '赵强', updateTime: '2024-11-15' },
-  { id: 5, name: '租赁合同审核标准', version: 'v1.0', type: 'contract', ruleCount: 32, usageCount: 42, status: 'active', updater: '张明', updateTime: '2024-12-01' },
-  { id: 6, name: '标书格式规范', version: 'v2.0', type: 'bid', ruleCount: 28, usageCount: 22, status: 'active', updater: '李华', updateTime: '2024-10-20' },
-  { id: 7, name: '企业服务合同标准', version: 'v1.0', type: 'contract', ruleCount: 18, usageCount: 42, status: 'active', updater: '王芳', updateTime: '2024-09-10' },
-  { id: 8, name: '通用规范（违规/敏感词/格式）', version: 'v4.0', type: 'universal', ruleCount: 12, usageCount: 300, status: 'active', updater: '赵强', updateTime: '2024-12-18' },
-];
+const loading = ref(false);
 
 const gridOptions: VxeGridProps = {
   checkboxConfig: {
@@ -152,12 +132,17 @@ const gridOptions: VxeGridProps = {
   proxyConfig: {
     ajax: {
       query: async ({ page }) => {
-        const start = (page.currentPage - 1) * page.pageSize;
-        const end = start + page.pageSize;
-        return {
-          rows: mockData.slice(start, end),
-          total: mockData.length,
-        };
+        loading.value = true;
+        try {
+          const params = {
+            pageNum: page.currentPage,
+            pageSize: page.pageSize,
+            ...searchParams.value,
+          };
+          return await reviewStandardList(params);
+        } finally {
+          loading.value = false;
+        }
       },
     },
   },
@@ -201,9 +186,10 @@ function handleDisable(row: any) {
     okText: '废止',
     okType: 'danger',
     cancelText: '取消',
-    onOk() {
+    async onOk() {
+      await reviewStandardRemove([row.id]);
       message.success('已废止');
-      tableApi.query();
+      await tableApi.query();
     },
   });
 }
@@ -231,7 +217,7 @@ function handleDisable(row: any) {
 
       <!-- 表格区域 -->
       <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
-        <BasicTable class="h-full" table-title="规范库列表">
+        <BasicTable class="h-full" table-title="规范库列表" :loading="loading">
           <template #name="{ row }">
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
@@ -242,9 +228,7 @@ function handleDisable(row: any) {
                 <span class="text-xs text-gray-400">{{ row.version }}</span>
               </div>
               <div class="flex items-center gap-1">
-                <Tag :color="typeMap[row.type]?.color" :bordered="false" class="tag-sm">
-                  {{ typeMap[row.type]?.label || row.type }}
-                </Tag>
+                <component :is="renderDict(row.type, DictEnum.REVIEW_STANDARD_TYPE)" />
               </div>
             </div>
           </template>

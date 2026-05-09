@@ -5,6 +5,7 @@ import {
   message, Upload, Select, Input, Form, FormItem, Alert, Textarea, Button, Divider,
 } from 'ant-design-vue';
 import { InboxOutlined } from '@ant-design/icons-vue';
+import { reviewKnowledgeAdd } from '#/api/review/knowledge';
 
 const emit = defineEmits<{ reload: [] }>();
 
@@ -40,7 +41,12 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       message.warning('请选择知识库类型');
       return;
     }
-    message.success('知识库创建成功');
+    await reviewKnowledgeAdd({
+      name: formData.value.name,
+      type: formData.value.type,
+      description: formData.value.description,
+      status: '0',
+    });
     drawerApi.close();
     emit('reload');
   },

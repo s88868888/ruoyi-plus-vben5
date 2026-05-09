@@ -1,4 +1,10 @@
 export const DictEnum = {
+  REVIEW_STANDARD_TYPE: 'review_standard_type', // 审核标准类型
+  REVIEW_TASK_STATUS: 'review_task_status', // 审核任务状态
+  REVIEW_TASK_TYPE: 'review_task_type', // 审核任务类型
+  REVIEW_PASS_STATUS: 'review_pass_status', // 审核通过状态
+  REVIEW_SEVERITY: 'review_severity', // 规则严重等级
+  REVIEW_KNOWLEDGE_TYPE: 'review_knowledge_type', // 知识库类型
   SYS_COMMON_STATUS: 'sys_common_status',
   SYS_DEVICE_TYPE: 'sys_device_type', // 设备类型
   SYS_GRANT_TYPE: 'sys_grant_type', // 授权类型

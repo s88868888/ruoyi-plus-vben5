@@ -2,9 +2,9 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
-import { Card, Tag, Button, Space, Select, Modal, Input, message } from 'ant-design-vue';
+import { Card, Tag, Button, Space, Select, Modal, Input, Spin, message } from 'ant-design-vue';
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
@@ -29,10 +29,18 @@ import type { AnchorNavItem } from '#/components/anchor-nav';
 import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 
+import { reviewTaskInfo, reviewTaskMarkMisjudgment, reviewResultItemList } from '#/api/review/task';
+import type { ReviewTask, ReviewResultItem } from '#/api/review/task/model';
+
+const route = useRoute();
 const router = useRouter();
 const layoutPreference = useDetailPagePreference();
 const tablePreference = useListTablePreference();
 const scrollContainer = ref<HTMLElement | null>(null);
+
+// loading 状态
+const pageLoading = ref(false);
+const misjudgmentLoading = ref(false);
 
 const anchorNavItems = ref<AnchorNavItem[]>([
   { key: 'overview', title: '审核概览' },
@@ -59,20 +67,21 @@ const tableCssVars = computed(() => ({
   '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
 }));
 
-// Mock 审核结果数据
+// Mock 审核结果数据（作为 fallback）
 const docInfo = ref({
-  name: 'XX市政府采购服务合同-2024.docx',
-  type: '合同',
-  standard: '政府采购合同审核标准 v2.1、合同通用条款检查 v3.0',
-  submitter: '李四',
-  submitTime: '2024-12-20 14:30:45',
-  reviewTime: '18秒',
-  totalRules: 38,
-  passCount: 31,
-  errorCount: 3,
-  warningCount: 2,
-  infoCount: 2,
-  reviewVersion: 3,
+  name: '暂无数据',
+  type: '--',
+  standard: '--',
+  submitter: '--',
+  submitTime: '--',
+  reviewTime: '--',
+  totalRules: 0,
+  passCount: 0,
+  errorCount: 0,
+  warningCount: 0,
+  infoCount: 0,
+  reviewVersion: 1,
+  aiSummary: '',
 });
 
 // 版本历史数据
@@ -129,7 +138,8 @@ const compareGridOptions: VxeGridProps = {
 
 const [CompareTable] = useVbenVxeGrid({ gridOptions: compareGridOptions } as any);
 
-const issues = ref([
+// Mock issues 数据（作为 fallback，API 返回后会被覆盖）
+const mockIssues = [
   { id: 1, severity: 'error', title: '大写金额与数字金额不一致', location: '第二章 · 采购金额', description: '大写"叁佰伍拾万元整"与数字¥3,500,000.00不一致，需确认是否笔误。', suggestion: '请核实金额，确保大写与小写完全一致', rule: '规则 R004 · 合同金额大写与小写必须完全一致', misjudged: false, misjudgmentReason: '' },
   { id: 2, severity: 'error', title: '服务期限缺少具体起止日期', location: '第三章 · 服务期限', description: '仅写"12个月"，未明确起止日期。', suggestion: '建议修改为"自2024年12月15日起至2025年12月14日止"', rule: '规则 R005 · 服务期限必须明确起止日期', misjudged: false, misjudgmentReason: '' },
   { id: 3, severity: 'error', title: '违约责任条款不完整', location: '第五章 · 违约责任', description: '仅约定了乙方违约责任，缺少甲方违约条款。', suggestion: '建议补充甲方违约条款', rule: '规则 R015 · 违约责任条款应双向约定', misjudged: false, misjudgmentReason: '' },
@@ -137,7 +147,9 @@ const issues = ref([
   { id: 5, severity: 'warning', title: '知识产权条款不完整', location: '第六章 · 知识产权', description: '未明确第三方开源组件的知识产权处理方式。', suggestion: '建议补充第三方组件清单及其许可证说明', rule: '规则 R018 · 知识产权条款应覆盖第三方组件', misjudged: false, misjudgmentReason: '' },
   { id: 6, severity: 'info', title: '建议补充仲裁作为争议解决备选', location: '第七章 · 争议解决', description: '当前仅约定诉讼方式，建议增加仲裁作为备选。', suggestion: '可补充"或提交XX仲裁委员会仲裁"', rule: '规则 R020 · 争议解决方式建议多元化', misjudged: false, misjudgmentReason: '' },
   { id: 7, severity: 'info', title: '合同份数建议增加备案份', location: '第八章 · 其他约定', description: '当前约定"一式肆份"，建议增加财政部门备案份数。', suggestion: '建议修改为"一式陆份，甲乙双方各执贰份，财政部门备案贰份"', rule: '规则 R022 · 政府采购合同应预留备案份数', misjudged: false, misjudgmentReason: '' },
-]);
+];
+
+const issues = ref([...mockIssues]);
 
 const severityConfig: Record<string, { tagColor: string; label: string }> = {
   error: { tagColor: 'error', label: '严重' },
@@ -160,31 +172,42 @@ const filteredIssues = computed(() => {
 // 误判矫正
 const misjudgmentModalVisible = ref(false);
 const misjudgmentReason = ref('');
-const currentMisjudgmentId = ref<number | null>(null);
+const currentMisjudgmentId = ref<number | string | null>(null);
 
 const misjudgedCount = computed(() => issues.value.filter(i => i.misjudged).length);
 
-function openMisjudgmentModal(issueId: number) {
+function openMisjudgmentModal(issueId: number | string) {
   currentMisjudgmentId.value = issueId;
   misjudgmentReason.value = '';
   misjudgmentModalVisible.value = true;
 }
 
-function confirmMisjudgment() {
+async function confirmMisjudgment() {
   if (!misjudgmentReason.value.trim()) {
     message.warning('请填写误判原因');
     return;
   }
-  const issue = issues.value.find(i => i.id === currentMisjudgmentId.value);
-  if (issue) {
-    issue.misjudged = true;
-    issue.misjudgmentReason = misjudgmentReason.value.trim();
-    message.success('已标记为误判，记录将沉淀到知识库');
+  const taskId = route.query.id || route.params.id;
+  if (taskId && currentMisjudgmentId.value !== null) {
+    try {
+      misjudgmentLoading.value = true;
+      await reviewTaskMarkMisjudgment(taskId, currentMisjudgmentId.value, misjudgmentReason.value.trim());
+      const issue = issues.value.find(i => i.id === currentMisjudgmentId.value);
+      if (issue) {
+        issue.misjudged = true;
+        issue.misjudgmentReason = misjudgmentReason.value.trim();
+      }
+      message.success('已标记为误判，记录将沉淀到知识库');
+    } catch (e) {
+      message.error('标记误判失败，请重试');
+    } finally {
+      misjudgmentLoading.value = false;
+    }
   }
   misjudgmentModalVisible.value = false;
 }
 
-function undoMisjudgment(issueId: number) {
+function undoMisjudgment(issueId: number | string) {
   const issue = issues.value.find(i => i.id === issueId);
   if (issue) {
     issue.misjudged = false;
@@ -193,9 +216,9 @@ function undoMisjudgment(issueId: number) {
   }
 }
 
-function selectIssue(issueId: number) {
-  activeIssueId.value = issueId;
-  const para = docParagraphs.value.find(p => p.issueIds?.includes(issueId));
+function selectIssue(issueId: number | string) {
+  activeIssueId.value = issueId as number;
+  const para = docParagraphs.value.find(p => p.issueIds?.includes(issueId as number));
   if (para && docPreviewRef.value) {
     const el = docPreviewRef.value.querySelector(`#doc-${para.id}`) as HTMLElement | null;
     if (el) {
@@ -205,7 +228,7 @@ function selectIssue(issueId: number) {
   }
 }
 
-// 模拟文档段落内容
+// 模拟文档段落内容（fallback）
 const docParagraphs = ref([
   { id: 'p1', chapter: '第一章', title: '合同基本信息', content: '甲方：XX市人民政府（统一社会信用代码：91440100...）\n乙方：XX科技有限公司（统一社会信用代码：91440300...）\n合同编号：GFCG-2024-0156\n签订日期：2024年12月10日' },
   { id: 'p2', chapter: '第二章', title: '采购金额', content: '本合同采购总金额为人民币叁佰伍拾万元整（¥3,500,000.00），包含服务费、技术支持费及相关税费。付款方式：分三期支付，首期30%，中期40%，验收后30%。', issueIds: [1] },
@@ -264,8 +287,89 @@ function handleManualPass() {
 
 function goBack() { router.push('/review/task'); }
 
+/** 将 ReviewResultItem 转换为页面 issue 展示结构 */
+function mapResultItemToIssue(item: ReviewResultItem) {
+  return {
+    id: item.id,
+    severity: item.severity || 'info',
+    title: item.fieldLabel || item.fieldName || '未命名问题',
+    location: item.location || '--',
+    description: item.description || '--',
+    suggestion: item.suggestion || '--',
+    rule: item.aiRemark || '--',
+    misjudged: item.misjudged === 'Y' || item.misjudged === '1',
+    misjudgmentReason: item.misjudgmentReason || '',
+  };
+}
+
+/** 计算审核耗时的友好显示 */
+function formatDuration(ms?: number): string {
+  if (!ms && ms !== 0) return '--';
+  if (ms < 1000) return `${ms}毫秒`;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}秒`;
+  const minutes = Math.floor(seconds / 60);
+  const remainSec = seconds % 60;
+  return remainSec > 0 ? `${minutes}分${remainSec}秒` : `${minutes}分`;
+}
+
+/** 加载任务详情及审核结果明细 */
+async function loadTaskData() {
+  const taskId = route.query.id || route.params.id;
+  if (!taskId) {
+    message.warning('未获取到任务ID');
+    return;
+  }
+  pageLoading.value = true;
+  try {
+    // 1. 获取任务详情
+    const taskData: ReviewTask = await reviewTaskInfo(taskId);
+
+    // 用 API 数据覆盖 docInfo
+    docInfo.value = {
+      name: taskData.taskName || docInfo.value.name,
+      type: taskData.taskType || docInfo.value.type,
+      standard: taskData.standardNames || docInfo.value.standard,
+      submitter: (taskData as any).createByName || (taskData as any).createBy || docInfo.value.submitter,
+      submitTime: taskData.createTime || docInfo.value.submitTime,
+      reviewTime: formatDuration(taskData.reviewDuration),
+      totalRules: taskData.totalRules ?? docInfo.value.totalRules,
+      passCount: taskData.passCount ?? docInfo.value.passCount,
+      errorCount: taskData.errorCount ?? docInfo.value.errorCount,
+      warningCount: taskData.warningCount ?? docInfo.value.warningCount,
+      infoCount: taskData.infoCount ?? docInfo.value.infoCount,
+      reviewVersion: taskData.version ?? docInfo.value.reviewVersion,
+      aiSummary: taskData.aiSummary || '',
+    };
+
+    // 更新版本对比选择器默认值
+    if (taskData.version) {
+      compareVersionA.value = taskData.version;
+      compareVersionB.value = Math.max(1, taskData.version - 1);
+    }
+
+    // 2. 获取审核结果明细
+    try {
+      const resultItems: ReviewResultItem[] = await reviewResultItemList(taskId);
+      if (resultItems && resultItems.length > 0) {
+        issues.value = resultItems.map(mapResultItemToIssue);
+      }
+      // 如果 API 返回空数组，保留 mock 数据作为 fallback
+    } catch {
+      // 获取明细失败，保留 mock 数据
+      console.warn('审核结果明细获取失败，使用 mock 数据展示');
+    }
+  } catch (e) {
+    message.error('获取任务详情失败');
+    console.error('loadTaskData error:', e);
+  } finally {
+    pageLoading.value = false;
+  }
+}
+
 onMounted(() => {
   scrollContainer.value?.addEventListener('scroll', handleScroll, { passive: true });
+  loadTaskData();
 });
 
 onUnmounted(() => {
@@ -274,6 +378,7 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <Spin :spinning="pageLoading" tip="加载中...">
   <div class="detail-page-layout">
     <div
       v-if="layoutPreference.showAnchorNav && layoutPreference.navMode === 'side'"
@@ -315,6 +420,11 @@ onUnmounted(() => {
                 <CheckCircleOutlined /> 已人工通过
               </Tag>
             </Space>
+          </div>
+          <!-- AI 总结 -->
+          <div v-if="docInfo.aiSummary" class="header-ai-summary">
+            <ThunderboltOutlined class="ai-summary-icon" />
+            <span>{{ docInfo.aiSummary }}</span>
           </div>
           <!-- 指标行 -->
           <div class="header-metrics-row">
@@ -438,7 +548,7 @@ onUnmounted(() => {
               </div>
               <div class="overview-content">
                 <div class="overview-label">通过率</div>
-                <div class="overview-value overview-value-rate">{{ Math.round(docInfo.passCount / docInfo.totalRules * 100) }}<span class="overview-unit">%</span></div>
+                <div class="overview-value overview-value-rate">{{ docInfo.totalRules > 0 ? Math.round(docInfo.passCount / docInfo.totalRules * 100) : 0 }}<span class="overview-unit">%</span></div>
               </div>
             </div>
             <div v-if="misjudgedCount > 0" class="overview-item">
@@ -526,6 +636,10 @@ onUnmounted(() => {
               <!-- 右侧：问题清单 -->
               <div class="issue-panel">
                 <div class="issue-panel-body">
+                  <div v-if="filteredIssues.length === 0" class="issue-empty">
+                    <CheckCircleOutlined style="font-size: 32px; color: #52c41a; margin-bottom: 8px;" />
+                    <div>暂无问题</div>
+                  </div>
                   <div
                     v-for="issue in filteredIssues"
                     :key="issue.id"
@@ -637,6 +751,7 @@ onUnmounted(() => {
       ok-text="确认标记"
       cancel-text="取消"
       @ok="confirmMisjudgment"
+      :confirm-loading="misjudgmentLoading"
       :width="480"
     >
       <div class="misjudgment-modal-body">
@@ -651,6 +766,7 @@ onUnmounted(() => {
       </div>
     </Modal>
   </div>
+  </Spin>
 </template>
 
 <style scoped>
@@ -705,6 +821,27 @@ onUnmounted(() => {
   color: rgba(0, 0, 0, 0.88);
   display: flex;
   align-items: center;
+}
+
+/* ===== AI 总结 ===== */
+.header-ai-summary {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #f0f5ff;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1d39c4;
+  line-height: 1.6;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ai-summary-icon {
+  color: #1677ff;
+  font-size: 15px;
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 .header-metrics-row {
@@ -933,6 +1070,16 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+}
+
+.issue-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #909399;
+  font-size: 14px;
 }
 
 .doc-paragraph {

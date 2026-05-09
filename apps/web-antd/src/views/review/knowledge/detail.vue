@@ -2,7 +2,7 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
@@ -27,8 +27,17 @@ import type { AnchorNavItem } from '#/components/anchor-nav';
 import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import CommonFilter from '#/components/CommonFilter/index.vue';
+import {
+  reviewKnowledgeInfo,
+  reviewKnowledgeStandards,
+  reviewKnowledgeCases,
+  reviewKnowledgePatterns,
+  reviewKnowledgeMisjudgments,
+} from '#/api/review/knowledge';
 
+const route = useRoute();
 const router = useRouter();
+const knowledgeId = computed(() => route.query.id as string);
 const layoutPreference = useDetailPagePreference();
 const tablePreference = useListTablePreference();
 const scrollContainer = ref<HTMLElement | null>(null);
@@ -57,68 +66,29 @@ const tableCssVars = computed(() => ({
   '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
 }));
 
-const knowledgeInfo = ref({
-  name: '政府采购合同案例库',
-  type: '合同类',
-  caseCount: 128,
-  patternCount: 23,
-  misjudgedCount: 15,
-  accuracy: 95,
-  updateTime: '2024-12-18',
-  description: '政府采购服务、货物合同的历史审核案例及常见问题模式。包含多年积累的审核经验，覆盖合同要素、金额条款、期限条款、违约责任等核心审核维度。',
-  status: 'active',
-});
-
-// 关联标准
-const linkedStandards = ref([
-  { id: 1, name: '政府采购合同审核标准', version: 'v2.1', type: '合同类', ruleCount: 38, status: 'active' },
-  { id: 5, name: '租赁合同审核标准', version: 'v1.0', type: '合同类', ruleCount: 32, status: 'active' },
-]);
+const knowledgeInfo = ref<Record<string, any>>({});
+const linkedStandards = ref<any[]>([]);
+const caseList = ref<any[]>([]);
+const patternList = ref<any[]>([]);
+const misjudgmentList = ref<any[]>([]);
 
 const activeTab = ref('cases');
 
-// 历史案例 mock 数据
-const caseMockData = [
-  { id: 1, docName: '某市采购合同审核', issue: '金额大写小写不一致', result: '确认问题', source: '审核反馈', time: '2024-12-20' },
-  { id: 2, docName: '物业租赁合同', issue: '缺少违约责任条款', result: '确认问题', source: '审核反馈', time: '2024-12-19' },
-  { id: 3, docName: '服务合同审核', issue: '服务期限表述模糊', result: '确认问题', source: '人工标注', time: '2024-12-18' },
-  { id: 4, docName: '财务报销单', issue: '发票金额超出标准', result: '确认问题', source: '审核反馈', time: '2024-12-17' },
-  { id: 5, docName: '项目立项表', issue: '缺少预算明细', result: '忽略（非必须）', source: '审核反馈', time: '2024-12-16' },
-  { id: 6, docName: '设备采购合同', issue: '验收标准不明确', result: '确认问题', source: '审核反馈', time: '2024-12-15' },
-  { id: 7, docName: '劳务派遣合同', issue: '缺少社保条款', result: '确认问题', source: '人工标注', time: '2024-12-14' },
-  { id: 8, docName: '软件开发合同', issue: '知识产权归属不清', result: '确认问题', source: '审核反馈', time: '2024-12-13' },
-  { id: 9, docName: '物流运输合同', issue: '保险责任未约定', result: '确认问题', source: '业务回传', time: '2024-12-12' },
-  { id: 10, docName: '广告投放合同', issue: '效果评估标准缺失', result: '忽略（非必须）', source: '审核反馈', time: '2024-12-11' },
-  { id: 11, docName: '房屋租赁合同', issue: '押金退还条件模糊', result: '确认问题', source: '审核反馈', time: '2024-12-10' },
-  { id: 12, docName: '咨询服务合同', issue: '保密期限未约定', result: '确认问题', source: '人工标注', time: '2024-12-09' },
-];
+async function loadKnowledgeInfo() {
+  if (!knowledgeId.value) return;
+  try {
+    knowledgeInfo.value = await reviewKnowledgeInfo(knowledgeId.value);
+  } catch { /* empty */ }
+}
 
-// 问题模式 mock 数据
-const patternMockData = [
-  { id: 1, name: '金额一致性问题', frequency: 38, accuracy: '98%', category: '金额类' },
-  { id: 2, name: '期限表述不明确', frequency: 25, accuracy: '95%', category: '期限类' },
-  { id: 3, name: '条款缺失', frequency: 20, accuracy: '90%', category: '完整性' },
-  { id: 4, name: '格式不规范', frequency: 18, accuracy: '88%', category: '格式类' },
-  { id: 5, name: '主体信息不完整', frequency: 15, accuracy: '96%', category: '主体类' },
-  { id: 6, name: '签章位置错误', frequency: 12, accuracy: '92%', category: '格式类' },
-  { id: 7, name: '付款条件不清晰', frequency: 10, accuracy: '87%', category: '金额类' },
-  { id: 8, name: '违约责任不对等', frequency: 9, accuracy: '91%', category: '完整性' },
-  { id: 9, name: '保密条款缺失', frequency: 8, accuracy: '94%', category: '完整性' },
-  { id: 10, name: '争议解决方式未约定', frequency: 7, accuracy: '89%', category: '完整性' },
-  { id: 11, name: '交付标准模糊', frequency: 6, accuracy: '85%', category: '期限类' },
-];
-
-// 误判记录 mock 数据
-const misjudgedMockData = [
-  { id: 1, rule: '规则 R005 · 服务期限必须明确起止日期', reason: '合同附件中已有补充协议明确了起止日期', docName: 'XX市政府采购服务合同-2024.docx', marker: '李四', time: '2024-12-20', ruleId: 'R005', totalTriggered: 32, misjudgedTimes: 5 },
-  { id: 2, rule: '规则 R022 · 政府采购合同应预留备案份数', reason: '本合同为内部协议，无需财政部门备案', docName: 'XX市政府采购服务合同-2024.docx', marker: '李四', time: '2024-12-20', ruleId: 'R022', totalTriggered: 18, misjudgedTimes: 8 },
-  { id: 3, rule: '规则 R018 · 知识产权条款应覆盖第三方组件', reason: '该项目为纯咨询服务，不涉及软件交付和第三方组件', docName: '咨询服务合同-XX项目.docx', marker: '张三', time: '2024-12-19', ruleId: 'R018', totalTriggered: 24, misjudgedTimes: 6 },
-  { id: 4, rule: '规则 R012 · 验收条款应明确验收方式、时限和标准文件', reason: '验收标准已在招标文件中详细约定，合同引用即可', docName: 'XX物业租赁合同-商铺A区.docx', marker: '张三', time: '2024-12-19', ruleId: 'R012', totalTriggered: 28, misjudgedTimes: 3 },
-  { id: 5, rule: '规则 R020 · 争议解决方式建议多元化', reason: '政府采购合同按规定只能走诉讼途径，不适用仲裁', docName: 'XX市政府采购服务合同-2024.docx', marker: '王五', time: '2024-12-18', ruleId: 'R020', totalTriggered: 20, misjudgedTimes: 12 },
-  { id: 6, rule: '规则 R006 · 住宿费不得超过对应级别标准', reason: '该员工已有总经理特批的住宿标准上浮审批', docName: '2024年Q4财务报销汇总表.xlsx', marker: '王五', time: '2024-12-18', ruleId: 'R006', totalTriggered: 45, misjudgedTimes: 4 },
-  { id: 7, rule: '规则 R009 · 单笔交通费超出历史均值3倍需说明', reason: '当天为机场接送往返，距离远属正常费用', docName: '2024年Q4财务报销汇总表.xlsx', marker: '王五', time: '2024-12-17', ruleId: 'R009', totalTriggered: 15, misjudgedTimes: 7 },
-  { id: 8, rule: '规则 R015 · 违约责任条款应双向约定', reason: '此为政府采购格式合同，甲方违约责任由上位法规定，合同中不重复约定', docName: '设备采购合同-XX学校.docx', marker: '赵六', time: '2024-12-16', ruleId: 'R015', totalTriggered: 30, misjudgedTimes: 9 },
-];
+async function loadLinkedStandards() {
+  if (!knowledgeId.value) return;
+  try {
+    linkedStandards.value = await reviewKnowledgeStandards(knowledgeId.value) || [];
+  } catch {
+    linkedStandards.value = [];
+  }
+}
 
 // 筛选条件
 const caseFilterData = ref([
@@ -200,28 +170,28 @@ const caseGridOptions: VxeGridProps = {
   columns: [
     { type: 'checkbox', width: 50 },
     {
-      field: 'docName',
-      title: '文档',
+      field: 'title',
+      title: '案例标题',
       minWidth: 220,
       headerAlign: 'left',
       align: 'left',
-      slots: { default: 'docName' },
+      slots: { default: 'caseTitle' },
     },
     {
-      field: 'issue',
-      title: '问题',
+      field: 'scenario',
+      title: '场景描述',
       minWidth: 200,
       headerAlign: 'left',
       align: 'left',
     },
     {
-      field: 'result',
-      title: '最终结论',
-      width: 130,
+      field: 'reviewConclusion',
+      title: '审核结论',
+      width: 160,
       slots: { default: 'result' },
     },
     {
-      field: 'time',
+      field: 'createTime',
       title: '时间',
       width: 120,
       headerAlign: 'left',
@@ -240,12 +210,16 @@ const caseGridOptions: VxeGridProps = {
   proxyConfig: {
     ajax: {
       query: async ({ page }) => {
-        const start = (page.currentPage - 1) * page.pageSize;
-        const end = start + page.pageSize;
-        return {
-          rows: caseMockData.slice(start, end),
-          total: caseMockData.length,
-        };
+        if (!knowledgeId.value) return { rows: [], total: 0 };
+        try {
+          const data = await reviewKnowledgeCases(knowledgeId.value);
+          caseList.value = data || [];
+          const start = (page.currentPage - 1) * page.pageSize;
+          const end = start + page.pageSize;
+          return { rows: caseList.value.slice(start, end), total: caseList.value.length };
+        } catch {
+          return { rows: [], total: 0 };
+        }
       },
     },
   },
@@ -292,12 +266,21 @@ const patternGridOptions: VxeGridProps = {
   proxyConfig: {
     ajax: {
       query: async ({ page }) => {
-        const start = (page.currentPage - 1) * page.pageSize;
-        const end = start + page.pageSize;
-        return {
-          rows: patternMockData.slice(start, end),
-          total: patternMockData.length,
-        };
+        if (!knowledgeId.value) return { rows: [], total: 0 };
+        try {
+          const data = await reviewKnowledgePatterns(knowledgeId.value);
+          patternList.value = (data || []).map((r: any) => ({
+            ...r,
+            name: r.patternName,
+            frequency: r.frequency ?? 0,
+            accuracy: r.accuracy ?? 0,
+          }));
+          const start = (page.currentPage - 1) * page.pageSize;
+          const end = start + page.pageSize;
+          return { rows: patternList.value.slice(start, end), total: patternList.value.length };
+        } catch {
+          return { rows: [], total: 0 };
+        }
       },
     },
   },
@@ -309,8 +292,8 @@ const patternGridOptions: VxeGridProps = {
 const misjudgedGridOptions: VxeGridProps = {
   columns: [
     {
-      field: 'rule',
-      title: '触发规则',
+      field: 'aiJudgment',
+      title: 'AI判断',
       minWidth: 240,
       headerAlign: 'left',
       align: 'left',
@@ -325,40 +308,26 @@ const misjudgedGridOptions: VxeGridProps = {
       slots: { default: 'misjudgedReason' },
     },
     {
-      field: 'totalTriggered',
-      title: '触发次数',
-      width: 90,
+      field: 'fieldName',
+      title: '字段',
+      width: 120,
       align: 'center',
     },
     {
-      field: 'misjudgedTimes',
-      title: '误判次数',
-      width: 90,
+      field: 'correctJudgment',
+      title: '人工纠正',
+      width: 130,
       align: 'center',
-      slots: { default: 'misjudgedTimes' },
     },
     {
-      field: 'misjudgedRate',
-      title: '误判率',
-      width: 100,
-      align: 'center',
-      slots: { default: 'misjudgedRate' },
-    },
-    {
-      field: 'docName',
-      title: '来源文档',
-      width: 200,
-      headerAlign: 'left',
-      align: 'left',
-    },
-    {
-      field: 'marker',
-      title: '标记人',
+      field: 'isLearned',
+      title: '已学习',
       width: 80,
       align: 'center',
+      slots: { default: 'isLearned' },
     },
     {
-      field: 'time',
+      field: 'createTime',
       title: '时间',
       width: 110,
       headerAlign: 'left',
@@ -377,12 +346,16 @@ const misjudgedGridOptions: VxeGridProps = {
   proxyConfig: {
     ajax: {
       query: async ({ page }) => {
-        const start = (page.currentPage - 1) * page.pageSize;
-        const end = start + page.pageSize;
-        return {
-          rows: misjudgedMockData.slice(start, end),
-          total: misjudgedMockData.length,
-        };
+        if (!knowledgeId.value) return { rows: [], total: 0 };
+        try {
+          const data = await reviewKnowledgeMisjudgments(knowledgeId.value);
+          misjudgmentList.value = data || [];
+          const start = (page.currentPage - 1) * page.pageSize;
+          const end = start + page.pageSize;
+          return { rows: misjudgmentList.value.slice(start, end), total: misjudgmentList.value.length };
+        } catch {
+          return { rows: [], total: 0 };
+        }
       },
     },
   },
@@ -478,8 +451,9 @@ function handleScroll() {
   activeAnchor.value = current;
 }
 
-onMounted(() => {
+onMounted(async () => {
   scrollContainer.value?.addEventListener('scroll', handleScroll, { passive: true });
+  await Promise.all([loadKnowledgeInfo(), loadLinkedStandards()]);
 });
 
 onUnmounted(() => {
@@ -513,7 +487,7 @@ onUnmounted(() => {
               <BookOutlined style="color: #1677ff; margin-right: 8px;" />
               {{ knowledgeInfo.name }}
               <Tag color="cyan" style="margin-left: 8px;">{{ knowledgeInfo.type }}</Tag>
-              <Badge v-if="knowledgeInfo.status === 'active'" status="success" text="启用中" style="margin-left: 8px;" />
+              <Badge v-if="knowledgeInfo.status === '0'" status="success" text="启用中" style="margin-left: 8px;" />
             </span>
             <Space>
               <Button type="default" size="small" @click="goBack"><ArrowLeftOutlined /> 返回</Button>
@@ -527,7 +501,7 @@ onUnmounted(() => {
               </div>
               <div class="header-metric-body">
                 <div class="header-metric-label">历史案例</div>
-                <div class="header-metric-value">{{ knowledgeInfo.caseCount }} 条</div>
+                <div class="header-metric-value">{{ knowledgeInfo.caseCount ?? 0 }} 条</div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -537,7 +511,7 @@ onUnmounted(() => {
               </div>
               <div class="header-metric-body">
                 <div class="header-metric-label">问题模式</div>
-                <div class="header-metric-value">{{ knowledgeInfo.patternCount }} 个</div>
+                <div class="header-metric-value">{{ knowledgeInfo.patternCount ?? 0 }} 个</div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -547,7 +521,7 @@ onUnmounted(() => {
               </div>
               <div class="header-metric-body">
                 <div class="header-metric-label">误判记录</div>
-                <div class="header-metric-value">{{ knowledgeInfo.misjudgedCount }} 条</div>
+                <div class="header-metric-value">{{ misjudgmentList.length }} 条</div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -557,7 +531,7 @@ onUnmounted(() => {
               </div>
               <div class="header-metric-body">
                 <div class="header-metric-label">识别准确率</div>
-                <div class="header-metric-value" style="color: #52c41a;">{{ knowledgeInfo.accuracy }}%</div>
+                <div class="header-metric-value" style="color: #52c41a;">{{ knowledgeInfo.accuracy ?? 0 }}%</div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -618,7 +592,7 @@ onUnmounted(() => {
                 </div>
                 <div class="linked-standard-meta">
                   <Tag :bordered="false" class="tag-sm">{{ std.type }}</Tag>
-                  <span class="text-gray-400 text-xs">{{ std.ruleCount }} 条规则</span>
+                  <span class="text-gray-400 text-xs">{{ std.ruleCount ?? 0 }} 条规则</span>
                 </div>
               </div>
             </div>
@@ -651,18 +625,18 @@ onUnmounted(() => {
                   </div>
                   <div class="table-style-wrapper" :style="tableCssVars">
                     <CaseTable table-title="历史案例">
-                      <template #docName="{ row }">
+                      <template #caseTitle="{ row }">
                         <div class="flex flex-col gap-1">
-                          <span class="doc-name-text">{{ row.docName }}</span>
+                          <span class="doc-name-text">{{ row.title }}</span>
                           <div class="flex items-center gap-1">
-                            <Tag :color="row.source === '审核反馈' ? 'blue' : row.source === '人工标注' ? 'orange' : 'cyan'" :bordered="false" class="tag-sm">
-                              {{ row.source }}
+                            <Tag :color="row.caseType === 'positive' ? 'green' : 'red'" :bordered="false" class="tag-sm">
+                              {{ row.caseType === 'positive' ? '正例' : '反例' }}
                             </Tag>
                           </div>
                         </div>
                       </template>
                       <template #result="{ row }">
-                        <Tag :color="row.result.includes('确认') ? 'green' : 'default'">{{ row.result }}</Tag>
+                        <span class="text-xs">{{ row.reviewConclusion || '-' }}</span>
                       </template>
                       <template #caseAction="{ row }">
                         <Space>
@@ -713,7 +687,7 @@ onUnmounted(() => {
                         <span v-else class="text-gray-400">{{ row.frequency }}</span>
                       </template>
                       <template #accuracy="{ row }">
-                        <span class="font-semibold text-green-500">{{ row.accuracy }}</span>
+                        <span class="font-semibold text-green-500">{{ row.accuracy }}%</span>
                       </template>
                       <template #patternAction="{ row }">
                         <Space>
@@ -740,7 +714,7 @@ onUnmounted(() => {
               <TabPane key="misjudged" class="tab-pane-content">
                 <template #tab>
                   <span>误判记录</span>
-                  <Tag v-if="knowledgeInfo.misjudgedCount > 0" color="default" :bordered="false" class="tag-sm" style="margin-left: 6px;">{{ knowledgeInfo.misjudgedCount }}</Tag>
+                  <Tag v-if="misjudgmentList.length > 0" color="default" :bordered="false" class="tag-sm" style="margin-left: 6px;">{{ misjudgmentList.length }}</Tag>
                 </template>
                 <div class="flex flex-col gap-3">
                   <div class="shrink-0 flex items-center justify-between">
@@ -753,23 +727,14 @@ onUnmounted(() => {
                   <div class="table-style-wrapper" :style="tableCssVars">
                     <MisjudgedTable table-title="误判记录明细">
                       <template #misjudgedRule="{ row }">
-                        <div class="flex flex-col gap-1">
-                          <span class="doc-name-text">{{ row.ruleId }}</span>
-                          <span class="text-xs text-gray-500">{{ row.rule.replace(`${row.ruleId} · `, '').replace(`规则 ${row.ruleId} · `, '') }}</span>
-                        </div>
+                        <span class="text-xs">{{ row.aiJudgment || '-' }}</span>
                       </template>
                       <template #misjudgedReason="{ row }">
-                        <span class="misjudged-reason-text">{{ row.reason }}</span>
+                        <span class="misjudged-reason-text">{{ row.reason || '-' }}</span>
                       </template>
-                      <template #misjudgedTimes="{ row }">
-                        <span class="font-semibold" style="color: #8c8c8c;">{{ row.misjudgedTimes }}</span>
-                      </template>
-                      <template #misjudgedRate="{ row }">
-                        <Tag
-                          :color="(row.misjudgedTimes / row.totalTriggered) >= 0.4 ? 'error' : (row.misjudgedTimes / row.totalTriggered) >= 0.2 ? 'warning' : 'default'"
-                          size="small"
-                        >
-                          {{ Math.round(row.misjudgedTimes / row.totalTriggered * 100) }}%
+                      <template #isLearned="{ row }">
+                        <Tag :color="row.isLearned === '1' ? 'green' : 'default'" :bordered="false">
+                          {{ row.isLearned === '1' ? '是' : '否' }}
                         </Tag>
                       </template>
                       <template #misjudgedAction="{ row }">

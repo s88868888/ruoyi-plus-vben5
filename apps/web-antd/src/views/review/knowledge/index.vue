@@ -6,13 +6,17 @@ import { useRouter } from 'vue-router';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
-import { Badge, Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, message } from 'ant-design-vue';
+import { Badge, Button, Dropdown, Menu, MenuItem, Modal, Space, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import AddKnowledgeDrawer from './modules/add-knowledge-drawer.vue';
+import { reviewKnowledgeList, reviewKnowledgeRemove } from '#/api/review/knowledge';
+import { DictEnum } from '@vben/constants';
+import { getDictOptions } from '#/utils/dict';
+import { renderDict } from '#/utils/render';
 
 const router = useRouter();
 const tablePreference = useListTablePreference();
@@ -37,13 +41,7 @@ const filterData = ref([
     label: '类型',
     type: 'a-select',
     data: '',
-    options: [
-      { label: '合同类', value: 'contract' },
-      { label: '财务类', value: 'finance' },
-      { label: '表单类', value: 'form' },
-      { label: '标书类', value: 'bid' },
-      { label: '综合类', value: 'general' },
-    ],
+    options: getDictOptions(DictEnum.REVIEW_KNOWLEDGE_TYPE),
     isCommon: true,
   },
   {
@@ -70,24 +68,7 @@ const handleFilterQuery = (conditions: any[]) => {
   tableApi.query();
 };
 
-const typeMap: Record<string, { label: string; color: string }> = {
-  contract: { label: '合同类', color: 'blue' },
-  finance: { label: '财务类', color: 'green' },
-  form: { label: '表单类', color: 'orange' },
-  bid: { label: '标书类', color: 'purple' },
-  general: { label: '综合类', color: 'cyan' },
-};
-
-const mockData = [
-  { id: 1, name: '政府采购合同案例库', type: 'contract', caseCount: 128, patternCount: 23, accuracy: 95, linkedStandardCount: 2, status: 'active', updateTime: '2024-12-18', description: '政府采购服务、货物合同的历史审核案例及常见问题模式' },
-  { id: 2, name: '合同纠纷判例库', type: 'contract', caseCount: 86, patternCount: 15, accuracy: 91, linkedStandardCount: 1, status: 'active', updateTime: '2024-12-15', description: '合同纠纷相关判例，用于增强违约、争议条款的审核能力' },
-  { id: 3, name: '财政审计问题库', type: 'finance', caseCount: 42, patternCount: 8, accuracy: 88, linkedStandardCount: 1, status: 'active', updateTime: '2024-12-10', description: '财政审计中发现的常见问题及整改案例' },
-  { id: 4, name: '企业服务合同案例库', type: 'contract', caseCount: 64, patternCount: 12, accuracy: 87, linkedStandardCount: 0, status: 'active', updateTime: '2024-11-28', description: '企业服务外包、咨询服务合同审核案例' },
-  { id: 5, name: '物业租赁合同案例库', type: 'contract', caseCount: 53, patternCount: 9, accuracy: 90, linkedStandardCount: 1, status: 'active', updateTime: '2024-11-20', description: '物业租赁合同的历史审核案例，含租金、押金、维修条款等' },
-  { id: 6, name: '劳动合同合规案例库', type: 'general', caseCount: 71, patternCount: 18, accuracy: 93, linkedStandardCount: 0, status: 'active', updateTime: '2024-11-15', description: '劳动合同合规审查相关案例，涵盖社保、工时、解除条件等' },
-  { id: 7, name: '标书格式规范案例库', type: 'bid', caseCount: 35, patternCount: 6, accuracy: 82, linkedStandardCount: 1, status: 'active', updateTime: '2024-10-20', description: '投标文件格式审查案例' },
-  { id: 8, name: '旧版财务报销库（已废弃）', type: 'finance', caseCount: 20, patternCount: 3, accuracy: 75, linkedStandardCount: 0, status: 'disabled', updateTime: '2024-06-01', description: '旧版报销规范案例，已被新规范替代' },
-];
+const loading = ref(false);
 
 const gridOptions: VxeGridProps = {
   checkboxConfig: {
@@ -159,12 +140,17 @@ const gridOptions: VxeGridProps = {
   proxyConfig: {
     ajax: {
       query: async ({ page }) => {
-        const start = (page.currentPage - 1) * page.pageSize;
-        const end = start + page.pageSize;
-        return {
-          rows: mockData.slice(start, end),
-          total: mockData.length,
-        };
+        loading.value = true;
+        try {
+          const params = {
+            pageNum: page.currentPage,
+            pageSize: page.pageSize,
+            ...searchParams.value,
+          };
+          return await reviewKnowledgeList(params);
+        } finally {
+          loading.value = false;
+        }
       },
     },
   },
@@ -207,9 +193,10 @@ function handleDisable(row: any) {
     okText: '停用',
     okType: 'danger',
     cancelText: '取消',
-    onOk() {
+    async onOk() {
+      await reviewKnowledgeRemove([row.id]);
       message.success('已停用');
-      tableApi.query();
+      await tableApi.query();
     },
   });
 }
@@ -237,7 +224,7 @@ function handleDisable(row: any) {
 
       <!-- 表格区域 -->
       <div class="table-style-wrapper flex-1 overflow-hidden" :style="tableCssVars">
-        <BasicTable class="h-full" table-title="知识库列表">
+        <BasicTable class="h-full" table-title="知识库列表" :loading="loading">
           <template #name="{ row }">
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
@@ -247,9 +234,7 @@ function handleDisable(row: any) {
                 >{{ row.name }}</span>
               </div>
               <div class="flex items-center gap-1">
-                <Tag :color="typeMap[row.type]?.color" :bordered="false" class="tag-sm">
-                  {{ typeMap[row.type]?.label || row.type }}
-                </Tag>
+                <component :is="renderDict(row.type, DictEnum.REVIEW_KNOWLEDGE_TYPE)" />
                 <span class="text-xs text-gray-400 truncate" style="max-width: 240px;">{{ row.description }}</span>
               </div>
             </div>
