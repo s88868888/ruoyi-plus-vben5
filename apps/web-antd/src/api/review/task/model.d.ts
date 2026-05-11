@@ -59,6 +59,7 @@ export interface ReviewResultItem extends BaseEntity {
   misjudgmentReason?: string;
   paragraphId?: number;
   sortOrder?: number;
+  rawData?: string;
 }
 
 export interface CreateTaskParams {
@@ -69,4 +70,5 @@ export interface CreateTaskParams {
   standardIds: number[];
   formSnapshot?: string;
   remark?: string;
+  files?: { ossId: number | string; fileName: string; fileType: string; filePath: string; fileSize: number }[];
 }

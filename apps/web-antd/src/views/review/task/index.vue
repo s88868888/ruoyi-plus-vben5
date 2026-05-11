@@ -128,28 +128,28 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'docName' },
     },
     {
-      field: 'standard',
+      field: 'standardNames',
       title: '审核标准',
       minWidth: 120,
       headerAlign: 'left',
       align: 'left',
     },
     {
-      field: 'passResult',
+      field: 'passStatus',
       title: '通过状态',
       width: 110,
       align: 'center',
       slots: { default: 'passResult' },
     },
     {
-      field: 'reviewVersion',
+      field: 'version',
       title: '审核次数',
       width: 90,
       align: 'center',
       slots: { default: 'reviewVersion' },
     },
     {
-      field: 'issueCount',
+      field: 'errorCount',
       title: '问题数',
       width: 90,
       align: 'center',
@@ -163,17 +163,18 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'misjudgedCount' },
     },
     {
-      field: 'submitTime',
+      field: 'createTime',
       title: '提交时间',
       width: 160,
       headerAlign: 'left',
       align: 'left',
     },
     {
-      field: 'reviewTime',
+      field: 'reviewDuration',
       title: '耗时',
       width: 80,
       align: 'center',
+      slots: { default: 'reviewTime' },
     },
     {
       field: 'action',
@@ -241,7 +242,7 @@ function handleView(row: any) {
 
 function handleDelete(row: any) {
   Modal.confirm({
-    title: `确认删除审核记录【${row.docName}】吗？`,
+    title: `确认删除审核记录【${row.taskName}】吗？`,
     okText: '删除',
     okType: 'danger',
     cancelText: '取消',
@@ -255,12 +256,12 @@ function handleDelete(row: any) {
 
 function handleExecute(row: any) {
   Modal.confirm({
-    title: `确认执行审核【${row.docName}】吗？`,
+    title: `确认执行审核【${row.taskName}】吗？`,
     okText: '确认',
     cancelText: '取消',
     async onOk() {
       await reviewTaskExecute(row.id);
-      message.success('审核任务已提交执行');
+      // message.success('审核任务已提交执行');
       await tableApi.query();
     },
   });
@@ -268,13 +269,27 @@ function handleExecute(row: any) {
 
 function handleTransferManual(row: any) {
   Modal.confirm({
-    title: `确认将【${row.docName}】转为人工审核吗？`,
+    title: `确认将【${row.taskName}】转为人工审核吗？`,
     content: '转为人工审核后，将由人工审核员进行复核',
     okText: '确认',
     cancelText: '取消',
     onOk() {
-      message.success('已转为人工审核');
+      // message.success('已转为人工审核');
       tableApi.query();
+    },
+  });
+}
+
+function handleRerun(row: any) {
+  Modal.confirm({
+    title: `确认重新审核【${row.taskName}】吗？`,
+    content: '将清除当前审核结果并重新执行AI审核',
+    okText: '确认',
+    cancelText: '取消',
+    async onOk() {
+      await reviewTaskExecute(row.id);
+      message.success('已重新提交审核');
+      await tableApi.query();
     },
   });
 }
@@ -321,8 +336,8 @@ function handleTransferManual(row: any) {
           </template>
 
           <template #issueCount="{ row }">
-            <span v-if="row.issueCount > 0" class="text-red-500">
-              <span class="text-base font-semibold">{{ row.issueCount }}</span>
+            <span v-if="(row.errorCount || 0) + (row.warningCount || 0) + (row.infoCount || 0) > 0" class="text-red-500">
+              <span class="text-base font-semibold">{{ (row.errorCount || 0) + (row.warningCount || 0) + (row.infoCount || 0) }}</span>
               <span class="text-xs font-normal ml-0.5">个</span>
             </span>
             <span v-else-if="row.status === 'completed'" class="text-green-500 font-semibold">
@@ -341,14 +356,21 @@ function handleTransferManual(row: any) {
           </template>
 
           <template #reviewVersion="{ row }">
-            <span v-if="row.reviewVersion > 1" class="text-black">
-              <span class="text-base font-semibold">{{ row.reviewVersion }}</span>
+            <span v-if="(row.version || 0) > 1" class="text-black">
+              <span class="text-base font-semibold">{{ row.version }}</span>
               <span class="text-xs font-normal text-gray-400 ml-0.5">次</span>
             </span>
             <span v-else class="text-gray-400">
-              <span class="text-base">{{ row.reviewVersion }}</span>
-              <span class="text-xs ml-0.5">次</span>
+              <span class="text-base">{{ row.version || '-' }}</span>
+              <span v-if="row.version" class="text-xs ml-0.5">次</span>
             </span>
+          </template>
+
+          <template #reviewTime="{ row }">
+            <span v-if="row.reviewDuration" class="text-gray-600">
+              {{ row.reviewDuration >= 1000 ? (row.reviewDuration / 1000).toFixed(1) + 's' : row.reviewDuration + 'ms' }}
+            </span>
+            <span v-else class="text-gray-400">-</span>
           </template>
 
           <template #action="{ row }">
@@ -361,8 +383,11 @@ function handleTransferManual(row: any) {
               </ghost-button>
               <Dropdown placement="bottomRight">
                 <template #overlay>
-                  <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); if (key === 'manual') handleTransferManual(row); }">
-                    <MenuItem v-if="row.status === 'completed' && row.passResult !== 'manual'" key="manual">
+                  <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); if (key === 'manual') handleTransferManual(row); if (key === 'rerun') handleRerun(row); }">
+                    <MenuItem v-if="row.status === 'completed' || row.status === 'failed'" key="rerun">
+                      重新审核
+                    </MenuItem>
+                    <MenuItem v-if="row.status === 'completed' && row.passStatus !== 'manual'" key="manual">
                       转人工审核
                     </MenuItem>
                     <MenuItem key="delete">

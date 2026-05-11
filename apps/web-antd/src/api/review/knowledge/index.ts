@@ -47,3 +47,8 @@ export function reviewKnowledgePatterns(knowledgeId: number | string) {
 export function reviewKnowledgeMisjudgments(knowledgeId: number | string) {
   return requestClient.get<ReviewKnowledgeMisjudgment[]>(`/review/knowledge/${knowledgeId}/misjudgments`);
 }
+
+// 同步知识库到向量库
+export function reviewKnowledgeSyncVector(knowledgeId: number | string) {
+  return requestClient.postWithMsg<void>(`/review/knowledge/${knowledgeId}/sync-vector`);
+}

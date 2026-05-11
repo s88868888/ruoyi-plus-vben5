@@ -26,6 +26,8 @@ import {
 
 import { AnchorNav } from '#/components/anchor-nav';
 import type { AnchorNavItem } from '#/components/anchor-nav';
+import { Page } from '@vben/common-ui';
+import { MarkdownPreviewer } from '@vben/common-ui';
 import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 
@@ -42,12 +44,17 @@ const scrollContainer = ref<HTMLElement | null>(null);
 const pageLoading = ref(false);
 const misjudgmentLoading = ref(false);
 
-const anchorNavItems = ref<AnchorNavItem[]>([
-  { key: 'overview', title: '审核概览' },
-  { key: 'data-overview', title: '数据概览' },
-  { key: 'review-detail', title: '审核详情' },
-  { key: 'version-compare', title: '版本对比' },
-]);
+const anchorNavItems = computed<AnchorNavItem[]>(() => {
+  const items: AnchorNavItem[] = [
+    { key: 'overview', title: '审核概览' },
+    { key: 'data-overview', title: '数据概览' },
+    { key: 'review-detail', title: '审核详情' },
+  ];
+  if (docInfo.value.reviewVersion > 1) {
+    items.push({ key: 'version-compare', title: '版本对比' });
+  }
+  return items;
+});
 
 const containerStyle = computed(() => {
   if (layoutPreference.contentWidth > 0) {
@@ -84,12 +91,32 @@ const docInfo = ref({
   aiSummary: '',
 });
 
-// 版本历史数据
-const versionHistory = ref([
-  { version: 3, time: '2024-12-20 14:30:45', errorCount: 3, warningCount: 2, infoCount: 2, passCount: 31, totalRules: 38, submitter: '李四' },
-  { version: 2, time: '2024-12-18 10:15:30', errorCount: 5, warningCount: 4, infoCount: 3, passCount: 26, totalRules: 38, submitter: '李四' },
-  { version: 1, time: '2024-12-15 09:00:12', errorCount: 8, warningCount: 6, infoCount: 4, passCount: 20, totalRules: 38, submitter: '李四' },
-]);
+// 表单快照和附件
+const formSnapshot = ref('');
+const taskFiles = ref<any[]>([]);
+const resultMarkdown = ref('');
+
+// 解析表单数据为键值对
+const formDataEntries = computed(() => {
+  if (!formSnapshot.value) return [];
+  try {
+    const obj = JSON.parse(formSnapshot.value);
+    return Object.entries(obj).map(([key, value]) => ({ key, value: String(value) }));
+  } catch {
+    return [{ key: '原始数据', value: formSnapshot.value }];
+  }
+});
+
+// 获取图片附件列表
+const imageFiles = computed(() => {
+  return taskFiles.value.filter((f: any) => {
+    const ext = (f.fileType || f.fileSuffix || '').toLowerCase();
+    return ['png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(ext);
+  });
+});
+
+// 版本历史数据（当前仅支持单次审核，后续迭代支持多版本）
+const versionHistory = ref<any[]>([]);
 
 const compareVersionA = ref(3);
 const compareVersionB = ref(2);
@@ -138,18 +165,7 @@ const compareGridOptions: VxeGridProps = {
 
 const [CompareTable] = useVbenVxeGrid({ gridOptions: compareGridOptions } as any);
 
-// Mock issues 数据（作为 fallback，API 返回后会被覆盖）
-const mockIssues = [
-  { id: 1, severity: 'error', title: '大写金额与数字金额不一致', location: '第二章 · 采购金额', description: '大写"叁佰伍拾万元整"与数字¥3,500,000.00不一致，需确认是否笔误。', suggestion: '请核实金额，确保大写与小写完全一致', rule: '规则 R004 · 合同金额大写与小写必须完全一致', misjudged: false, misjudgmentReason: '' },
-  { id: 2, severity: 'error', title: '服务期限缺少具体起止日期', location: '第三章 · 服务期限', description: '仅写"12个月"，未明确起止日期。', suggestion: '建议修改为"自2024年12月15日起至2025年12月14日止"', rule: '规则 R005 · 服务期限必须明确起止日期', misjudged: false, misjudgmentReason: '' },
-  { id: 3, severity: 'error', title: '违约责任条款不完整', location: '第五章 · 违约责任', description: '仅约定了乙方违约责任，缺少甲方违约条款。', suggestion: '建议补充甲方违约条款', rule: '规则 R015 · 违约责任条款应双向约定', misjudged: false, misjudgmentReason: '' },
-  { id: 4, severity: 'warning', title: '验收方式描述不够具体', location: '第四章 · 验收标准', description: '仅写"由甲方组织验收"，未明确验收时限和标准文件编号。', suggestion: '建议补充验收时限和验收依据文件', rule: '规则 R012 · 验收条款应明确验收方式、时限和标准文件', misjudged: false, misjudgmentReason: '' },
-  { id: 5, severity: 'warning', title: '知识产权条款不完整', location: '第六章 · 知识产权', description: '未明确第三方开源组件的知识产权处理方式。', suggestion: '建议补充第三方组件清单及其许可证说明', rule: '规则 R018 · 知识产权条款应覆盖第三方组件', misjudged: false, misjudgmentReason: '' },
-  { id: 6, severity: 'info', title: '建议补充仲裁作为争议解决备选', location: '第七章 · 争议解决', description: '当前仅约定诉讼方式，建议增加仲裁作为备选。', suggestion: '可补充"或提交XX仲裁委员会仲裁"', rule: '规则 R020 · 争议解决方式建议多元化', misjudged: false, misjudgmentReason: '' },
-  { id: 7, severity: 'info', title: '合同份数建议增加备案份', location: '第八章 · 其他约定', description: '当前约定"一式肆份"，建议增加财政部门备案份数。', suggestion: '建议修改为"一式陆份，甲乙双方各执贰份，财政部门备案贰份"', rule: '规则 R022 · 政府采购合同应预留备案份数', misjudged: false, misjudgmentReason: '' },
-];
-
-const issues = ref([...mockIssues]);
+const issues = ref<any[]>([]);
 
 const severityConfig: Record<string, { tagColor: string; label: string }> = {
   error: { tagColor: 'error', label: '严重' },
@@ -229,16 +245,7 @@ function selectIssue(issueId: number | string) {
 }
 
 // 模拟文档段落内容（fallback）
-const docParagraphs = ref([
-  { id: 'p1', chapter: '第一章', title: '合同基本信息', content: '甲方：XX市人民政府（统一社会信用代码：91440100...）\n乙方：XX科技有限公司（统一社会信用代码：91440300...）\n合同编号：GFCG-2024-0156\n签订日期：2024年12月10日' },
-  { id: 'p2', chapter: '第二章', title: '采购金额', content: '本合同采购总金额为人民币叁佰伍拾万元整（¥3,500,000.00），包含服务费、技术支持费及相关税费。付款方式：分三期支付，首期30%，中期40%，验收后30%。', issueIds: [1] },
-  { id: 'p3', chapter: '第三章', title: '服务期限', content: '服务期限为12个月。乙方应按照甲方要求，在服务期内完成全部约定工作内容。', issueIds: [2] },
-  { id: 'p4', chapter: '第四章', title: '验收标准', content: '项目验收由甲方组织验收，乙方应配合提供相关验收材料。验收不合格的，乙方应在10个工作日内整改完毕。', issueIds: [4] },
-  { id: 'p5', chapter: '第五章', title: '违约责任', content: '乙方未按合同约定时间交付的，每逾期一日，应向甲方支付合同总金额0.5‰的违约金。逾期超过30日的，甲方有权解除合同。', issueIds: [3] },
-  { id: 'p6', chapter: '第六章', title: '知识产权', content: '乙方保证其提供的服务及成果不侵犯任何第三方的知识产权。项目成果的知识产权归甲方所有。', issueIds: [5] },
-  { id: 'p7', chapter: '第七章', title: '争议解决', content: '双方因履行本合同发生争议的，应协商解决；协商不成的，向甲方所在地人民法院提起诉讼。', issueIds: [6] },
-  { id: 'p8', chapter: '第八章', title: '其他约定', content: '本合同一式肆份，甲乙双方各执贰份，具有同等法律效力。本合同自双方签字盖章之日起生效。', issueIds: [7] },
-]);
+const docParagraphs = ref<any[]>([]);
 
 // 横向导航：当前激活锚点
 const activeAnchor = ref('overview');
@@ -292,11 +299,15 @@ function mapResultItemToIssue(item: ReviewResultItem) {
   return {
     id: item.id,
     severity: item.severity || 'info',
-    title: item.fieldLabel || item.fieldName || '未命名问题',
-    location: item.location || '--',
+    title: item.fieldLabel || item.fieldName || '未命名字段',
+    location: item.location || (item.fieldName ? `字段: ${item.fieldName}` : '--'),
     description: item.description || '--',
     suggestion: item.suggestion || '--',
-    rule: item.aiRemark || '--',
+    rule: item.ruleId ? `规则 R${item.ruleId}` : '--',
+    formValue: item.formValue || '--',
+    extractedValue: item.extractedValue || '--',
+    matchStatus: item.matchStatus || '--',
+    confidence: item.confidence,
     misjudged: item.misjudged === 'Y' || item.misjudged === '1',
     misjudgmentReason: item.misjudgmentReason || '',
   };
@@ -342,6 +353,11 @@ async function loadTaskData() {
       aiSummary: taskData.aiSummary || '',
     };
 
+    // 保存表单快照和附件信息
+    formSnapshot.value = taskData.formSnapshot || '';
+    taskFiles.value = taskData.files || [];
+    resultMarkdown.value = (taskData as any).resultMarkdown || '';
+
     // 更新版本对比选择器默认值
     if (taskData.version) {
       compareVersionA.value = taskData.version;
@@ -351,13 +367,12 @@ async function loadTaskData() {
     // 2. 获取审核结果明细
     try {
       const resultItems: ReviewResultItem[] = await reviewResultItemList(taskId);
-      if (resultItems && resultItems.length > 0) {
-        issues.value = resultItems.map(mapResultItemToIssue);
-      }
-      // 如果 API 返回空数组，保留 mock 数据作为 fallback
+      issues.value = (resultItems && resultItems.length > 0)
+        ? resultItems.map(mapResultItemToIssue)
+        : [];
     } catch {
-      // 获取明细失败，保留 mock 数据
-      console.warn('审核结果明细获取失败，使用 mock 数据展示');
+      issues.value = [];
+      console.warn('审核结果明细获取失败');
     }
   } catch (e) {
     message.error('获取任务详情失败');
@@ -378,7 +393,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Spin :spinning="pageLoading" tip="加载中...">
+  <Page :auto-content-height="true">
+  <Spin :spinning="pageLoading" tip="加载中..." style="height: 100%;">
   <div class="detail-page-layout">
     <div
       v-if="layoutPreference.showAnchorNav && layoutPreference.navMode === 'side'"
@@ -603,38 +619,50 @@ onUnmounted(() => {
             </template>
 
             <div class="review-detail-split">
-              <!-- 左侧：文档预览 -->
+              <!-- 左侧：审核报告 / 提交资料预览 -->
               <div class="doc-preview-panel">
                 <div class="doc-preview-body" ref="docPreviewRef">
-                  <div
-                    v-for="para in docParagraphs"
-                    :id="`doc-${para.id}`"
-                    :key="para.id"
-                    :class="['doc-paragraph', { 'doc-paragraph-highlight': isParaHighlighted(para), 'doc-paragraph-has-issue': para.issueIds && para.issueIds.length > 0 }]"
-                  >
-                    <div class="doc-para-chapter">{{ para.chapter }} · {{ para.title }}</div>
-                    <div class="doc-para-content">{{ para.content }}</div>
-                    <div v-if="para.issueIds && para.issueIds.length > 0" class="doc-para-markers">
-                      <Tag
-                        v-for="iid in para.issueIds"
-                        :key="iid"
-                        :color="severityConfig[issues.find(i => i.id === iid)?.severity || 'info']?.tagColor"
-                        size="small"
-                        class="cursor-pointer"
-                        @click="selectIssue(iid)"
-                      >
-                        {{ issues.find(i => i.id === iid)?.title }}
-                      </Tag>
-                    </div>
+                  <!-- 优先展示 Markdown 审核报告 -->
+                  <div v-if="resultMarkdown" class="markdown-report-section">
+                    <MarkdownPreviewer v-model:value="resultMarkdown" height="auto" />
                   </div>
+
+                  <!-- 无 Markdown 时展示表单数据 + 附件 -->
+                  <template v-else>
+                    <!-- 表单数据 -->
+                    <div v-if="formDataEntries.length > 0" class="form-preview-section">
+                      <div class="form-preview-title">提交表单数据</div>
+                      <div class="form-preview-table">
+                        <div v-for="entry in formDataEntries" :key="entry.key" class="form-preview-row">
+                          <span class="form-preview-label">{{ entry.key }}</span>
+                          <span class="form-preview-value">{{ entry.value || '-' }}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 附件图片 -->
+                    <div v-if="imageFiles.length > 0" class="form-preview-section" style="margin-top: 16px;">
+                      <div class="form-preview-title">营业执照附件</div>
+                      <div v-for="file in imageFiles" :key="file.id" class="image-preview-item">
+                        <img :src="file.filePath || file.url" :alt="file.fileName" class="image-preview-img" />
+                        <div class="image-preview-name">{{ file.fileName }}</div>
+                      </div>
+                    </div>
+
+                    <!-- 无内容时的空状态 -->
+                    <div v-if="formDataEntries.length === 0 && imageFiles.length === 0" class="doc-preview-empty">
+                      <AuditOutlined style="font-size: 32px; color: #d9d9d9; margin-bottom: 8px;" />
+                      <div style="color: #999;">暂无提交资料预览</div>
+                    </div>
+                  </template>
                 </div>
               </div>
 
-              <!-- 分隔线 -->
-              <div class="review-detail-divider" />
+              <!-- 分隔线（有问题列表时显示） -->
+              <div v-if="issues.length > 0" class="review-detail-divider" />
 
-              <!-- 右侧：问题清单 -->
-              <div class="issue-panel">
+              <!-- 右侧：问题清单（有 items 时显示） -->
+              <div v-if="issues.length > 0" class="issue-panel">
                 <div class="issue-panel-body">
                   <div v-if="filteredIssues.length === 0" class="issue-empty">
                     <CheckCircleOutlined style="font-size: 32px; color: #52c41a; margin-bottom: 8px;" />
@@ -649,9 +677,19 @@ onUnmounted(() => {
                     <div class="issue-card-top">
                       <Tag :color="severityConfig[issue.severity]?.tagColor" size="small">{{ severityConfig[issue.severity]?.label }}</Tag>
                       <span :class="['issue-card-title', { 'issue-title-misjudged': issue.misjudged }]">{{ issue.title }}</span>
+                      <Tag v-if="issue.confidence" color="default" size="small">{{ issue.confidence }}%</Tag>
                       <Tag v-if="issue.misjudged" color="default" size="small" class="misjudged-tag">误判</Tag>
                     </div>
-                    <div class="issue-card-location">{{ issue.location }}</div>
+                    <div v-if="issue.formValue && issue.formValue !== '--'" class="issue-card-compare">
+                      <div class="compare-row">
+                        <span class="compare-label">表单值：</span>
+                        <span class="compare-value">{{ issue.formValue }}</span>
+                      </div>
+                      <div class="compare-row">
+                        <span class="compare-label">提取值：</span>
+                        <span :class="['compare-value', { 'compare-value-mismatch': issue.matchStatus === 'mismatched' }]">{{ issue.extractedValue }}</span>
+                      </div>
+                    </div>
                     <p :class="['issue-card-desc', { 'issue-desc-misjudged': issue.misjudged }]">{{ issue.description }}</p>
                     <div v-if="issue.misjudged" class="issue-card-misjudgment-reason">
                       <StopOutlined class="misjudgment-reason-icon" /> 误判原因：{{ issue.misjudgmentReason }}
@@ -689,8 +727,8 @@ onUnmounted(() => {
             </div>
           </Card>
 
-          <!-- 版本对比 -->
-          <Card id="version-compare" class="mb-4 detail-card" :style="cardRadiusStyle">
+          <!-- 版本对比（仅多次审核时显示） -->
+          <Card v-if="docInfo.reviewVersion > 1" id="version-compare" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
               <span class="card-title">
                 <HistoryOutlined class="card-title-icon" />
@@ -767,9 +805,16 @@ onUnmounted(() => {
     </Modal>
   </div>
   </Spin>
+  </Page>
 </template>
 
 <style scoped>
+/* Spin 容器高度 */
+:deep(.ant-spin-nested-loading),
+:deep(.ant-spin-container) {
+  height: 100%;
+}
+
 /* ===== 页面布局（与招标详情一致） ===== */
 .detail-page-layout {
   position: relative;
@@ -1054,6 +1099,100 @@ onUnmounted(() => {
   padding: 20px;
 }
 
+.markdown-report-section {
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.markdown-report-section :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+.markdown-report-section :deep(th),
+.markdown-report-section :deep(td) {
+  border: 1px solid #e8e8e8;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.markdown-report-section :deep(th) {
+  background: #fafafa;
+  font-weight: 600;
+}
+
+.doc-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+}
+
+.form-preview-section {
+  margin-bottom: 12px;
+}
+
+.form-preview-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 10px;
+  padding-left: 8px;
+  border-left: 3px solid #1677ff;
+}
+
+.form-preview-table {
+  background: #fafafa;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.form-preview-row {
+  display: flex;
+  align-items: baseline;
+  padding: 5px 0;
+  border-bottom: 1px dashed #f0f0f0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.form-preview-row:last-child {
+  border-bottom: none;
+}
+
+.form-preview-label {
+  color: #909399;
+  width: 100px;
+  flex-shrink: 0;
+}
+
+.form-preview-value {
+  color: #303133;
+  word-break: break-all;
+}
+
+.image-preview-item {
+  margin-top: 8px;
+}
+
+.image-preview-img {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+
+.image-preview-name {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  text-align: center;
+}
+
 .review-detail-divider {
   width: 1px;
   background: #f0f0f0;
@@ -1159,6 +1298,36 @@ onUnmounted(() => {
   font-size: 11px;
   color: #909399;
   margin-bottom: 6px;
+}
+
+.issue-card-compare {
+  background: #f9fafb;
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin: 6px 0 8px;
+  font-size: 12px;
+}
+
+.compare-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  line-height: 1.8;
+}
+
+.compare-label {
+  color: #909399;
+  flex-shrink: 0;
+}
+
+.compare-value {
+  color: #303133;
+  word-break: break-all;
+}
+
+.compare-value-mismatch {
+  color: #f56c6c;
+  font-weight: 600;
 }
 
 .issue-card-desc {

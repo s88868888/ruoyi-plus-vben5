@@ -20,6 +20,7 @@ import {
   CheckCircleOutlined,
   LinkOutlined,
   StopOutlined,
+  SyncOutlined,
 } from '@ant-design/icons-vue';
 
 import { AnchorNav } from '#/components/anchor-nav';
@@ -33,6 +34,7 @@ import {
   reviewKnowledgeCases,
   reviewKnowledgePatterns,
   reviewKnowledgeMisjudgments,
+  reviewKnowledgeSyncVector,
 } from '#/api/review/knowledge';
 
 const route = useRoute();
@@ -419,6 +421,21 @@ function handleDeleteMisjudged(row: any) {
   });
 }
 
+const syncing = ref(false);
+
+async function handleSyncVector() {
+  if (!knowledgeId.value) return;
+  syncing.value = true;
+  try {
+    await reviewKnowledgeSyncVector(knowledgeId.value);
+    message.success('同步任务已提交，知识库正在向量化中...');
+  } catch {
+    message.error('同步失败，请检查向量库服务是否正常');
+  } finally {
+    syncing.value = false;
+  }
+}
+
 function goBack() {
   router.push('/review/knowledge');
 }
@@ -490,6 +507,9 @@ onUnmounted(() => {
               <Badge v-if="knowledgeInfo.status === '0'" status="success" text="启用中" style="margin-left: 8px;" />
             </span>
             <Space>
+              <Button type="primary" size="small" :loading="syncing" @click="handleSyncVector">
+                <SyncOutlined /> 同步
+              </Button>
               <Button type="default" size="small" @click="goBack"><ArrowLeftOutlined /> 返回</Button>
             </Space>
           </div>
