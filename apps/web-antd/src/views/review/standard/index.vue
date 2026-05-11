@@ -13,6 +13,7 @@ import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import AddStandardDrawer from './modules/add-standard-drawer.vue';
+import EditStandardDrawer from './modules/edit-standard-drawer.vue';
 import { reviewStandardList, reviewStandardRemove } from '#/api/review/standard';
 import { DictEnum } from '@vben/constants';
 import { getDictOptions } from '#/utils/dict';
@@ -37,11 +38,14 @@ const filterData = ref([
     isCommon: true,
   },
   {
-    field: 'type',
-    label: '类型',
+    field: 'isSystem',
+    label: '是否通用',
     type: 'a-select',
     data: '',
-    options: getDictOptions(DictEnum.REVIEW_STANDARD_TYPE),
+    options: [
+      { label: '通用', value: '1' },
+      { label: '专用', value: '0' },
+    ],
     isCommon: true,
   },
   {
@@ -50,8 +54,8 @@ const filterData = ref([
     type: 'a-select',
     data: '',
     options: [
-      { label: '启用中', value: 'active' },
-      { label: '已废止', value: 'disabled' },
+      { label: '启用中', value: '0' },
+      { label: '已废止', value: '1' },
     ],
     isCommon: true,
   },
@@ -94,7 +98,7 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'ruleCount' },
     },
     {
-      field: 'usageCount',
+      field: 'useCount',
       title: '使用次数',
       width: 100,
       align: 'center',
@@ -107,7 +111,7 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'status' },
     },
     {
-      field: 'updater',
+      field: 'updateByName',
       title: '更新人',
       width: 100,
       align: 'center',
@@ -115,7 +119,7 @@ const gridOptions: VxeGridProps = {
     {
       field: 'updateTime',
       title: '更新时间',
-      width: 120,
+      width: 150,
       headerAlign: 'left',
       align: 'left',
     },
@@ -167,6 +171,11 @@ const [AddDrawerComp, addDrawerApi] = useVbenDrawer({
   connectedComponent: AddStandardDrawer,
 });
 
+// 编辑抽屉
+const [EditDrawerComp, editDrawerApi] = useVbenDrawer({
+  connectedComponent: EditStandardDrawer,
+});
+
 function handleAdd() {
   addDrawerApi.open();
 }
@@ -177,6 +186,11 @@ async function handleReload() {
 
 function handleViewDetail(row: any) {
   router.push(`/review/standard/detail?id=${row.id}`);
+}
+
+function handleEdit(row: any) {
+  editDrawerApi.setData({ id: row.id });
+  editDrawerApi.open();
 }
 
 function handleDisable(row: any) {
@@ -226,9 +240,11 @@ function handleDisable(row: any) {
                   @click="handleViewDetail(row)"
                 >{{ row.name }}</span>
                 <span class="text-xs text-gray-400">{{ row.version }}</span>
+                <Tag v-if="row.isSystem === '1'" color="purple" class="m-0">通用</Tag>
+                <Tag v-else color="default" class="m-0">专用</Tag>
               </div>
-              <div class="flex items-center gap-1">
-                <component :is="renderDict(row.type, DictEnum.REVIEW_STANDARD_TYPE)" />
+              <div v-if="row.description" class="text-xs text-gray-400 truncate">
+                {{ row.description }}
               </div>
             </div>
           </template>
@@ -238,11 +254,11 @@ function handleDisable(row: any) {
           </template>
 
           <template #usageCount="{ row }">
-            <span class="text-gray-600"><span class="text-base font-semibold">{{ row.usageCount }}</span><span class="text-xs ml-0.5">次</span></span>
+            <span class="text-gray-600"><span class="text-base font-semibold">{{ row.useCount ?? 0 }}</span><span class="text-xs ml-0.5">次</span></span>
           </template>
 
           <template #status="{ row }">
-            <Badge v-if="row.status === 'active'" status="success" text="启用" />
+            <Badge v-if="row.status === '0'" status="success" text="启用" />
             <Badge v-else status="default" text="已废止" />
           </template>
 
@@ -254,7 +270,7 @@ function handleDisable(row: any) {
               <Dropdown placement="bottomRight">
                 <template #overlay>
                   <Menu>
-                    <MenuItem key="edit" @click="handleViewDetail(row)">
+                    <MenuItem key="edit" @click="handleEdit(row)">
                       编辑
                     </MenuItem>
                     <MenuItem key="disable" @click="handleDisable(row)">
@@ -272,6 +288,7 @@ function handleDisable(row: any) {
       </div>
     </div>
     <AddDrawerComp @reload="handleReload" />
+    <EditDrawerComp @reload="handleReload" />
   </Page>
 </template>
 

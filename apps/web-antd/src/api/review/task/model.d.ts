@@ -25,6 +25,7 @@ export interface ReviewTask extends BaseEntity {
   reviewComment?: string;
   remark?: string;
   standardNames?: string;
+  createByName?: string;
   files?: ReviewTaskFile[];
 }
 

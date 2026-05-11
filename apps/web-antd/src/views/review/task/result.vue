@@ -4,7 +4,7 @@ import type { VxeGridProps } from '#/adapter/vxe-table';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-import { Card, Tag, Button, Space, Select, Modal, Input, Spin, message } from 'ant-design-vue';
+import { Card, Image, Tag, Button, Space, Select, Modal, Input, Spin, message } from 'ant-design-vue';
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
@@ -75,6 +75,14 @@ const tableCssVars = computed(() => ({
 }));
 
 // Mock 审核结果数据（作为 fallback）
+const taskTypeMap: Record<string, string> = {
+  company_info: '公司资料审核',
+  contract: '合同审核',
+  finance: '财务审核',
+  bid: '标书审核',
+  general: '通用审核',
+};
+
 const docInfo = ref({
   name: '暂无数据',
   type: '--',
@@ -171,6 +179,7 @@ const severityConfig: Record<string, { tagColor: string; label: string }> = {
   error: { tagColor: 'error', label: '严重' },
   warning: { tagColor: 'warning', label: '一般' },
   info: { tagColor: 'processing', label: '提示' },
+  pass: { tagColor: 'success', label: '通过' },
 };
 
 // 当前选中的问题（高亮文档对应段落）
@@ -182,8 +191,11 @@ const issueFilter = ref<string>('all');
 const filteredIssues = computed(() => {
   if (issueFilter.value === 'all') return issues.value;
   if (issueFilter.value === 'misjudged') return issues.value.filter(i => i.misjudged);
+  if (issueFilter.value === 'pass') return issues.value.filter(i => i.passed);
   return issues.value.filter(i => i.severity === issueFilter.value);
 });
+
+const problemCount = computed(() => issues.value.filter(i => !i.passed).length);
 
 // 误判矫正
 const misjudgmentModalVisible = ref(false);
@@ -296,9 +308,10 @@ function goBack() { router.push('/review/task'); }
 
 /** 将 ReviewResultItem 转换为页面 issue 展示结构 */
 function mapResultItemToIssue(item: ReviewResultItem) {
+  const passed = item.matchStatus === 'matched';
   return {
     id: item.id,
-    severity: item.severity || 'info',
+    severity: passed ? 'pass' : (item.severity || 'info'),
     title: item.fieldLabel || item.fieldName || '未命名字段',
     location: item.location || (item.fieldName ? `字段: ${item.fieldName}` : '--'),
     description: item.description || '--',
@@ -310,6 +323,7 @@ function mapResultItemToIssue(item: ReviewResultItem) {
     confidence: item.confidence,
     misjudged: item.misjudged === 'Y' || item.misjudged === '1',
     misjudgmentReason: item.misjudgmentReason || '',
+    passed,
   };
 }
 
@@ -341,7 +355,7 @@ async function loadTaskData() {
       name: taskData.taskName || docInfo.value.name,
       type: taskData.taskType || docInfo.value.type,
       standard: taskData.standardNames || docInfo.value.standard,
-      submitter: (taskData as any).createByName || (taskData as any).createBy || docInfo.value.submitter,
+      submitter: taskData.createByName || docInfo.value.submitter,
       submitTime: taskData.createTime || docInfo.value.submitTime,
       reviewTime: formatDuration(taskData.reviewDuration),
       totalRules: taskData.totalRules ?? docInfo.value.totalRules,
@@ -419,7 +433,7 @@ onUnmounted(() => {
           <div class="header-title-row">
             <span class="header-project-name">
               {{ docInfo.name }}
-              <Tag color="blue" style="margin-left: 8px;">{{ docInfo.type }}</Tag>
+              <Tag color="blue" style="margin-left: 8px;">{{ taskTypeMap[docInfo.type] || docInfo.type }}</Tag>
             </span>
             <Space>
               <Button type="default" size="small" @click="goBack"><ArrowLeftOutlined /> 返回</Button>
@@ -598,17 +612,22 @@ onUnmounted(() => {
                   :color="issueFilter === 'error' ? 'error' : 'default'"
                   class="cursor-pointer"
                   @click="issueFilter = 'error'"
-                >严重 {{ docInfo.errorCount }}</Tag>
+                >严重 {{ issues.filter(i => i.severity === 'error').length }}</Tag>
                 <Tag
                   :color="issueFilter === 'warning' ? 'warning' : 'default'"
                   class="cursor-pointer"
                   @click="issueFilter = 'warning'"
-                >一般 {{ docInfo.warningCount }}</Tag>
+                >一般 {{ issues.filter(i => i.severity === 'warning').length }}</Tag>
                 <Tag
                   :color="issueFilter === 'info' ? 'processing' : 'default'"
                   class="cursor-pointer"
                   @click="issueFilter = 'info'"
-                >提示 {{ docInfo.infoCount }}</Tag>
+                >提示 {{ issues.filter(i => i.severity === 'info').length }}</Tag>
+                <Tag
+                  :color="issueFilter === 'pass' ? 'success' : 'default'"
+                  class="cursor-pointer"
+                  @click="issueFilter = 'pass'"
+                >通过 {{ issues.filter(i => i.passed).length }}</Tag>
                 <Tag
                   v-if="misjudgedCount > 0"
                   :color="issueFilter === 'misjudged' ? 'default' : 'default'"
@@ -644,7 +663,7 @@ onUnmounted(() => {
                     <div v-if="imageFiles.length > 0" class="form-preview-section" style="margin-top: 16px;">
                       <div class="form-preview-title">营业执照附件</div>
                       <div v-for="file in imageFiles" :key="file.id" class="image-preview-item">
-                        <img :src="file.filePath || file.url" :alt="file.fileName" class="image-preview-img" />
+                        <Image :src="file.filePath || file.url" :alt="file.fileName" class="image-preview-img" />
                         <div class="image-preview-name">{{ file.fileName }}</div>
                       </div>
                     </div>
@@ -671,13 +690,13 @@ onUnmounted(() => {
                   <div
                     v-for="issue in filteredIssues"
                     :key="issue.id"
-                    :class="['issue-card', { 'issue-card-active': activeIssueId === issue.id, 'issue-card-misjudged': issue.misjudged }]"
+                    :class="['issue-card', { 'issue-card-active': activeIssueId === issue.id, 'issue-card-misjudged': issue.misjudged, 'issue-card-passed': issue.passed }]"
                     @click="selectIssue(issue.id)"
                   >
                     <div class="issue-card-top">
                       <Tag :color="severityConfig[issue.severity]?.tagColor" size="small">{{ severityConfig[issue.severity]?.label }}</Tag>
                       <span :class="['issue-card-title', { 'issue-title-misjudged': issue.misjudged }]">{{ issue.title }}</span>
-                      <Tag v-if="issue.confidence" color="default" size="small">{{ issue.confidence }}%</Tag>
+                      <Tag v-if="issue.confidence && issue.confidence < 80" color="orange" size="small">AI不确定 {{ issue.confidence }}%</Tag>
                       <Tag v-if="issue.misjudged" color="default" size="small" class="misjudged-tag">误判</Tag>
                     </div>
                     <div v-if="issue.formValue && issue.formValue !== '--'" class="issue-card-compare">
@@ -691,10 +710,13 @@ onUnmounted(() => {
                       </div>
                     </div>
                     <p :class="['issue-card-desc', { 'issue-desc-misjudged': issue.misjudged }]">{{ issue.description }}</p>
-                    <div v-if="issue.misjudged" class="issue-card-misjudgment-reason">
+                    <div v-if="issue.passed" class="issue-card-passed-result">
+                      <CheckCircleOutlined class="issue-card-passed-icon" /> {{ issue.suggestion }}
+                    </div>
+                    <div v-else-if="issue.misjudged" class="issue-card-misjudgment-reason">
                       <StopOutlined class="misjudgment-reason-icon" /> 误判原因：{{ issue.misjudgmentReason }}
                     </div>
-                    <div v-if="!issue.misjudged" class="issue-card-suggestion">
+                    <div v-else class="issue-card-suggestion">
                       <CheckCircleOutlined class="issue-card-suggestion-icon" /> {{ issue.suggestion }}
                     </div>
                     <div class="issue-card-bottom">
@@ -703,7 +725,7 @@ onUnmounted(() => {
                       </div>
                       <div class="issue-card-actions" @click.stop>
                         <Button
-                          v-if="!issue.misjudged"
+                          v-if="!issue.passed && !issue.misjudged"
                           type="text"
                           size="small"
                           danger
@@ -712,7 +734,7 @@ onUnmounted(() => {
                           <StopOutlined /> 标记误判
                         </Button>
                         <Button
-                          v-else
+                          v-else-if="issue.misjudged"
                           type="text"
                           size="small"
                           @click="undoMisjudgment(issue.id)"
@@ -1498,6 +1520,35 @@ onUnmounted(() => {
   color: #606266;
   margin-bottom: 12px;
   line-height: 1.6;
+}
+
+.issue-card-passed {
+  border-color: #b7eb8f;
+  background: #f6ffed;
+}
+
+.issue-card-passed:hover {
+  background: #f0ffe6;
+}
+
+.issue-card-passed-result {
+  font-size: 12px;
+  color: #52c41a;
+  background: #f6ffed;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.issue-card-passed-icon {
+  color: #52c41a;
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 </style>

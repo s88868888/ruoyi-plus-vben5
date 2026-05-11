@@ -179,6 +179,19 @@ const severityMap: Record<string, { label: string; color: string }> = {
   suggest: { label: '提示', color: 'blue' },
 };
 
+const categoryMap: Record<string, string> = {
+  subject_info: '主体信息',
+  compliance: '合规性',
+  amount: '金额条款',
+  term: '期限条款',
+  acceptance: '验收条款',
+  liability: '违约责任',
+  ip: '知识产权',
+  dispute: '争议解决',
+  format: '格式规范',
+  other: '其他',
+};
+
 const ruleFilterData = ref([
   {
     field: 'content',
@@ -205,17 +218,16 @@ const ruleFilterData = ref([
     type: 'a-select',
     data: '',
     options: [
-      { label: '主体信息', value: '主体信息' },
-      { label: '基本信息', value: '基本信息' },
-      { label: '金额条款', value: '金额条款' },
-      { label: '期限条款', value: '期限条款' },
-      { label: '付款条款', value: '付款条款' },
-      { label: '验收条款', value: '验收条款' },
-      { label: '违约条款', value: '违约条款' },
-      { label: '知识产权', value: '知识产权' },
-      { label: '保密条款', value: '保密条款' },
-      { label: '争议解决', value: '争议解决' },
-      { label: '其他', value: '其他' },
+      { label: '主体信息', value: 'subject_info' },
+      { label: '合规性', value: 'compliance' },
+      { label: '金额条款', value: 'amount' },
+      { label: '期限条款', value: 'term' },
+      { label: '验收条款', value: 'acceptance' },
+      { label: '违约责任', value: 'liability' },
+      { label: '知识产权', value: 'ip' },
+      { label: '争议解决', value: 'dispute' },
+      { label: '格式规范', value: 'format' },
+      { label: '其他', value: 'other' },
     ],
     isCommon: true,
   },
@@ -247,6 +259,7 @@ const gridOptions: VxeGridProps = {
       title: '分类',
       width: 100,
       align: 'center',
+      slots: { default: 'category' },
     },
     {
       field: 'weight',
@@ -657,6 +670,9 @@ onUnmounted(() => {
                 <template #severity="{ row }">
                   <Tag :color="severityMap[row.severity]?.color">{{ severityMap[row.severity]?.label }}</Tag>
                 </template>
+                <template #category="{ row }">
+                  <span>{{ categoryMap[row.category] || row.category || '-' }}</span>
+                </template>
                 <template #weight="{ row }">
                   <Tooltip :title="`权重 ${row.weight}%：该规则在审核评分中的占比`">
                     <span
@@ -672,16 +688,19 @@ onUnmounted(() => {
                 <template #confidence="{ row }">
                   <Tooltip :title="`识别 ${row.hitCount} 次，误判 ${row.missCount} 次`">
                     <div class="confidence-cell">
-                      <Progress
-                        :percent="row.confidence"
-                        :size="[80, 6]"
-                        :stroke-color="row.confidence >= 90 ? '#52c41a' : row.confidence >= 75 ? '#faad14' : '#ff4d4f'"
-                        :show-info="false"
-                      />
-                      <span
-                        class="confidence-text"
-                        :style="{ color: row.confidence >= 90 ? '#52c41a' : row.confidence >= 75 ? '#faad14' : '#ff4d4f' }"
-                      >{{ row.confidence }}%</span>
+                      <template v-if="row.hitCount > 0">
+                        <Progress
+                          :percent="Math.round((1 - row.missCount / row.hitCount) * 100)"
+                          :size="[80, 6]"
+                          :stroke-color="Math.round((1 - row.missCount / row.hitCount) * 100) >= 90 ? '#52c41a' : Math.round((1 - row.missCount / row.hitCount) * 100) >= 75 ? '#faad14' : '#ff4d4f'"
+                          :show-info="false"
+                        />
+                        <span
+                          class="confidence-text"
+                          :style="{ color: Math.round((1 - row.missCount / row.hitCount) * 100) >= 90 ? '#52c41a' : Math.round((1 - row.missCount / row.hitCount) * 100) >= 75 ? '#faad14' : '#ff4d4f' }"
+                        >{{ Math.round((1 - row.missCount / row.hitCount) * 100) }}%</span>
+                      </template>
+                      <span v-else class="confidence-text" style="color: #999;">暂无数据</span>
                     </div>
                   </Tooltip>
                 </template>

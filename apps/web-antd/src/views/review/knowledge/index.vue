@@ -50,8 +50,8 @@ const filterData = ref([
     type: 'a-select',
     data: '',
     options: [
-      { label: '启用中', value: 'active' },
-      { label: '已停用', value: 'disabled' },
+      { label: '启用中', value: '0' },
+      { label: '已停用', value: '1' },
     ],
     isCommon: true,
   },
@@ -261,7 +261,7 @@ function handleDisable(row: any) {
           </template>
 
           <template #status="{ row }">
-            <Badge v-if="row.status === 'active'" status="success" text="启用" />
+            <Badge v-if="row.status === '0'" status="success" text="启用" />
             <Badge v-else status="default" text="已停用" />
           </template>
 

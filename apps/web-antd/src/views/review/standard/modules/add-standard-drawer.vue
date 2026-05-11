@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import {
-  message, Steps, Upload, Select, Input, Form, FormItem, Alert, Tag, Card, Textarea, Button, Divider,
+  message, Steps, Upload, Switch, Input, Form, FormItem, Alert, Tag, Card, Textarea, Button, Divider,
 } from 'ant-design-vue';
 import { InboxOutlined, DownloadOutlined } from '@ant-design/icons-vue';
 import { reviewStandardAdd } from '#/api/review/standard';
@@ -13,7 +13,7 @@ const currentStep = ref(0);
 const fileList = ref<any[]>([]);
 const formData = ref({
   name: '',
-  type: undefined as string | undefined,
+  isSystem: '0' as string,
   description: '',
 });
 
@@ -38,7 +38,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
     if (!visible) {
       currentStep.value = 0;
       fileList.value = [];
-      formData.value = { name: '', type: undefined, description: '' };
+      formData.value = { name: '', isSystem: '0', description: '' };
       parsedRules.value = [];
     }
   },
@@ -48,17 +48,13 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         message.warning('请输入规范名称');
         return;
       }
-      if (!formData.value.type) {
-        message.warning('请选择适用文档类型');
-        return;
-      }
       // 先创建标准（文件解析功能后续接入AI）
       currentStep.value = 1;
       return;
     }
     await reviewStandardAdd({
       name: formData.value.name,
-      type: formData.value.type,
+      isSystem: formData.value.isSystem,
       description: formData.value.description,
       version: 'v1.0',
       status: '0',
@@ -99,17 +95,12 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           <FormItem label="规范名称" required>
             <Input v-model:value="formData.name" placeholder="如：政府采购合同审核标准" />
           </FormItem>
-          <FormItem label="适用文档类型" required>
-            <Select
-              v-model:value="formData.type"
-              placeholder="请选择"
-              style="width: 100%;"
-              :options="[
-                { label: '合同', value: 'contract' },
-                { label: '财务账单', value: 'finance' },
-                { label: '表单', value: 'form' },
-                { label: '标书', value: 'bid' },
-              ]"
+          <FormItem label="是否通用">
+            <Switch
+              :checked="formData.isSystem === '1'"
+              checked-children="是"
+              un-checked-children="否"
+              @change="(val: boolean) => formData.isSystem = val ? '1' : '0'"
             />
           </FormItem>
           <FormItem label="补充说明（可选）" class="col-span-2">

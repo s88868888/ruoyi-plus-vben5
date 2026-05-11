@@ -26,6 +26,7 @@ const availableVars = [
   { key: '{rules}', desc: '审核规则列表（自动从关联标准中提取）' },
   { key: '{knowledge_context}', desc: 'RAG知识上下文（案例+模式+误判记录）' },
   { key: '{form_data}', desc: '用户提交的表单/业务数据' },
+  { key: '{output_format}', desc: '输出格式定义（下方"输出格式要求"字段的内容）' },
 ];
 
 function resetForm() {

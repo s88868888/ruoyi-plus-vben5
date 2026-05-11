@@ -428,7 +428,7 @@ async function handleSyncVector() {
   syncing.value = true;
   try {
     await reviewKnowledgeSyncVector(knowledgeId.value);
-    message.success('同步任务已提交，知识库正在向量化中...');
+    // message.success('同步任务已提交，知识库正在向量化中...');
   } catch {
     message.error('同步失败，请检查向量库服务是否正常');
   } finally {

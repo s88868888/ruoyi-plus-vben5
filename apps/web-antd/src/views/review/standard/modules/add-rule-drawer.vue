@@ -40,17 +40,16 @@ const severityOptions = [
 ];
 
 const categoryOptions = [
-  { label: '主体信息', value: '主体信息' },
-  { label: '基本信息', value: '基本信息' },
-  { label: '金额条款', value: '金额条款' },
-  { label: '期限条款', value: '期限条款' },
-  { label: '付款条款', value: '付款条款' },
-  { label: '验收条款', value: '验收条款' },
-  { label: '违约条款', value: '违约条款' },
-  { label: '知识产权', value: '知识产权' },
-  { label: '保密条款', value: '保密条款' },
-  { label: '争议解决', value: '争议解决' },
-  { label: '其他', value: '其他' },
+  { label: '主体信息', value: 'subject_info' },
+  { label: '合规性', value: 'compliance' },
+  { label: '金额条款', value: 'amount' },
+  { label: '期限条款', value: 'term' },
+  { label: '验收条款', value: 'acceptance' },
+  { label: '违约责任', value: 'liability' },
+  { label: '知识产权', value: 'ip' },
+  { label: '争议解决', value: 'dispute' },
+  { label: '格式规范', value: 'format' },
+  { label: '其他', value: 'other' },
 ];
 
 const [BasicDrawer] = useVbenDrawer({
