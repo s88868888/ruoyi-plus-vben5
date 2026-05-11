@@ -28,9 +28,9 @@ export function reviewStandardRemove(ids: (number | string)[]) {
   return requestClient.deleteWithMsg<void>(`/review/standard/${ids.join(',')}`);
 }
 
-// 查询标准下的规则列表
-export function reviewStandardRuleList(standardId: number | string) {
-  return requestClient.get<ReviewStandardRule[]>(`/review/standard/${standardId}/rules`);
+// 分页查询标准下的规则列表
+export function reviewStandardRuleList(standardId: number | string, params?: PageQuery) {
+  return requestClient.get<PageResult<ReviewStandardRule>>(`/review/standard/${standardId}/rules`, { params });
 }
 
 // 新增规则

@@ -6,7 +6,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
-import { Card, Tag, Button, Space, Dropdown, Menu, MenuItem, Progress, Tooltip, Modal, message } from 'ant-design-vue';
+import { Card, Tag, Button, Space, Switch, Dropdown, Menu, MenuItem, Progress, Tooltip, Modal, message } from 'ant-design-vue';
 import {
   ArrowLeftOutlined,
   PlusOutlined,
@@ -29,12 +29,13 @@ import CommonFilter from '#/components/CommonFilter/index.vue';
 import {
   reviewStandardInfo,
   reviewStandardRuleList,
+  reviewStandardRuleUpdate,
   reviewStandardRuleRemove,
   reviewStandardKnowledges,
   reviewStandardLinkKnowledge,
   reviewStandardUnlinkKnowledge,
 } from '#/api/review/standard';
-import { reviewKnowledgeList } from '#/api/review/knowledge';
+import { reviewKnowledgeList, reviewKnowledgeSyncVector } from '#/api/review/knowledge';
 import type { ReviewStandard, ReviewStandardRule } from '#/api/review/standard/model';
 import type { ReviewKnowledge } from '#/api/review/knowledge/model';
 import AddRuleDrawer from './modules/add-rule-drawer.vue';
@@ -124,13 +125,13 @@ function handleUnlinkKnowledge(kb: any) {
   });
 }
 
-function handleSyncKnowledge(kb: any) {
-  kb.status = 'syncing';
-  setTimeout(() => {
-    kb.status = 'synced';
-    kb.lastSync = new Date().toISOString().split('T')[0];
+async function handleSyncKnowledge(kb: any) {
+  try {
+    await reviewKnowledgeSyncVector(kb.id);
     message.success(`知识库【${kb.name}】同步完成`);
-  }, 1500);
+  } catch {
+    message.error('同步失败，请检查向量库服务是否正常');
+  }
 }
 
 function toggleKnowledgeSelect(id: number | string) {
@@ -156,8 +157,8 @@ async function loadStandardInfo() {
 async function loadRules() {
   if (!standardId.value) return;
   try {
-    const data = await reviewStandardRuleList(standardId.value);
-    ruleList.value = data || [];
+    const data = await reviewStandardRuleList(standardId.value, { pageNum: 1, pageSize: 9999 });
+    ruleList.value = data?.rows || [];
   } catch {
     ruleList.value = [];
   }
@@ -233,7 +234,14 @@ const ruleFilterData = ref([
   },
 ]);
 
-const handleRuleFilterQuery = (_conditions: any[]) => {
+const ruleSearchParams = ref<Record<string, any>>({});
+
+const handleRuleFilterQuery = (conditions: any[]) => {
+  const queryParams: Record<string, any> = {};
+  conditions.forEach((item) => {
+    queryParams[item.key] = item.value;
+  });
+  ruleSearchParams.value = queryParams;
   tableApi.query();
 };
 
@@ -276,6 +284,13 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'confidence', header: 'confidenceHeader' },
     },
     {
+      field: 'status',
+      title: '状态',
+      width: 80,
+      align: 'center',
+      slots: { default: 'status' },
+    },
+    {
       field: 'action',
       title: '操作',
       width: 120,
@@ -291,20 +306,12 @@ const gridOptions: VxeGridProps = {
       query: async ({ page }) => {
         if (!standardId.value) return { rows: [], total: 0 };
         try {
-          const data = await reviewStandardRuleList(standardId.value);
-          ruleList.value = (data || []).map((r: any) => ({
-            ...r,
-            weight: r.weight ?? 0,
-            confidence: r.confidence ?? 0,
-            hitCount: r.hitCount ?? 0,
-            missCount: r.missCount ?? 0,
-          }));
-          const start = (page.currentPage - 1) * page.pageSize;
-          const end = start + page.pageSize;
-          return {
-            rows: ruleList.value.slice(start, end),
-            total: ruleList.value.length,
+          const params = {
+            pageNum: page.currentPage,
+            pageSize: page.pageSize,
+            ...ruleSearchParams.value,
           };
+          return await reviewStandardRuleList(standardId.value, params);
         } catch {
           return { rows: [], total: 0 };
         }
@@ -369,6 +376,12 @@ function handleDeleteRule(row: any) {
   });
 }
 
+async function handleToggleRuleStatus(row: any, enabled: boolean) {
+  await reviewStandardRuleUpdate({ id: row.id, status: enabled ? '0' : '1' });
+  message.success(enabled ? '已启用' : '已停用');
+  await tableApi.query();
+}
+
 function handleImportRule() {
   importRuleDrawerApi.open();
 }
@@ -409,7 +422,7 @@ function goBack() { router.push('/review/standard'); }
 
 onMounted(async () => {
   scrollContainer.value?.addEventListener('scroll', handleScroll, { passive: true });
-  await Promise.all([loadStandardInfo(), loadKnowledges()]);
+  await Promise.all([loadStandardInfo(), loadKnowledges(), loadRules()]);
 });
 
 onUnmounted(() => {
@@ -443,7 +456,8 @@ onUnmounted(() => {
             <span class="header-project-name">
               {{ standardInfo.name }}
               <Tag color="blue" style="margin-left: 8px;">{{ standardInfo.version }}</Tag>
-              <Tag color="cyan" style="margin-left: 4px;">{{ standardInfo.type }}</Tag>
+              <Tag v-if="standardInfo.isSystem === '1'" color="purple" style="margin-left: 4px;">通用</Tag>
+              <Tag v-else color="default" style="margin-left: 4px;">专用</Tag>
             </span>
             <Space>
               <Button type="default" size="small" @click="goBack"><ArrowLeftOutlined /> 返回</Button>
@@ -535,21 +549,9 @@ onUnmounted(() => {
                     <BookOutlined style="color: #1677ff; margin-right: 6px;" />
                     {{ kb.name }}
                   </div>
-                  <Dropdown placement="bottomRight">
-                    <template #overlay>
-                      <Menu>
-                        <MenuItem key="sync" @click="handleSyncKnowledge(kb)">
-                          同步数据
-                        </MenuItem>
-                        <MenuItem key="unlink" @click="handleUnlinkKnowledge(kb)">
-                          <span class="text-red-500">解除关联</span>
-                        </MenuItem>
-                      </Menu>
-                    </template>
-                    <a-button size="small" type="text">
-                      <EllipsisOutlined />
-                    </a-button>
-                  </Dropdown>
+                  <Button size="small" type="link" @click="handleSyncKnowledge(kb)">
+                    同步
+                  </Button>
                 </div>
                 <div class="knowledge-card-stats">
                   <div class="knowledge-stat-item">
@@ -572,15 +574,9 @@ onUnmounted(() => {
                     <ClockCircleOutlined style="margin-right: 4px;" />
                     {{ kb.updateTime ? `更新于 ${kb.updateTime}` : '未更新' }}
                   </span>
-                  <Tag
-                    v-if="kb.status === '1'" color="green" :bordered="false"
-                  >正常</Tag>
-                  <Tag
-                    v-else-if="kb.status === '0'" color="default" :bordered="false"
-                  >未启用</Tag>
-                  <Tag
-                    v-else color="orange" :bordered="false"
-                  >{{ kb.status || '未知' }}</Tag>
+                  <Button size="small" type="link" danger @click="handleUnlinkKnowledge(kb)">
+                    解除关联
+                  </Button>
                 </div>
               </div>
             </div>
@@ -703,6 +699,15 @@ onUnmounted(() => {
                       <span v-else class="confidence-text" style="color: #999;">暂无数据</span>
                     </div>
                   </Tooltip>
+                </template>
+                <template #status="{ row }">
+                  <Switch
+                    :checked="row.status !== '1'"
+                    checked-children="启用"
+                    un-checked-children="停用"
+                    size="small"
+                    @change="(val: boolean) => handleToggleRuleStatus(row, val)"
+                  />
                 </template>
                 <template #action="{ row }">
                   <Space>

@@ -95,11 +95,15 @@ async function handleSubmit() {
     }
 
     // 2. 提交任务
+    let snapshot = formData.value.formSnapshot || '{}';
+    try {
+      snapshot = JSON.stringify(JSON.parse(snapshot.replace(/\n\s*/g, ' ')));
+    } catch { /* 非 JSON 则原样提交 */ }
     const params: CreateTaskParams = {
       taskName: generateTaskName(),
       taskType: formData.value.taskType || 'general',
       standardIds: formData.value.standardIds.map(Number),
-      formSnapshot: formData.value.formSnapshot || '{}',
+      formSnapshot: snapshot,
       files: uploadedFiles,
     };
     await reviewTaskAdd(params);

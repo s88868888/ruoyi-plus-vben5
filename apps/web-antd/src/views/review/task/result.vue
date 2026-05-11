@@ -104,12 +104,15 @@ const formSnapshot = ref('');
 const taskFiles = ref<any[]>([]);
 const resultMarkdown = ref('');
 
-// 解析表单数据为键值对
+// 解析表单数据为键值对（支持任意 JSON 结构）
 const formDataEntries = computed(() => {
   if (!formSnapshot.value) return [];
   try {
     const obj = JSON.parse(formSnapshot.value);
-    return Object.entries(obj).map(([key, value]) => ({ key, value: String(value) }));
+    if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+      return Object.entries(obj).map(([key, value]) => ({ key, value: typeof value === 'object' ? JSON.stringify(value) : String(value ?? '') }));
+    }
+    return [{ key: '数据', value: JSON.stringify(obj, null, 2) }];
   } catch {
     return [{ key: '原始数据', value: formSnapshot.value }];
   }
