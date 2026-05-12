@@ -5,6 +5,12 @@ import {
   message, Steps, Upload, Alert, Tag, Button, Space, Table, Input, Select,
 } from 'ant-design-vue';
 import { InboxOutlined, LoadingOutlined, CheckCircleOutlined, DeleteOutlined, BulbOutlined } from '@ant-design/icons-vue';
+import {
+  parseRuleDocument,
+  importRuleTemplatePreview,
+  batchAddStandardRules,
+} from '#/api/review/standard';
+import { uploadApi } from '#/api/core/upload';
 
 const emit = defineEmits<{ reload: [] }>();
 
@@ -12,13 +18,16 @@ const currentStep = ref(0);
 const fileList = ref<any[]>([]);
 const parsing = ref(false);
 const parseProgress = ref('');
+const standardId = ref<number | null>(null);
 
 const parsedRules = ref<any[]>([]);
 
+const EXCEL_EXTS = ['xlsx', 'xls'];
+
 const severityOptions = [
-  { label: '必须', value: 'must' },
-  { label: '应当', value: 'should' },
-  { label: '建议', value: 'suggest' },
+  { label: '严重', value: 'must' },
+  { label: '警告', value: 'should' },
+  { label: '提示', value: 'suggest' },
 ];
 
 const categoryOptions = [
@@ -37,9 +46,9 @@ const categoryOptions = [
 ];
 
 const severityMap: Record<string, { label: string; color: string }> = {
-  must: { label: '必须', color: 'red' },
-  should: { label: '应当', color: 'orange' },
-  suggest: { label: '建议', color: 'blue' },
+  must: { label: '严重', color: 'red' },
+  should: { label: '警告', color: 'orange' },
+  suggest: { label: '提示', color: 'blue' },
 };
 
 const columns = [
@@ -57,31 +66,42 @@ const ruleStats = computed(() => ({
 }));
 
 async function startParsing() {
+  if (fileList.value.length === 0) {
+    message.warning('请先上传文档');
+    return;
+  }
+  const file: File = fileList.value[0] as File;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
   parsing.value = true;
   parseProgress.value = '正在分析文档结构...';
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  parseProgress.value = '正在提取审核要点...';
-  await new Promise(resolve => setTimeout(resolve, 1200));
-  parseProgress.value = '正在分类和评级...';
-  await new Promise(resolve => setTimeout(resolve, 800));
-
-  parsedRules.value = [
-    { id: 1, content: '文档必须包含完整的甲乙双方主体信息及统一社会信用代码', severity: 'must', category: '主体信息', editing: false },
-    { id: 2, content: '合同金额大写与小写金额必须完全一致', severity: 'must', category: '金额条款', editing: false },
-    { id: 3, content: '服务期限必须明确起止日期，不得仅写时长', severity: 'must', category: '期限条款', editing: false },
-    { id: 4, content: '付款方式必须明确各期比例、金额及触发条件', severity: 'must', category: '付款条款', editing: false },
-    { id: 5, content: '必须包含违约责任条款且应双向约定', severity: 'must', category: '违约条款', editing: false },
-    { id: 6, content: '验收条款应明确验收方式、时限和标准文件编号', severity: 'should', category: '验收条款', editing: false },
-    { id: 7, content: '应包含知识产权归属条款，覆盖第三方组件', severity: 'should', category: '知识产权', editing: false },
-    { id: 8, content: '应包含保密条款并明确保密期限', severity: 'should', category: '保密条款', editing: false },
-    { id: 9, content: '应明确争议解决方式及管辖法院', severity: 'should', category: '争议解决', editing: false },
-    { id: 10, content: '文档格式应符合标准公文格式（字体、字号、行距）', severity: 'should', category: '格式规范', editing: false },
-    { id: 11, content: '建议补充仲裁作为争议解决备选方式', severity: 'suggest', category: '争议解决', editing: false },
-    { id: 12, content: '建议预留财政部门备案份数', severity: 'suggest', category: '其他', editing: false },
-  ];
-
-  parsing.value = false;
-  currentStep.value = 2;
+  try {
+    let rules: any[];
+    if (EXCEL_EXTS.includes(ext)) {
+      parseProgress.value = '解析 Excel 模板...';
+      rules = await importRuleTemplatePreview(file);
+    } else {
+      parseProgress.value = '上传文档到服务器...';
+      const uploadRes: any = await uploadApi(file);
+      const ossId = uploadRes?.ossId;
+      if (!ossId) throw new Error('上传失败，未返回 ossId');
+      parseProgress.value = 'AI 正在抽取审核规则（qwen-long）...';
+      rules = await parseRuleDocument(ossId);
+    }
+    parsedRules.value = (rules || []).map((r: any, i: number) => ({
+      ...r,
+      id: i + 1,
+      editing: false,
+    }));
+    if (parsedRules.value.length === 0) {
+      message.warning('未从文档中抽取到规则');
+    }
+    currentStep.value = 2;
+  } catch (e: any) {
+    message.error(e?.message || '解析失败');
+    currentStep.value = 0;
+  } finally {
+    parsing.value = false;
+  }
 }
 
 function deleteRule(id: number) {
@@ -100,12 +120,16 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
     return `智能解析 - ${stepNames[currentStep.value]}`;
   }),
   onOpenChange: (visible) => {
-    if (!visible) {
+    if (visible) {
+      const data = drawerApi.getData<{ standardId: number }>();
+      if (data?.standardId) standardId.value = data.standardId;
+    } else {
       currentStep.value = 0;
       fileList.value = [];
       parsedRules.value = [];
       parsing.value = false;
       parseProgress.value = '';
+      standardId.value = null;
     }
   },
   onConfirm: async () => {
@@ -126,18 +150,37 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         message.warning('没有可导入的规则');
         return;
       }
-      message.success(`成功导入 ${parsedRules.value.length} 条规则`);
-      emit('reload');
-      drawerApi.close();
+      if (!standardId.value) {
+        message.error('缺少 standardId，无法保存');
+        return;
+      }
+      try {
+        await batchAddStandardRules(standardId.value, parsedRules.value.map((r: any) => ({
+          content: r.content,
+          severity: r.severity,
+          category: r.category,
+          checkField: r.checkField,
+          checkMethod: r.checkMethod,
+          weight: r.weight ?? 10,
+        })));
+        emit('reload');
+        drawerApi.close();
+      } catch (e: any) {
+        message.error(e?.message || '保存失败');
+      }
     }
   },
 });
 
 function handleBeforeUpload(file: any) {
   const ext = file.name.split('.').pop()?.toLowerCase();
-  const validExts = ['doc', 'docx', 'pdf', 'txt'];
+  const validExts = ['doc', 'docx', 'pdf', 'txt', 'xlsx', 'xls'];
   if (!validExts.includes(ext)) {
-    message.error('仅支持 Word、PDF、TXT 格式文件');
+    message.error('仅支持 Word、PDF、TXT、Excel 格式文件');
+    return Upload.LIST_IGNORE;
+  }
+  if (file.size / 1024 / 1024 > 150) {
+    message.error('文件大小不能超过 150MB');
     return Upload.LIST_IGNORE;
   }
   fileList.value = [file];

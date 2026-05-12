@@ -176,7 +176,7 @@ async function loadKnowledges() {
 
 const severityMap: Record<string, { label: string; color: string }> = {
   must: { label: '严重', color: 'red' },
-  should: { label: '一般', color: 'orange' },
+  should: { label: '警告', color: 'orange' },
   suggest: { label: '提示', color: 'blue' },
 };
 
@@ -208,7 +208,7 @@ const ruleFilterData = ref([
     data: '',
     options: [
       { label: '严重', value: 'must' },
-      { label: '一般', value: 'should' },
+      { label: '警告', value: 'should' },
       { label: '提示', value: 'suggest' },
     ],
     isCommon: true,
@@ -344,6 +344,7 @@ const [SmartParseDrawerComp, smartParseDrawerApi] = useVbenDrawer({
 });
 
 function handleSmartParse() {
+  smartParseDrawerApi.setData({ standardId: standardId.value });
   smartParseDrawerApi.open();
 }
 
@@ -383,11 +384,27 @@ async function handleToggleRuleStatus(row: any, enabled: boolean) {
 }
 
 function handleImportRule() {
+  importRuleDrawerApi.setData({ standardId: standardId.value });
   importRuleDrawerApi.open();
 }
 
-function handleExportRule() {
-  message.success('规则导出中...');
+async function handleExportRule() {
+  if (ruleList.value.length === 0) {
+    message.warning('暂无规则可导出');
+    return;
+  }
+  try {
+    const { exportStandardRules } = await import('#/api/review/standard');
+    const blob = await exportStandardRules(standardId.value);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${standardInfo.value.name || '规则'}_规则列表.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    message.error('导出失败');
+  }
 }
 
 async function handleReloadRules() {
@@ -625,7 +642,7 @@ onUnmounted(() => {
             <template #extra>
               <Space>
                 <Tag color="red">严重 {{ ruleList.filter(r => r.severity === 'must').length }}</Tag>
-                <Tag color="orange">一般 {{ ruleList.filter(r => r.severity === 'should').length }}</Tag>
+                <Tag color="orange">警告 {{ ruleList.filter(r => r.severity === 'should').length }}</Tag>
                 <Tag color="blue">提示 {{ ruleList.filter(r => r.severity === 'suggest').length }}</Tag>
               </Space>
             </template>

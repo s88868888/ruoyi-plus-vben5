@@ -15,7 +15,7 @@ export function reviewStandardInfo(id: number | string) {
 
 // 新增标准
 export function reviewStandardAdd(data: Partial<ReviewStandard>) {
-  return requestClient.postWithMsg<void>('/review/standard', data);
+  return requestClient.postWithMsg<number>('/review/standard', data);
 }
 
 // 修改标准
@@ -62,3 +62,64 @@ export function reviewStandardLinkKnowledge(standardId: number | string, knowled
 export function reviewStandardUnlinkKnowledge(standardId: number | string, knowledgeId: number | string) {
   return requestClient.deleteWithMsg<void>(`/review/standard/${standardId}/knowledge/${knowledgeId}`);
 }
+
+// ==================== 规则导出 ====================
+
+// 导出标准下的规则列表（xlsx）
+export function exportStandardRules(standardId: number | string) {
+  return requestClient.post<Blob>(
+    `/review/standard/${standardId}/rules/export`,
+    {},
+    {
+      isTransformResponse: false,
+      responseType: 'blob',
+    },
+  );
+}
+
+// ==================== 规则导入 / AI 抽取 ====================
+
+export interface ParsedRule {
+  content: string;
+  severity: string;
+  category?: string;
+  checkField?: string;
+  checkMethod?: string;
+  weight?: number;
+  remark?: string;
+}
+
+// 下载规则导入模板（xlsx）
+export function downloadRuleTemplate() {
+  return requestClient.post<Blob>(
+    '/review/standard/rule/template',
+    {},
+    {
+      isTransformResponse: false,
+      responseType: 'blob',
+    },
+  );
+}
+
+// 调 AI 从已上传 OSS 文件中抽取规则（不落库）
+export function parseRuleDocument(ossId: number | string) {
+  return requestClient.post<ParsedRule[]>('/review/standard/rule/parse-document', null, {
+    params: { ossId },
+    timeout: 120_000,
+  });
+}
+
+// 上传 Excel 模板解析规则（不落库）
+export function importRuleTemplatePreview(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  return requestClient.post<ParsedRule[]>('/review/standard/rule/import-preview', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+}
+
+// 批量保存规则到指定标准
+export function batchAddStandardRules(standardId: number | string, rules: Partial<ReviewStandardRule>[]) {
+  return requestClient.postWithMsg<number>(`/review/standard/${standardId}/rules/batch`, rules);
+}
+

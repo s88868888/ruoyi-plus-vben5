@@ -2,21 +2,27 @@
 import { ref, computed } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import {
-  message, Steps, Upload, Alert, Tag, Button, Space, Table,
+  message, Steps, Upload, Alert, Tag, Button, Table,
 } from 'ant-design-vue';
-import { InboxOutlined, DownloadOutlined, LoadingOutlined, CheckCircleOutlined } from '@ant-design/icons-vue';
+import { InboxOutlined, DownloadOutlined, LoadingOutlined } from '@ant-design/icons-vue';
+import {
+  downloadRuleTemplate,
+  importRuleTemplatePreview,
+  batchAddStandardRules,
+} from '#/api/review/standard';
 
 const emit = defineEmits<{ reload: [] }>();
 
 const currentStep = ref(0);
 const fileList = ref<any[]>([]);
 const parsing = ref(false);
+const standardId = ref<number | null>(null);
 
 const parsedRules = ref<any[]>([]);
 
 const severityMap: Record<string, { label: string; color: string }> = {
   must: { label: '严重', color: 'red' },
-  should: { label: '一般', color: 'orange' },
+  should: { label: '警告', color: 'orange' },
   suggest: { label: '提示', color: 'blue' },
 };
 
@@ -26,36 +32,56 @@ const columns = [
   { title: '分类', dataIndex: 'category', key: 'category', width: 100, align: 'center' as const },
 ];
 
-function handleDownloadTemplate() {
-  message.success('模板下载中...');
+async function handleDownloadTemplate() {
+  try {
+    const blob = await downloadRuleTemplate();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '审核规则导入模板.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    message.error('模板下载失败');
+  }
 }
 
 async function startParsing() {
+  if (fileList.value.length === 0) return;
   parsing.value = true;
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  parsedRules.value = [
-    { id: 1, content: '合同必须包含甲方全称及统一社会信用代码', severity: 'must', category: '主体信息' },
-    { id: 2, content: '合同金额大写与小写必须完全一致', severity: 'must', category: '金额条款' },
-    { id: 3, content: '服务期限必须明确起止日期', severity: 'must', category: '期限条款' },
-    { id: 4, content: '违约责任条款应双向约定', severity: 'should', category: '违约条款' },
-    { id: 5, content: '验收条款应明确验收方式和时限', severity: 'should', category: '验收条款' },
-    { id: 6, content: '建议补充仲裁作为争议解决备选', severity: 'suggest', category: '争议解决' },
-  ];
-  parsing.value = false;
-  currentStep.value = 2;
+  try {
+    const file = fileList.value[0] as File;
+    const rules = await importRuleTemplatePreview(file);
+    parsedRules.value = (rules || []).map((r: any, i: number) => ({ ...r, id: i + 1 }));
+    if (parsedRules.value.length === 0) {
+      message.warning('未从文件中解析到规则，请检查文件格式');
+      currentStep.value = 0;
+    } else {
+      currentStep.value = 2;
+    }
+  } catch (e: any) {
+    message.error(e?.message || '解析失败');
+    currentStep.value = 0;
+  } finally {
+    parsing.value = false;
+  }
 }
 
-const [BasicDrawer] = useVbenDrawer({
+const [BasicDrawer, drawerApi] = useVbenDrawer({
   title: computed(() => {
-    const stepNames = ['上传文件', 'AI解析规则', '确认导入'];
+    const stepNames = ['上传文件', '解析规则', '确认导入'];
     return `导入规则 - ${stepNames[currentStep.value]}`;
   }),
   onOpenChange: (visible) => {
-    if (!visible) {
+    if (visible) {
+      const data = drawerApi.getData<{ standardId: number }>();
+      if (data?.standardId) standardId.value = data.standardId;
+    } else {
       currentStep.value = 0;
       fileList.value = [];
       parsedRules.value = [];
       parsing.value = false;
+      standardId.value = null;
     }
   },
   onConfirm: async () => {
@@ -72,24 +98,39 @@ const [BasicDrawer] = useVbenDrawer({
       return;
     }
     if (currentStep.value === 2) {
-      message.success(`成功导入 ${parsedRules.value.length} 条规则`);
-      emit('reload');
+      if (parsedRules.value.length === 0) {
+        message.warning('没有可导入的规则');
+        return;
+      }
+      if (!standardId.value) {
+        message.error('缺少标准ID');
+        return;
+      }
+      try {
+        await batchAddStandardRules(standardId.value, parsedRules.value.map((r: any) => ({
+          content: r.content,
+          severity: r.severity,
+          category: r.category,
+          weight: r.weight ?? 10,
+        })));
+        emit('reload');
+        drawerApi.close();
+      } catch (e: any) {
+        message.error(e?.message || '导入失败');
+      }
     }
   },
 });
 
 function handleBeforeUpload(file: any) {
-  const validTypes = [
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/msword',
-    'text/plain',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel',
-  ];
   const ext = file.name.split('.').pop()?.toLowerCase();
-  const validExts = ['doc', 'docx', 'txt', 'xls', 'xlsx'];
+  const validExts = ['xls', 'xlsx'];
   if (!validExts.includes(ext)) {
-    message.error('仅支持 Word、TXT、Excel 格式文件');
+    message.error('仅支持 Excel(.xls/.xlsx) 格式文件');
+    return Upload.LIST_IGNORE;
+  }
+  if (file.size / 1024 / 1024 > 20) {
+    message.error('文件大小不能超过 20MB');
     return Upload.LIST_IGNORE;
   }
   fileList.value = [file];
@@ -105,7 +146,7 @@ function handleRemoveFile() {
   <BasicDrawer>
     <Steps :current="currentStep" size="small" class="mb-6">
       <Steps.Step title="上传文件" />
-      <Steps.Step title="AI解析" />
+      <Steps.Step title="解析规则" />
       <Steps.Step title="确认导入" />
     </Steps>
 
@@ -113,7 +154,7 @@ function handleRemoveFile() {
     <div v-if="currentStep === 0">
       <Alert class="mb-4" type="info" show-icon>
         <template #message>
-          支持 Word(.doc/.docx)、TXT、Excel(.xls/.xlsx) 格式，AI将自动分析文件内容并提取规则。
+          支持 Excel(.xls/.xlsx) 格式，请按模板格式填写规则后上传。
         </template>
       </Alert>
 
@@ -121,7 +162,7 @@ function handleRemoveFile() {
         <Button type="link" class="p-0" @click="handleDownloadTemplate">
           <DownloadOutlined /> 下载导入模板
         </Button>
-        <span class="ml-2 text-gray-400 text-xs">建议按模板格式整理规则，提取效果更佳</span>
+        <span class="ml-2 text-gray-400 text-xs">按模板格式整理规则，解析更准确</span>
       </div>
 
       <Upload.Dragger
@@ -132,22 +173,21 @@ function handleRemoveFile() {
       >
         <p class="ant-upload-drag-icon"><InboxOutlined /></p>
         <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
-        <p class="ant-upload-hint">支持 Word、TXT、Excel 格式，单个文件不超过 20MB</p>
+        <p class="ant-upload-hint">支持 .xls / .xlsx 格式，单个文件不超过 20MB</p>
       </Upload.Dragger>
     </div>
 
-    <!-- 步骤2: AI解析中 -->
+    <!-- 步骤2: 解析中 -->
     <div v-if="currentStep === 1" class="flex flex-col items-center justify-center py-12">
       <LoadingOutlined class="text-4xl text-blue-500 mb-4" />
-      <p class="text-base text-gray-700">AI 正在分析文件内容并提取规则...</p>
-      <p class="text-sm text-gray-400 mt-2">预计需要 10-30 秒，请耐心等待</p>
+      <p class="text-base text-gray-700">正在解析 Excel 文件...</p>
     </div>
 
     <!-- 步骤3: 确认导入 -->
     <div v-if="currentStep === 2">
       <Alert class="mb-4" type="success" show-icon>
         <template #message>
-          AI 共提取到 <span class="font-bold">{{ parsedRules.length }}</span> 条规则，请确认后导入。
+          共解析到 <span class="font-bold">{{ parsedRules.length }}</span> 条规则，请确认后导入。
         </template>
       </Alert>
 
@@ -157,11 +197,12 @@ function handleRemoveFile() {
         :pagination="false"
         row-key="id"
         size="small"
+        :scroll="{ y: 400 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'severity'">
             <Tag :color="severityMap[record.severity]?.color">
-              {{ severityMap[record.severity]?.label }}
+              {{ severityMap[record.severity]?.label || record.severity }}
             </Tag>
           </template>
         </template>

@@ -667,10 +667,6 @@ onUnmounted(() => {
                       type="both"
                       @handle-query="handleCaseFilterQuery"
                     />
-                    <Button type="primary" size="small">
-                      <PlusOutlined />
-                      新增案例
-                    </Button>
                   </div>
                   <div class="table-style-wrapper" :style="tableCssVars">
                     <CaseTable table-title="历史案例">
@@ -716,10 +712,6 @@ onUnmounted(() => {
                       type="both"
                       @handle-query="handlePatternFilterQuery"
                     />
-                    <Button type="primary" size="small">
-                      <PlusOutlined />
-                      新增模式
-                    </Button>
                   </div>
                   <div class="table-style-wrapper" :style="tableCssVars">
                     <PatternTable table-title="问题模式">

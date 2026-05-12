@@ -35,7 +35,7 @@ watch(() => formData.value.severity, (val) => {
 
 const severityOptions = [
   { label: '严重', value: 'must' },
-  { label: '一般', value: 'should' },
+  { label: '警告', value: 'should' },
   { label: '提示', value: 'suggest' },
 ];
 
@@ -52,31 +52,31 @@ const categoryOptions = [
   { label: '其他', value: 'other' },
 ];
 
-const [BasicDrawer] = useVbenDrawer({
+const [BasicDrawer, drawerApi] = useVbenDrawer({
   title: computed(() => isEdit.value ? '编辑规则' : '添加规则'),
   onOpenChange: (visible) => {
-    if (!visible) {
+    if (visible) {
+      const data = drawerApi.getData() as any;
+      if (data && data.standardId) {
+        standardId.value = data.standardId;
+      }
+      if (data && data.id) {
+        isEdit.value = true;
+        ruleId.value = data.id;
+        standardId.value = data.standardId;
+        formData.value = {
+          content: data.content ?? '',
+          severity: data.severity,
+          category: data.category,
+          weight: data.weight ?? 80,
+          confidence: data.confidence,
+          hitCount: data.hitCount,
+          missCount: data.missCount,
+        };
+      }
+    } else {
       isEdit.value = false;
       formData.value = { content: '', severity: undefined, category: undefined, weight: 80, confidence: undefined, hitCount: undefined, missCount: undefined };
-    }
-  },
-  onData: (data: any) => {
-    if (data && data.standardId) {
-      standardId.value = data.standardId;
-    }
-    if (data && data.content) {
-      isEdit.value = true;
-      ruleId.value = data.id;
-      standardId.value = data.standardId;
-      formData.value = {
-        content: data.content,
-        severity: data.severity,
-        category: data.category,
-        weight: data.weight ?? 80,
-        confidence: data.confidence,
-        hitCount: data.hitCount,
-        missCount: data.missCount,
-      };
     }
   },
   onConfirm: async () => {
@@ -111,6 +111,7 @@ const [BasicDrawer] = useVbenDrawer({
       });
     }
     emit('reload');
+    drawerApi.close();
   },
 });
 </script>
@@ -183,7 +184,7 @@ const [BasicDrawer] = useVbenDrawer({
         </div>
       </FormItem>
 
-      <template v-if="isEdit && formData.confidence !== undefined">
+      <template v-if="isEdit && formData.confidence != null">
         <Divider orientation="left" class="section-title-divider">
           <span class="section-title">置信度</span>
         </Divider>
