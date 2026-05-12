@@ -7,7 +7,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useVbenDrawer } from '@vben/common-ui';
 
 import {
-  Badge, Button, Card, Dropdown, Menu, MenuItem, Modal, Space, Tag, Tabs, TabPane, message,
+  Badge, Button, Card, Descriptions, DescriptionsItem, Drawer, Dropdown, Menu, MenuItem, Modal, Space, Tag, Tabs, TabPane, message,
 } from 'ant-design-vue';
 import {
   ArrowLeftOutlined,
@@ -397,6 +397,21 @@ const handleMisjudgedFilterQuery = (_conditions: any[]) => {
   misjudgedTableApi.query();
 };
 
+const viewCaseDrawer = ref(false);
+const viewCaseData = ref<any>({});
+const viewPatternDrawer = ref(false);
+const viewPatternData = ref<any>({});
+
+function handleViewCase(row: any) {
+  viewCaseData.value = row;
+  viewCaseDrawer.value = true;
+}
+
+function handleViewPattern(row: any) {
+  viewPatternData.value = row;
+  viewPatternDrawer.value = true;
+}
+
 function handleDeleteCase(row: any) {
   Modal.confirm({
     title: `确认删除案例【${row.docName}】吗？`,
@@ -674,7 +689,7 @@ onUnmounted(() => {
                       </template>
                       <template #caseAction="{ row }">
                         <Space>
-                          <ghost-button @click.stop>查看</ghost-button>
+                          <ghost-button @click.stop="handleViewCase(row)">查看</ghost-button>
                           <Dropdown placement="bottomRight">
                             <template #overlay>
                               <Menu @click="({ key }: any) => { if (key === 'delete') handleDeleteCase(row); }">
@@ -725,7 +740,7 @@ onUnmounted(() => {
                       </template>
                       <template #patternAction="{ row }">
                         <Space>
-                          <ghost-button @click.stop>查看</ghost-button>
+                          <ghost-button @click.stop="handleViewPattern(row)">查看</ghost-button>
                           <Dropdown placement="bottomRight">
                             <template #overlay>
                               <Menu @click="({ key }: any) => { if (key === 'delete') handleDeletePattern(row); }">
@@ -796,6 +811,40 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 历史案例查看抽屉 -->
+    <Drawer v-model:open="viewCaseDrawer" title="历史案例详情" :width="520" :footer="null">
+      <Descriptions :column="1" bordered size="small">
+        <DescriptionsItem label="案例标题">{{ viewCaseData.title || '-' }}</DescriptionsItem>
+        <DescriptionsItem label="案例类型">
+          <Tag :color="viewCaseData.caseType === 'positive' ? 'green' : 'red'" :bordered="false">
+            {{ viewCaseData.caseType === 'positive' ? '正例' : '反例' }}
+          </Tag>
+        </DescriptionsItem>
+        <DescriptionsItem label="适用场景">{{ viewCaseData.scenario || '-' }}</DescriptionsItem>
+        <DescriptionsItem label="审核结论">{{ viewCaseData.reviewConclusion || '-' }}</DescriptionsItem>
+        <DescriptionsItem label="关键要点">{{ viewCaseData.keyPoint || '-' }}</DescriptionsItem>
+        <DescriptionsItem v-if="viewCaseData.formData" label="表单数据">
+          <pre style="white-space: pre-wrap; font-size: 12px; margin: 0;">{{ viewCaseData.formData }}</pre>
+        </DescriptionsItem>
+      </Descriptions>
+    </Drawer>
+
+    <!-- 问题模式查看抽屉 -->
+    <Drawer v-model:open="viewPatternDrawer" title="问题模式详情" :width="520" :footer="null">
+      <Descriptions :column="1" bordered size="small">
+        <DescriptionsItem label="模式名称">{{ viewPatternData.name || viewPatternData.patternName || '-' }}</DescriptionsItem>
+        <DescriptionsItem label="分类">{{ viewPatternData.category || '-' }}</DescriptionsItem>
+        <DescriptionsItem label="描述">{{ viewPatternData.description || '-' }}</DescriptionsItem>
+        <DescriptionsItem label="出现频次">{{ viewPatternData.frequency ?? 0 }} 次</DescriptionsItem>
+        <DescriptionsItem label="识别准确率">
+          <span :style="{ color: (viewPatternData.accuracy ?? 0) > 0 ? '#52c41a' : '#999' }">
+            {{ viewPatternData.accuracy ?? 0 }}%
+          </span>
+        </DescriptionsItem>
+        <DescriptionsItem label="解决方案">{{ viewPatternData.solution || '-' }}</DescriptionsItem>
+      </Descriptions>
+    </Drawer>
   </div>
 </template>
 
