@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
-import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, message } from 'ant-design-vue';
+import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, Tooltip, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -109,6 +109,17 @@ function getDictLabel(options: any[], value: string) {
   return item?.label || value;
 }
 
+function tooltipDotStyle(color: string) {
+  return {
+    display: 'inline-block',
+    width: '8px',
+    height: '8px',
+    marginRight: '6px',
+    borderRadius: '50%',
+    backgroundColor: color,
+  };
+}
+
 const loading = ref(false);
 
 const gridOptions: VxeGridProps = {
@@ -151,7 +162,7 @@ const gridOptions: VxeGridProps = {
     {
       field: 'errorCount',
       title: '问题数',
-      width: 90,
+      width: 160,
       align: 'center',
       slots: { default: 'issueCount' },
     },
@@ -336,10 +347,29 @@ function handleRerun(row: any) {
           </template>
 
           <template #issueCount="{ row }">
-            <span v-if="(row.errorCount || 0) + (row.warningCount || 0) + (row.infoCount || 0) > 0" class="text-red-500">
-              <span class="text-base font-semibold">{{ (row.errorCount || 0) + (row.warningCount || 0) + (row.infoCount || 0) }}</span>
-              <span class="text-xs font-normal ml-0.5">个</span>
-            </span>
+            <Tooltip
+              v-if="(row.errorCount || 0) + (row.warningCount || 0) + (row.infoCount || 0) > 0"
+              placement="top"
+            >
+              <template #title>
+                <div>
+                  <div><span :style="tooltipDotStyle('#ff4d4f')" />严重：{{ row.errorCount || 0 }}</div>
+                  <div><span :style="tooltipDotStyle('#faad14')" />警告：{{ row.warningCount || 0 }}</div>
+                  <div><span :style="tooltipDotStyle('#1677ff')" />提示：{{ row.infoCount || 0 }}</div>
+                </div>
+              </template>
+              <span class="issue-dots">
+                <span v-if="(row.errorCount || 0) > 0" class="issue-dot issue-dot-error">
+                  <span class="issue-dot-num">{{ row.errorCount }}</span>
+                </span>
+                <span v-if="(row.warningCount || 0) > 0" class="issue-dot issue-dot-warning">
+                  <span class="issue-dot-num">{{ row.warningCount }}</span>
+                </span>
+                <span v-if="(row.infoCount || 0) > 0" class="issue-dot issue-dot-info">
+                  <span class="issue-dot-num">{{ row.infoCount }}</span>
+                </span>
+              </span>
+            </Tooltip>
             <span v-else-if="row.status === 'completed'" class="text-green-500 font-semibold">
               无
             </span>
@@ -443,5 +473,41 @@ function handleRerun(row: any) {
 
 .misjudged-count {
   color: #8c8c8c;
+}
+
+.issue-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.issue-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1;
+}
+
+.issue-dot-error {
+  background-color: #ff4d4f;
+}
+
+.issue-dot-warning {
+  background-color: #faad14;
+}
+
+.issue-dot-info {
+  background-color: #1677ff;
+}
+
+.issue-dot-num {
+  line-height: 1;
 }
 </style>

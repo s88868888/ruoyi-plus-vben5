@@ -515,8 +515,8 @@ onUnmounted(() => {
           </a>
         </div>
 
-        <!-- 关联知识库 -->
-        <div class="cards-wrapper" style="padding-bottom: 0;">
+        <!-- 关联知识库 + 规则列表 -->
+        <div class="cards-wrapper">
           <Card id="knowledge-link" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
               <span class="card-title">
@@ -581,7 +581,6 @@ onUnmounted(() => {
               </div>
             </div>
           </Card>
-        </div>
 
         <!-- 选择知识库弹窗 -->
         <Modal
@@ -616,7 +615,6 @@ onUnmounted(() => {
         </Modal>
 
         <!-- 规则列表 -->
-        <div class="cards-wrapper">
           <Card id="rule-list" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
               <span class="card-title">

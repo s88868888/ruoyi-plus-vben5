@@ -28,6 +28,8 @@ import type { AnchorNavItem } from '#/components/anchor-nav';
 import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import CommonFilter from '#/components/CommonFilter/index.vue';
+import { DictEnum } from '@vben/constants';
+import { renderDict } from '#/utils/render';
 import {
   reviewKnowledgeInfo,
   reviewKnowledgeStandards,
@@ -90,6 +92,20 @@ async function loadLinkedStandards() {
   } catch {
     linkedStandards.value = [];
   }
+}
+
+async function loadCounts() {
+  if (!knowledgeId.value) return;
+  try {
+    const [cases, patterns, misjudgments] = await Promise.all([
+      reviewKnowledgeCases(knowledgeId.value),
+      reviewKnowledgePatterns(knowledgeId.value),
+      reviewKnowledgeMisjudgments(knowledgeId.value),
+    ]);
+    caseList.value = cases || [];
+    patternList.value = (patterns || []).map((r: any) => ({ ...r, name: r.patternName, frequency: r.frequency ?? 0, accuracy: r.accuracy ?? 0 }));
+    misjudgmentList.value = misjudgments || [];
+  } catch { /* empty */ }
 }
 
 // 筛选条件
@@ -470,7 +486,7 @@ function handleScroll() {
 
 onMounted(async () => {
   scrollContainer.value?.addEventListener('scroll', handleScroll, { passive: true });
-  await Promise.all([loadKnowledgeInfo(), loadLinkedStandards()]);
+  await Promise.all([loadKnowledgeInfo(), loadLinkedStandards(), loadCounts()]);
 });
 
 onUnmounted(() => {
@@ -503,7 +519,7 @@ onUnmounted(() => {
             <span class="header-project-name">
               <BookOutlined style="color: #1677ff; margin-right: 8px;" />
               {{ knowledgeInfo.name }}
-              <Tag color="cyan" style="margin-left: 8px;">{{ knowledgeInfo.type }}</Tag>
+              <component :is="renderDict(knowledgeInfo.type, DictEnum.REVIEW_KNOWLEDGE_TYPE)" style="margin-left: 8px;" />
               <Badge v-if="knowledgeInfo.status === '0'" status="success" text="启用中" style="margin-left: 8px;" />
             </span>
             <Space>
@@ -521,7 +537,7 @@ onUnmounted(() => {
               </div>
               <div class="header-metric-body">
                 <div class="header-metric-label">历史案例</div>
-                <div class="header-metric-value">{{ knowledgeInfo.caseCount ?? 0 }} 条</div>
+                <div class="header-metric-value">{{ caseList.length }} 条</div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -531,7 +547,7 @@ onUnmounted(() => {
               </div>
               <div class="header-metric-body">
                 <div class="header-metric-label">问题模式</div>
-                <div class="header-metric-value">{{ knowledgeInfo.patternCount ?? 0 }} 个</div>
+                <div class="header-metric-value">{{ patternList.length }} 个</div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -583,8 +599,8 @@ onUnmounted(() => {
           </a>
         </div>
 
-        <!-- 关联标准 -->
-        <div class="cards-wrapper" style="padding-bottom: 0;">
+        <!-- 关联标准 + 数据内容 -->
+        <div class="cards-wrapper">
           <Card id="linked-standards" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
               <span class="card-title">
@@ -611,16 +627,14 @@ onUnmounted(() => {
                   <Tag color="blue" :bordered="false" class="tag-sm" style="margin-left: 6px;">{{ std.version }}</Tag>
                 </div>
                 <div class="linked-standard-meta">
-                  <Tag :bordered="false" class="tag-sm">{{ std.type }}</Tag>
+                  <Tag v-if="std.isSystem === '1'" color="purple" :bordered="false" class="tag-sm">通用</Tag>
+                  <Tag v-else color="default" :bordered="false" class="tag-sm">专用</Tag>
                   <span class="text-gray-400 text-xs">{{ std.ruleCount ?? 0 }} 条规则</span>
                 </div>
               </div>
             </div>
           </Card>
-        </div>
 
-        <!-- 数据内容：案例 + 模式 -->
-        <div class="cards-wrapper">
           <Card id="data-content" class="detail-card" :style="cardRadiusStyle">
             <template #title>
               <span class="card-title">
