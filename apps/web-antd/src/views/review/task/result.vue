@@ -122,7 +122,7 @@ const formDataEntries = computed(() => {
 const imageFiles = computed(() => {
   return taskFiles.value.filter((f: any) => {
     const ext = (f.fileType || f.fileSuffix || '').toLowerCase();
-    return ['png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(ext);
+    return ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'image'].includes(ext);
   });
 });
 
