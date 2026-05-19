@@ -34,6 +34,8 @@ import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { reviewTaskInfo, reviewTaskMarkMisjudgment, reviewResultItemList } from '#/api/review/task';
 import type { ReviewTask, ReviewResultItem } from '#/api/review/task/model';
 
+import AttachmentPreview from './modules/AttachmentPreview.vue';
+
 const route = useRoute();
 const router = useRouter();
 const layoutPreference = useDetailPagePreference();
@@ -118,13 +120,7 @@ const formDataEntries = computed(() => {
   }
 });
 
-// 获取图片附件列表
-const imageFiles = computed(() => {
-  return taskFiles.value.filter((f: any) => {
-    const ext = (f.fileType || f.fileSuffix || '').toLowerCase();
-    return ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'image'].includes(ext);
-  });
-});
+// 附件渲染已抽到 AttachmentPreview.vue 组件，新增文件类型只动那个文件，本页不再分发类型
 
 // 版本历史数据（当前仅支持单次审核，后续迭代支持多版本）
 const versionHistory = ref<any[]>([]);
@@ -662,17 +658,18 @@ onUnmounted(() => {
                       </div>
                     </div>
 
-                    <!-- 附件图片 -->
-                    <div v-if="imageFiles.length > 0" class="form-preview-section" style="margin-top: 16px;">
-                      <div class="form-preview-title">营业执照附件</div>
-                      <div v-for="file in imageFiles" :key="file.id" class="image-preview-item">
-                        <Image :src="file.filePath || file.url" :alt="file.fileName" class="image-preview-img" />
-                        <div class="image-preview-name">{{ file.fileName }}</div>
-                      </div>
+                    <!-- 审核附件（图片/PDF/Office/视频/音频等由 AttachmentPreview 按类型分发） -->
+                    <div v-if="taskFiles.length > 0" class="form-preview-section" style="margin-top: 16px;">
+                      <div class="form-preview-title">审核附件</div>
+                      <AttachmentPreview
+                        v-for="file in taskFiles"
+                        :key="file.id || file.fileName"
+                        :file="file"
+                      />
                     </div>
 
                     <!-- 无内容时的空状态 -->
-                    <div v-if="formDataEntries.length === 0 && imageFiles.length === 0" class="doc-preview-empty">
+                    <div v-if="formDataEntries.length === 0 && taskFiles.length === 0" class="doc-preview-empty">
                       <AuditOutlined style="font-size: 32px; color: #d9d9d9; margin-bottom: 8px;" />
                       <div style="color: #999;">暂无提交资料预览</div>
                     </div>
