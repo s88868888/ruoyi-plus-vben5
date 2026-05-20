@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import type { VxeGridProps } from '#/adapter/vxe-table';
-
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-import { Card, Image, Tag, Button, Space, Select, Modal, Input, Spin, message } from 'ant-design-vue';
+import { Card, Image, Tag, Button, Space, Modal, Input, Spin, message } from 'ant-design-vue';
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
@@ -18,7 +16,6 @@ import {
   ClockCircleOutlined,
   ThunderboltOutlined,
   AuditOutlined,
-  SwapOutlined,
   HistoryOutlined,
   StopOutlined,
   UndoOutlined,
@@ -28,8 +25,7 @@ import { AnchorNav } from '#/components/anchor-nav';
 import type { AnchorNavItem } from '#/components/anchor-nav';
 import { Page } from '@vben/common-ui';
 import { MarkdownPreviewer } from '@vben/common-ui';
-import { useDetailPagePreference, useListTablePreference } from '#/preferences/userPreference';
-import { useVbenVxeGrid } from '#/adapter/vxe-table';
+import { useDetailPagePreference } from '#/preferences/userPreference';
 
 import { reviewTaskInfo, reviewTaskMarkMisjudgment, reviewResultItemList } from '#/api/review/task';
 import type { ReviewTask, ReviewResultItem } from '#/api/review/task/model';
@@ -39,7 +35,6 @@ import AttachmentPreview from './modules/AttachmentPreview.vue';
 const route = useRoute();
 const router = useRouter();
 const layoutPreference = useDetailPagePreference();
-const tablePreference = useListTablePreference();
 const scrollContainer = ref<HTMLElement | null>(null);
 
 // loading 状态
@@ -47,15 +42,11 @@ const pageLoading = ref(false);
 const misjudgmentLoading = ref(false);
 
 const anchorNavItems = computed<AnchorNavItem[]>(() => {
-  const items: AnchorNavItem[] = [
+  return [
     { key: 'overview', title: '审核概览' },
     { key: 'data-overview', title: '数据概览' },
     { key: 'review-detail', title: '审核详情' },
   ];
-  if (docInfo.value.reviewVersion > 1) {
-    items.push({ key: 'version-compare', title: '版本对比' });
-  }
-  return items;
 });
 
 const containerStyle = computed(() => {
@@ -67,13 +58,6 @@ const containerStyle = computed(() => {
 
 const cardRadiusStyle = computed(() => ({
   borderRadius: `${layoutPreference.cardRadius}px`,
-}));
-
-const tableCssVars = computed(() => ({
-  '--list-header-bg': tablePreference.headerBgColor,
-  '--list-header-color': tablePreference.headerTextColor,
-  '--list-header-padding-y': `${tablePreference.headerPaddingY}px`,
-  '--list-cell-padding-y': `${tablePreference.cellPaddingY}px`,
 }));
 
 // Mock 审核结果数据（作为 fallback）
@@ -121,56 +105,6 @@ const formDataEntries = computed(() => {
 });
 
 // 附件渲染已抽到 AttachmentPreview.vue 组件，新增文件类型只动那个文件，本页不再分发类型
-
-// 版本历史数据（当前仅支持单次审核，后续迭代支持多版本）
-const versionHistory = ref<any[]>([]);
-
-const compareVersionA = ref(3);
-const compareVersionB = ref(2);
-
-const versionAData = computed(() => versionHistory.value.find(v => v.version === compareVersionA.value));
-const versionBData = computed(() => versionHistory.value.find(v => v.version === compareVersionB.value));
-
-const versionOptions = computed(() => versionHistory.value.map(v => ({
-  label: `第${v.version}次审核 (${v.time.split(' ')[0]})`,
-  value: v.version,
-})));
-
-const compareTableData = computed(() => {
-  if (!versionAData.value || !versionBData.value) return [];
-  const a = versionAData.value;
-  const b = versionBData.value;
-  return [
-    { id: 1, metric: '严重问题', valueA: a.errorCount, valueB: b.errorCount, diff: a.errorCount - b.errorCount, type: 'less-better' },
-    { id: 2, metric: '一般问题', valueA: a.warningCount, valueB: b.warningCount, diff: a.warningCount - b.warningCount, type: 'less-better' },
-    { id: 3, metric: '提示信息', valueA: a.infoCount, valueB: b.infoCount, diff: a.infoCount - b.infoCount, type: 'less-better' },
-    { id: 4, metric: '通过率', valueA: Math.round(a.passCount / a.totalRules * 100), valueB: Math.round(b.passCount / b.totalRules * 100), diff: Math.round(a.passCount / a.totalRules * 100) - Math.round(b.passCount / b.totalRules * 100), type: 'more-better' },
-  ];
-});
-
-const compareGridOptions: VxeGridProps = {
-  showOverflow: true,
-  border: true,
-  toolbarConfig: { enabled: false },
-  pagerConfig: { enabled: false },
-  columns: [
-    { field: 'metric', title: '指标', width: 100, align: 'left' },
-    { field: 'valueA', title: '当前版本', minWidth: 100, align: 'center', slots: { default: 'valueA' } },
-    { field: 'valueB', title: '对比版本', minWidth: 100, align: 'center', slots: { default: 'valueB' } },
-    { field: 'diff', title: '变化', width: 100, align: 'center', slots: { default: 'diff' } },
-  ],
-  rowConfig: { keyField: 'id' },
-  proxyConfig: {
-    ajax: {
-      query: async () => {
-        return { rows: compareTableData.value, total: compareTableData.value.length };
-      },
-    },
-  },
-  id: 'review-version-compare',
-};
-
-const [CompareTable] = useVbenVxeGrid({ gridOptions: compareGridOptions } as any);
 
 const issues = ref<any[]>([]);
 
@@ -370,12 +304,6 @@ async function loadTaskData() {
     formSnapshot.value = taskData.formSnapshot || '';
     taskFiles.value = taskData.files || [];
     resultMarkdown.value = (taskData as any).resultMarkdown || '';
-
-    // 更新版本对比选择器默认值
-    if (taskData.version) {
-      compareVersionA.value = taskData.version;
-      compareVersionB.value = Math.max(1, taskData.version - 1);
-    }
 
     // 2. 获取审核结果明细
     try {
@@ -747,57 +675,6 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-          </Card>
-
-          <!-- 版本对比（仅多次审核时显示） -->
-          <Card v-if="docInfo.reviewVersion > 1" id="version-compare" class="mb-4 detail-card" :style="cardRadiusStyle">
-            <template #title>
-              <span class="card-title">
-                <HistoryOutlined class="card-title-icon" />
-                版本对比
-              </span>
-            </template>
-            <template #extra>
-              <Space>
-                <Tag color="blue">当前第{{ docInfo.reviewVersion }}次审核</Tag>
-              </Space>
-            </template>
-
-            <!-- 版本选择器 -->
-            <div class="version-selector">
-              <div class="version-select-item">
-                <span class="version-select-label">对比版本</span>
-                <Select v-model:value="compareVersionA" :options="versionOptions" style="width: 220px;" />
-              </div>
-              <SwapOutlined class="version-swap-icon" />
-              <div class="version-select-item">
-                <Select v-model:value="compareVersionB" :options="versionOptions" style="width: 220px;" />
-              </div>
-            </div>
-
-            <!-- 对比结果 -->
-            <div v-if="versionAData && versionBData" class="version-compare-table" :style="tableCssVars">
-              <CompareTable>
-                <template #valueA="{ row }">
-                  <span :class="row.metric === '通过率' ? 'text-green-500 font-semibold' : row.metric === '严重问题' ? 'text-red-500 font-semibold' : row.metric === '一般问题' ? 'text-orange-500 font-semibold' : 'text-blue-500 font-semibold'">
-                    {{ row.valueA }}{{ row.metric === '通过率' ? '%' : '' }}
-                  </span>
-                </template>
-                <template #valueB="{ row }">
-                  <span :class="row.metric === '通过率' ? 'text-green-500 font-semibold' : row.metric === '严重问题' ? 'text-red-500 font-semibold' : row.metric === '一般问题' ? 'text-orange-500 font-semibold' : 'text-blue-500 font-semibold'">
-                    {{ row.valueB }}{{ row.metric === '通过率' ? '%' : '' }}
-                  </span>
-                </template>
-                <template #diff="{ row }">
-                  <Tag v-if="row.diff !== 0" :color="(row.type === 'less-better' && row.diff < 0) || (row.type === 'more-better' && row.diff > 0) ? 'success' : 'error'">
-                    {{ row.diff > 0 ? '↑' : '↓' }} {{ Math.abs(row.diff) }}{{ row.metric === '通过率' ? '%' : '' }}
-                  </Tag>
-                  <span v-else class="text-gray-400">-</span>
-                </template>
-              </CompareTable>
-            </div>
-
-            <!-- 版本对比表格下方无审核历史 -->
           </Card>
         </div>
       </div>
@@ -1390,59 +1267,6 @@ onUnmounted(() => {
 .issue-card-rule-icon {
   font-size: 12px;
   color: #bfbfbf;
-}
-
-/* ===== 版本对比 ===== */
-.version-selector {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #fafafa;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.version-select-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.version-select-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.65);
-  white-space: nowrap;
-}
-
-.version-swap-icon {
-  font-size: 16px;
-  color: #909399;
-}
-
-.version-compare-table {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.version-compare-table :deep(.vxe-table--header-wrapper),
-.version-compare-table :deep(.vxe-header--column) {
-  background-color: var(--list-header-bg) !important;
-}
-
-.version-compare-table :deep(.vxe-header--column .vxe-cell) {
-  color: var(--list-header-color) !important;
-}
-
-.version-compare-table :deep(.vxe-header--column) {
-  padding-top: var(--list-header-padding-y) !important;
-  padding-bottom: var(--list-header-padding-y) !important;
-}
-
-.version-compare-table :deep(.vxe-body--column) {
-  padding-top: var(--list-cell-padding-y) !important;
-  padding-bottom: var(--list-cell-padding-y) !important;
 }
 
 /* ===== 误判矫正相关样式 ===== */
