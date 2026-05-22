@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import {
-  message, Form, FormItem, Input, Textarea, Select, InputNumber, Alert, Divider, Tag,
+  message, Form, FormItem, Input, Textarea, Select, Alert, Divider, Tag,
   Tooltip,
 } from 'ant-design-vue';
 import { InfoCircleOutlined } from '@ant-design/icons-vue';
@@ -233,31 +233,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           <div class="text-xs text-gray-400 mt-1">
             仅当任务里有"扫描件PDF"时才会触发 OCR。打印件PDF走 PDFBox 抽文，与此无关。
           </div>
-        </FormItem>
-        <FormItem label="AI模型 (legacy，未选模型配置时生效)">
-          <Select
-            v-model:value="formData.modelName"
-            placeholder="留空则由系统根据附件类型自动选择"
-            style="width: 100%;"
-            allow-clear
-            :disabled="!!formData.modelConfigId"
-            :options="[
-              { label: 'qwen-plus（文本）', value: 'qwen-plus' },
-              { label: 'qwen3-vl-plus（图片/视觉）', value: 'qwen3-vl-plus' },
-              { label: 'qwen-long（文档）', value: 'qwen-long' },
-              { label: 'ollama:qwen3.6:35b-a3b-q4_K_M（本地）', value: 'ollama:qwen3.6:35b-a3b-q4_K_M' },
-            ]"
-          />
-        </FormItem>
-        <FormItem label="温度 (legacy)">
-          <InputNumber
-            v-model:value="formData.temperature"
-            :min="0"
-            :max="1"
-            :step="0.1"
-            :disabled="!!formData.modelConfigId"
-            style="width: 100%;"
-          />
         </FormItem>
         <FormItem label="状态">
           <Select
