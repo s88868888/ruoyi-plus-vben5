@@ -216,7 +216,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
             :options="chatConfigOptions"
           />
           <div class="text-xs text-gray-400 mt-1">
-            选择配置后，下方「AI模型」「温度」字段失效，由配置统一管理。
+            模型与温度由所选配置统一管理；切换不同业务通道只需切换配置，无需重启。
           </div>
         </FormItem>
         <FormItem label="OCR模型配置（扫描件PDF才会用到）" class="col-span-2">
