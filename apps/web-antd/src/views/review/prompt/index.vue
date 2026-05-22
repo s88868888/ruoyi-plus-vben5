@@ -5,7 +5,7 @@ import { computed, ref } from 'vue';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
-import { Badge, Button, Dropdown, Menu, MenuItem, Modal, Space, message } from 'ant-design-vue';
+import { Badge, Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, message } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -13,6 +13,8 @@ import { useListTablePreference } from '#/preferences/userPreference';
 import CommonFilter from '#/components/CommonFilter/index.vue';
 import PromptEditDrawer from './modules/prompt-edit-drawer.vue';
 import { reviewPromptList, reviewPromptRemove } from '#/api/review/prompt';
+import { reviewModelConfigList } from '#/api/review/modelConfig';
+import type { ReviewModelConfig } from '#/api/review/modelConfig/model';
 
 const tablePreference = useListTablePreference();
 
@@ -53,6 +55,20 @@ const filterData = ref([
 
 const searchParams = ref<Record<string, any>>({});
 
+// modelConfigId → modelConfig 映射，用于在表格中展示「配置名 · model」
+const modelConfigMap = ref<Record<string, ReviewModelConfig>>({});
+async function loadModelConfigs() {
+  try {
+    const list = (await reviewModelConfigList()) || [];
+    const map: Record<string, ReviewModelConfig> = {};
+    list.forEach((c) => { map[String(c.id)] = c; });
+    modelConfigMap.value = map;
+  } catch {
+    // 忽略：拉不到配置不影响列表展示，列上会回退到 legacy modelName
+  }
+}
+loadModelConfigs();
+
 const handleFilterQuery = (conditions: any[]) => {
   const queryParams: Record<string, any> = {};
   conditions.forEach((item) => {
@@ -90,8 +106,9 @@ const gridOptions: VxeGridProps = {
     {
       field: 'modelName',
       title: '模型',
-      width: 130,
+      width: 220,
       align: 'center',
+      slots: { default: 'modelName' },
     },
     {
       field: 'temperature',
@@ -222,6 +239,21 @@ function handleDelete(row: any) {
 
           <template #type="{ row }">
             <code class="type-code">{{ row.type }}</code>
+          </template>
+
+          <template #modelName="{ row }">
+            <div v-if="row.modelConfigId && modelConfigMap[String(row.modelConfigId)]" class="flex flex-col items-center gap-1">
+              <Tag color="green" style="margin: 0;">
+                {{ modelConfigMap[String(row.modelConfigId)].name }}
+              </Tag>
+              <span class="text-xs text-gray-400">{{ modelConfigMap[String(row.modelConfigId)].modelName }}</span>
+            </div>
+            <div v-else-if="row.modelConfigId" class="text-xs text-gray-400">
+              configId={{ row.modelConfigId }} (已删除)
+            </div>
+            <span v-else class="text-xs text-gray-500">
+              {{ row.modelName || '默认' }}
+            </span>
           </template>
 
           <template #status="{ row }">

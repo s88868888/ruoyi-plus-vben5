@@ -8,6 +8,10 @@ export interface ReviewPromptTemplate extends BaseEntity {
   userPrompt: string;
   outputFormat?: string;
   modelName?: string;
+  /** 关联 review_model_config.id（purpose=chat） */
+  modelConfigId?: number | string;
+  /** 关联 review_model_config.id（purpose=ocr）；为空走全局兜底 */
+  ocrConfigId?: number | string;
   temperature?: number;
   status?: string;
   remark?: string;
