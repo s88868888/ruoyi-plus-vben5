@@ -7,11 +7,12 @@ import { useRouter } from 'vue-router';
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
 import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, Badge, message } from 'ant-design-vue';
-import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
+import { EllipsisOutlined, PlusOutlined, ThunderboltOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
 import CommonFilter from '#/components/CommonFilter/index.vue';
+import AddStandardManualDrawer from './modules/add-standard-manual-drawer.vue';
 import AddStandardDrawer from './modules/add-standard-drawer.vue';
 import EditStandardDrawer from './modules/edit-standard-drawer.vue';
 import { reviewStandardList, reviewStandardRemove } from '#/api/review/standard';
@@ -166,7 +167,12 @@ const [BasicTable, tableApi] = useVbenVxeGrid({
   },
 } as any);
 
-// 新增抽屉
+// 手动新增抽屉（仅基本信息）
+const [ManualAddDrawerComp, manualAddDrawerApi] = useVbenDrawer({
+  connectedComponent: AddStandardManualDrawer,
+});
+
+// 智能解析抽屉（上传文档 AI 抽取规则）
 const [AddDrawerComp, addDrawerApi] = useVbenDrawer({
   connectedComponent: AddStandardDrawer,
 });
@@ -176,7 +182,11 @@ const [EditDrawerComp, editDrawerApi] = useVbenDrawer({
   connectedComponent: EditStandardDrawer,
 });
 
-function handleAdd() {
+function handleManualAdd() {
+  manualAddDrawerApi.open();
+}
+
+function handleSmartParse() {
   addDrawerApi.open();
 }
 
@@ -221,9 +231,13 @@ function handleDisable(row: any) {
             @handle-query="handleFilterQuery"
           />
           <Space>
-            <Button type="primary" @click="handleAdd">
+            <Button @click="handleManualAdd">
               <PlusOutlined />
-              新增审核标准
+              手动新增审核标准
+            </Button>
+            <Button type="primary" @click="handleSmartParse">
+              <ThunderboltOutlined />
+              智能解析
             </Button>
           </Space>
         </div>
@@ -287,6 +301,7 @@ function handleDisable(row: any) {
         </BasicTable>
       </div>
     </div>
+    <ManualAddDrawerComp @reload="handleReload" />
     <AddDrawerComp @reload="handleReload" />
     <EditDrawerComp @reload="handleReload" />
   </Page>

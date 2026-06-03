@@ -378,7 +378,13 @@ function handleDeleteRule(row: any) {
 }
 
 async function handleToggleRuleStatus(row: any, enabled: boolean) {
-  await reviewStandardRuleUpdate({ id: row.id, status: enabled ? '0' : '1' });
+  // 后端 editRule 使用 EditGroup 校验，standardId/content 均为必填，切换状态时需一并回传
+  await reviewStandardRuleUpdate({
+    id: row.id,
+    standardId: row.standardId ?? standardId.value,
+    content: row.content,
+    status: enabled ? '0' : '1',
+  });
   message.success(enabled ? '已启用' : '已停用');
   await tableApi.query();
 }
