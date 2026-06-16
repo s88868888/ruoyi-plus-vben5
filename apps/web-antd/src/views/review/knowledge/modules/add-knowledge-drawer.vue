@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import {
-  message, Upload, Select, Input, Form, FormItem, Alert, Textarea, Button, Divider,
+  message, Select, Input, Form, FormItem, Textarea, Divider,
 } from 'ant-design-vue';
-import { InboxOutlined } from '@ant-design/icons-vue';
 import { reviewKnowledgeAdd } from '#/api/review/knowledge';
 
 const emit = defineEmits<{ reload: [] }>();
 
-const fileList = ref<any[]>([]);
 const formData = ref({
   name: '',
   type: undefined as string | undefined,
@@ -28,7 +26,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
   title: '新建知识库',
   onOpenChange: (visible) => {
     if (!visible) {
-      fileList.value = [];
       formData.value = { name: '', type: undefined, description: '' };
     }
   },
@@ -75,27 +72,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           <Textarea v-model:value="formData.description" placeholder="描述该知识库的用途、数据来源、适用场景等..." :rows="3" />
         </FormItem>
       </div>
-
-      <Divider orientation="left" class="section-title-divider">
-        <span class="section-title">初始数据（可选）</span>
-      </Divider>
-      <FormItem class="col-span-2" style="margin-bottom: 0;">
-        <Upload.Dragger
-          v-model:file-list="fileList"
-          :multiple="true"
-          :before-upload="() => false"
-        >
-          <p class="ant-upload-drag-icon"><InboxOutlined /></p>
-          <p class="ant-upload-text">拖拽历史审核文档到此处批量导入</p>
-          <p class="ant-upload-hint">支持 Word、PDF、Excel 格式，系统将自动提取审核案例</p>
-        </Upload.Dragger>
-        <Alert
-          message="创建后也可以在知识库详情中手动添加案例，或通过审核反馈自动积累"
-          type="info"
-          show-icon
-          style="margin-top: 12px;"
-        />
-      </FormItem>
     </Form>
   </BasicDrawer>
 </template>

@@ -184,7 +184,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         </div>
       </FormItem>
 
-      <template v-if="isEdit && formData.confidence != null">
+      <template v-if="isEdit && formData.hitCount != null && formData.hitCount > 0">
         <Divider orientation="left" class="section-title-divider">
           <span class="section-title">置信度</span>
         </Divider>
@@ -199,15 +199,15 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           </template>
           <div class="confidence-display">
             <Progress
-              :percent="formData.confidence"
-              :stroke-color="formData.confidence! >= 90 ? '#52c41a' : formData.confidence! >= 75 ? '#faad14' : '#ff4d4f'"
+              :percent="Math.round((1 - (formData.missCount ?? 0) / formData.hitCount!) * 100)"
+              :stroke-color="Math.round((1 - (formData.missCount ?? 0) / formData.hitCount!) * 100) >= 90 ? '#52c41a' : Math.round((1 - (formData.missCount ?? 0) / formData.hitCount!) * 100) >= 75 ? '#faad14' : '#ff4d4f'"
               :size="[220, 8]"
             />
             <div class="confidence-stats">
               <span>识别命中: <b>{{ formData.hitCount ?? 0 }}</b> 次</span>
               <span>误判: <b>{{ formData.missCount ?? 0 }}</b> 次</span>
             </div>
-            <div v-if="formData.confidence! < 75" class="confidence-warn">
+            <div v-if="Math.round((1 - (formData.missCount ?? 0) / formData.hitCount!) * 100) < 75" class="confidence-warn">
               置信度偏低，建议结合知识库增强学习或调整规则描述
             </div>
           </div>

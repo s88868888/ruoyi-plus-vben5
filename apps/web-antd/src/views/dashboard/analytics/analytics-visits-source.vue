@@ -2,63 +2,62 @@
 import type { EchartsUIType } from '@vben/plugins/echarts';
 
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
-import { onMounted, ref } from 'vue';
+import { ref, watch } from 'vue';
+
+const props = defineProps<{
+  data: Array<{ name: string; value: number }>;
+}>();
 
 const chartRef = ref<EchartsUIType>();
 const { renderEcharts } = useEcharts(chartRef);
 
-onMounted(() => {
-  renderEcharts({
-    legend: {
-      bottom: '2%',
-      left: 'center',
-    },
-    series: [
-      {
-        animationDelay() {
-          return Math.random() * 100;
-        },
-        animationEasing: 'exponentialInOut',
-        animationType: 'scale',
-        avoidLabelOverlap: false,
-        color: ['#5ab1ef', '#b6a2de', '#67e0e3', '#2ec7c9'],
-        data: [
-          { name: '搜索引擎', value: 1048 },
-          { name: '直接访问', value: 735 },
-          { name: '邮件营销', value: 580 },
-          { name: '联盟广告', value: 484 },
-        ],
-        emphasis: {
-          label: {
-            fontSize: '12',
-            fontWeight: 'bold',
-            show: true,
-          },
-        },
-        itemStyle: {
-          // borderColor: '#fff',
-          borderRadius: 10,
-          borderWidth: 2,
-        },
-        label: {
-          position: 'center',
-          show: false,
-        },
-        labelLine: {
-          show: false,
-        },
-        name: '访问来源',
-        radius: ['40%', '65%'],
-        type: 'pie',
+const colorMap: Record<string, string> = {
+  '通过': '#52c41a',
+  '不通过': '#ff4d4f',
+  '进行中': '#1677ff',
+};
+
+watch(
+  () => props.data,
+  (val) => {
+    if (!val || val.length === 0) return;
+    renderEcharts({
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}: {c} ({d}%)',
       },
-    ],
-    tooltip: {
-      trigger: 'item',
-    },
-  });
-});
+      legend: {
+        orient: 'horizontal',
+        bottom: 0,
+      },
+      series: [
+        {
+          type: 'pie',
+          radius: ['40%', '70%'],
+          center: ['50%', '45%'],
+          avoidLabelOverlap: false,
+          itemStyle: {
+            borderRadius: 6,
+            borderColor: '#fff',
+            borderWidth: 2,
+          },
+          label: {
+            show: true,
+            formatter: '{b}\n{d}%',
+            fontSize: 12,
+          },
+          data: val.map((item) => ({
+            ...item,
+            itemStyle: { color: colorMap[item.name] || '#faad14' },
+          })),
+        },
+      ],
+    });
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
-  <EchartsUI ref="chartRef" />
+  <EchartsUI ref="chartRef" height="300px" />
 </template>

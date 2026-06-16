@@ -282,6 +282,13 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'confidence', header: 'confidenceHeader' },
     },
     {
+      field: 'focusEnabled',
+      title: '关注',
+      width: 80,
+      align: 'center',
+      slots: { default: 'focusEnabled' },
+    },
+    {
       field: 'status',
       title: '状态',
       width: 80,
@@ -384,6 +391,16 @@ async function handleToggleRuleStatus(row: any, enabled: boolean) {
     status: enabled ? '0' : '1',
   });
   message.success(enabled ? '已启用' : '已停用');
+  await tableApi.query();
+}
+
+async function handleToggleFocusEnabled(row: any, enabled: boolean) {
+  await reviewStandardRuleUpdate({
+    id: row.id,
+    standardId: row.standardId ?? standardId.value,
+    content: row.content,
+    focusEnabled: enabled ? '1' : '0',
+  });
   await tableApi.query();
 }
 
@@ -718,6 +735,15 @@ onUnmounted(() => {
                       <span v-else class="confidence-text" style="color: #999;">暂无数据</span>
                     </div>
                   </Tooltip>
+                </template>
+                <template #focusEnabled="{ row }">
+                  <Switch
+                    :checked="row.focusEnabled === '1'"
+                    checked-children="是"
+                    un-checked-children="否"
+                    size="small"
+                    @change="(val: boolean) => handleToggleFocusEnabled(row, val)"
+                  />
                 </template>
                 <template #status="{ row }">
                   <Switch

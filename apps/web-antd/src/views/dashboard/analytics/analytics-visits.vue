@@ -2,53 +2,77 @@
 import type { EchartsUIType } from '@vben/plugins/echarts';
 
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
-import { onMounted, ref } from 'vue';
+import { ref, watch } from 'vue';
+
+const props = defineProps<{
+  data: Array<{ ruleName: string; hitCount: number }>;
+}>();
 
 const chartRef = ref<EchartsUIType>();
 const { renderEcharts } = useEcharts(chartRef);
 
-onMounted(() => {
-  renderEcharts({
-    grid: {
-      bottom: 0,
-      containLabel: true,
-      left: '1%',
-      right: '1%',
-      top: '2 %',
-    },
-    series: [
-      {
-        barMaxWidth: 80,
-        // color: '#4f69fd',
-        data: [
-          3000, 2000, 3333, 5000, 3200, 4200, 3200, 2100, 3000, 5100, 6000,
-          3200, 4800,
-        ],
-        type: 'bar',
+watch(
+  () => props.data,
+  (val) => {
+    if (!val || val.length === 0) return;
+    // 倒序：排行最高的在最上面
+    const sorted = [...val].reverse();
+    renderEcharts({
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
       },
-    ],
-    tooltip: {
-      axisPointer: {
-        lineStyle: {
-          // color: '#4f69fd',
-          width: 1,
+      grid: {
+        left: '3%',
+        right: '10%',
+        bottom: '3%',
+        top: '3%',
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'value',
+        minInterval: 1,
+        splitLine: { lineStyle: { type: 'dashed' } },
+      },
+      yAxis: {
+        type: 'category',
+        data: sorted.map((item) => item.ruleName),
+        axisLabel: {
+          width: 120,
+          overflow: 'truncate',
+          fontSize: 11,
         },
       },
-      trigger: 'axis',
-    },
-    xAxis: {
-      data: Array.from({ length: 12 }).map((_item, index) => `${index + 1}月`),
-      type: 'category',
-    },
-    yAxis: {
-      max: 8000,
-      splitNumber: 4,
-      type: 'value',
-    },
-  });
-});
+      series: [
+        {
+          type: 'bar',
+          data: sorted.map((item) => item.hitCount),
+          barMaxWidth: 20,
+          itemStyle: {
+            borderRadius: [0, 4, 4, 0],
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 1, y2: 0,
+              colorStops: [
+                { offset: 0, color: '#1677ff' },
+                { offset: 1, color: '#69b1ff' },
+              ],
+            },
+          },
+          label: {
+            show: true,
+            position: 'right',
+            fontSize: 11,
+            color: '#666',
+          },
+        },
+      ],
+    });
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
-  <EchartsUI ref="chartRef" />
+  <EchartsUI ref="chartRef" height="300px" />
 </template>
