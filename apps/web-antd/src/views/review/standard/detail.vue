@@ -79,7 +79,7 @@ const linkedKnowledgeBases = ref<ReviewKnowledge[]>([]);
 const availableKnowledgeBases = ref<ReviewKnowledge[]>([]);
 
 const showKnowledgeSelectModal = ref(false);
-const selectedKnowledgeIds = ref<number[]>([]);
+const selectedKnowledgeIds = ref<string[]>([]);
 
 function handleLinkKnowledge() {
   selectedKnowledgeIds.value = [];
@@ -90,8 +90,8 @@ function handleLinkKnowledge() {
 async function loadAvailableKnowledges() {
   try {
     const res = await reviewKnowledgeList({ pageNum: 1, pageSize: 100 });
-    const linkedIds = new Set(linkedKnowledgeBases.value.map((kb: any) => Number(kb.id)));
-    availableKnowledgeBases.value = (res.rows || []).filter((kb: any) => !linkedIds.has(Number(kb.id)));
+    const linkedIds = new Set(linkedKnowledgeBases.value.map((kb: any) => String(kb.id)));
+    availableKnowledgeBases.value = (res.rows || []).filter((kb: any) => !linkedIds.has(String(kb.id)));
   } catch {
     availableKnowledgeBases.value = [];
   }
@@ -106,7 +106,6 @@ async function handleConfirmLinkKnowledge() {
     await reviewStandardLinkKnowledge(standardId.value, kid);
   }
   showKnowledgeSelectModal.value = false;
-  message.success(`已关联 ${selectedKnowledgeIds.value.length} 个知识库`);
   await loadKnowledges();
 }
 
@@ -128,19 +127,18 @@ function handleUnlinkKnowledge(kb: any) {
 async function handleSyncKnowledge(kb: any) {
   try {
     await reviewKnowledgeSyncVector(kb.id);
-    message.success(`知识库【${kb.name}】同步完成`);
   } catch {
     message.error('同步失败，请检查向量库服务是否正常');
   }
 }
 
 function toggleKnowledgeSelect(id: number | string) {
-  const numId = Number(id);
-  const idx = selectedKnowledgeIds.value.indexOf(numId);
+  const strId = String(id);
+  const idx = selectedKnowledgeIds.value.indexOf(strId);
   if (idx >= 0) {
     selectedKnowledgeIds.value.splice(idx, 1);
   } else {
-    selectedKnowledgeIds.value.push(numId);
+    selectedKnowledgeIds.value.push(strId);
   }
 }
 
@@ -622,7 +620,7 @@ onUnmounted(() => {
             <div
               v-for="kb in availableKnowledgeBases"
               :key="kb.id"
-              :class="['knowledge-select-item', { 'knowledge-select-item-active': selectedKnowledgeIds.includes(Number(kb.id)) }]"
+              :class="['knowledge-select-item', { 'knowledge-select-item-active': selectedKnowledgeIds.includes(String(kb.id)) }]"
               @click="toggleKnowledgeSelect(kb.id)"
             >
               <div class="knowledge-select-item-left">
@@ -632,7 +630,7 @@ onUnmounted(() => {
                   <div class="knowledge-select-item-meta">{{ kb.caseCount ?? 0 }} 案例 · {{ kb.patternCount ?? 0 }} 模式</div>
                 </div>
               </div>
-              <div class="knowledge-select-check" v-if="selectedKnowledgeIds.includes(Number(kb.id))">✓</div>
+              <div class="knowledge-select-check" v-if="selectedKnowledgeIds.includes(String(kb.id))">✓</div>
             </div>
           </div>
         </Modal>
