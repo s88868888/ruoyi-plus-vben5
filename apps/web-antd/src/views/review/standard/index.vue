@@ -212,7 +212,6 @@ function handleDisable(row: any) {
     cancelText: '取消',
     async onOk() {
       await reviewStandardRemove([row.id]);
-      message.success('已废止');
       await tableApi.query();
     },
   });
