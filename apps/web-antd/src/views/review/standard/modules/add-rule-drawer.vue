@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
-import { Form, FormItem, Input, Select, Slider, InputNumber, Progress, Switch, Tooltip, Divider, message } from 'ant-design-vue';
+import { Form, FormItem, Input, Select, Slider, InputNumber, Progress, Tooltip, Divider, message } from 'ant-design-vue';
 import { InfoCircleOutlined } from '@ant-design/icons-vue';
 import { reviewStandardRuleAdd, reviewStandardRuleUpdate } from '#/api/review/standard';
 
@@ -16,8 +16,6 @@ const formData = ref({
   severity: undefined as string | undefined,
   category: undefined as string | undefined,
   weight: 80,
-  focusEnabled: false,
-  focusKeyword: '',
   confidence: undefined as number | undefined,
   hitCount: undefined as number | undefined,
   missCount: undefined as number | undefined,
@@ -71,8 +69,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           severity: data.severity,
           category: data.category,
           weight: data.weight ?? 80,
-          focusEnabled: data.focusEnabled === '1',
-          focusKeyword: data.focusKeyword ?? '',
           confidence: data.confidence,
           hitCount: data.hitCount,
           missCount: data.missCount,
@@ -80,7 +76,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       }
     } else {
       isEdit.value = false;
-      formData.value = { content: '', severity: undefined, category: undefined, weight: 80, focusEnabled: false, focusKeyword: '', confidence: undefined, hitCount: undefined, missCount: undefined };
+      formData.value = { content: '', severity: undefined, category: undefined, weight: 80, confidence: undefined, hitCount: undefined, missCount: undefined };
     }
   },
   onConfirm: async () => {
@@ -96,12 +92,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       message.warning('请选择分类');
       return;
     }
-    if (formData.value.focusEnabled && !formData.value.focusKeyword.trim()) {
-      message.warning('已开启关注，请填写关注要点');
-      return;
-    }
-    const focusEnabled = formData.value.focusEnabled ? '1' : '0';
-    const focusKeyword = formData.value.focusEnabled ? formData.value.focusKeyword.trim() : '';
     if (isEdit.value) {
       await reviewStandardRuleUpdate({
         id: ruleId.value as any,
@@ -110,8 +100,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         severity: formData.value.severity,
         category: formData.value.category,
         weight: formData.value.weight,
-        focusEnabled,
-        focusKeyword,
       });
     } else {
       await reviewStandardRuleAdd({
@@ -120,8 +108,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         severity: formData.value.severity,
         category: formData.value.category,
         weight: formData.value.weight,
-        focusEnabled,
-        focusKeyword,
       });
     }
     emit('reload');
@@ -198,31 +184,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           <span v-else-if="formData.weight >= 50" style="color: #d46b08;">中权重 — 不通过将标记为一般问题</span>
           <span v-else style="color: #1677ff;">低权重 — 不通过将作为提示建议</span>
         </div>
-      </FormItem>
-
-      <Divider orientation="left" class="section-title-divider">
-        <span class="section-title">关注配置</span>
-      </Divider>
-      <FormItem>
-        <template #label>
-          <span>
-            开启关注
-            <Tooltip title="开启后，AI 会按下方关注要点在文档中定位对应原文，显示在审查结果的「关注列表」中（不计入评分）">
-              <InfoCircleOutlined style="color: #999; margin-left: 4px;" />
-            </Tooltip>
-          </span>
-        </template>
-        <Switch v-model:checked="formData.focusEnabled" checked-children="是" un-checked-children="否" />
-      </FormItem>
-      <FormItem v-if="formData.focusEnabled" label="关注要点" required>
-        <Input.TextArea
-          v-model:value="formData.focusKeyword"
-          placeholder="每行一个关注要点，AI 将逐条在文档中定位对应原文。例如：&#10;项目总投资额&#10;拆迁补偿标准&#10;签约截止日期"
-          :rows="4"
-          :maxlength="500"
-          show-count
-        />
-        <div class="focus-hint">多个要点用换行或分号分隔，每个要点会作为一条关注项单独定位</div>
       </FormItem>
 
       <template v-if="isEdit && formData.hitCount != null && formData.hitCount > 0">
@@ -302,12 +263,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
 
 .weight-hint {
   font-size: 12px;
-  margin-top: 4px;
-}
-
-.focus-hint {
-  font-size: 12px;
-  color: #999;
   margin-top: 4px;
 }
 

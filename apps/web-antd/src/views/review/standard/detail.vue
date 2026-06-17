@@ -34,11 +34,15 @@ import {
   reviewStandardKnowledges,
   reviewStandardLinkKnowledge,
   reviewStandardUnlinkKnowledge,
+  reviewStandardFocusList,
+  reviewStandardFocusRemove,
+  reviewStandardFocusUpdate,
 } from '#/api/review/standard';
 import { reviewKnowledgeList, reviewKnowledgeSyncVector } from '#/api/review/knowledge';
 import type { ReviewStandard, ReviewStandardRule } from '#/api/review/standard/model';
 import type { ReviewKnowledge } from '#/api/review/knowledge/model';
 import AddRuleDrawer from './modules/add-rule-drawer.vue';
+import AddFocusDrawer from './modules/add-focus-drawer.vue';
 import ImportRuleDrawer from './modules/import-rule-drawer.vue';
 import SmartParseDrawer from './modules/smart-parse-drawer.vue';
 
@@ -53,6 +57,7 @@ const anchorNavItems = ref<AnchorNavItem[]>([
   { key: 'overview', title: '基本信息' },
   { key: 'knowledge-link', title: '关联知识库' },
   { key: 'rule-list', title: '规则列表' },
+  { key: 'focus-list', title: '关注列表' },
 ]);
 
 const containerStyle = computed(() => {
@@ -282,13 +287,6 @@ const gridOptions: VxeGridProps = {
       slots: { default: 'confidence', header: 'confidenceHeader' },
     },
     {
-      field: 'focusEnabled',
-      title: '关注',
-      width: 80,
-      align: 'center',
-      slots: { default: 'focusEnabled' },
-    },
-    {
       field: 'status',
       title: '状态',
       width: 80,
@@ -333,6 +331,58 @@ const [BasicTable, tableApi] = useVbenVxeGrid({
   gridOptions,
 } as any);
 
+// 关注列表表格：照抄规则列表的 vxe-grid 写法，表头样式与规则列表完全一致
+const focusGridOptions: VxeGridProps = {
+  columns: [
+    { type: 'seq', title: '序号', width: 60, align: 'center' },
+    {
+      field: 'keyword',
+      title: '关注要点',
+      minWidth: 300,
+      headerAlign: 'left',
+      align: 'left',
+    },
+    {
+      field: 'status',
+      title: '状态',
+      width: 90,
+      align: 'center',
+      slots: { default: 'focusStatus' },
+    },
+    {
+      field: 'action',
+      title: '操作',
+      width: 120,
+      fixed: 'right',
+      align: 'center',
+      slots: { default: 'focusAction' },
+    },
+  ],
+  keepSource: true,
+  pagerConfig: { enabled: false },
+  proxyConfig: {
+    ajax: {
+      query: async () => {
+        if (!standardId.value) return { rows: [], total: 0 };
+        try {
+          const rows = (await reviewStandardFocusList(standardId.value)) || [];
+          return { rows, total: rows.length };
+        } catch {
+          return { rows: [], total: 0 };
+        }
+      },
+    },
+  },
+  rowConfig: {
+    keyField: 'id',
+  },
+  id: 'review-standard-detail-focus',
+};
+
+const [BasicFocusTable, focusTableApi] = useVbenVxeGrid({
+  gridOptions: focusGridOptions,
+} as any);
+
 // 添加规则抽屉
 const [AddRuleDrawerComp, addRuleDrawerApi] = useVbenDrawer({
   connectedComponent: AddRuleDrawer,
@@ -347,6 +397,51 @@ const [ImportRuleDrawerComp, importRuleDrawerApi] = useVbenDrawer({
 const [SmartParseDrawerComp, smartParseDrawerApi] = useVbenDrawer({
   connectedComponent: SmartParseDrawer,
 });
+
+// 关注要点抽屉
+const [AddFocusDrawerComp, addFocusDrawerApi] = useVbenDrawer({
+  connectedComponent: AddFocusDrawer,
+});
+
+function handleAddFocus() {
+  addFocusDrawerApi.setData({ standardId: standardId.value });
+  addFocusDrawerApi.open();
+}
+
+function handleEditFocus(row: any) {
+  addFocusDrawerApi.setData({ ...row, standardId: standardId.value });
+  addFocusDrawerApi.open();
+}
+
+function handleDeleteFocus(row: any) {
+  Modal.confirm({
+    title: '确认删除该关注要点吗？',
+    content: row.keyword,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await reviewStandardFocusRemove([row.id]);
+      message.success('删除成功');
+      await focusTableApi.query();
+    },
+  });
+}
+
+async function handleToggleFocusStatus(row: any, enabled: boolean) {
+  await reviewStandardFocusUpdate({
+    id: row.id,
+    standardId: row.standardId ?? standardId.value,
+    keyword: row.keyword,
+    status: enabled ? '0' : '1',
+  });
+  message.success(enabled ? '已启用' : '已停用');
+  await focusTableApi.query();
+}
+
+async function handleReloadFocus() {
+  await focusTableApi.query();
+}
 
 function handleSmartParse() {
   smartParseDrawerApi.setData({ standardId: standardId.value });
@@ -394,15 +489,6 @@ async function handleToggleRuleStatus(row: any, enabled: boolean) {
   await tableApi.query();
 }
 
-async function handleToggleFocusEnabled(row: any, enabled: boolean) {
-  await reviewStandardRuleUpdate({
-    id: row.id,
-    standardId: row.standardId ?? standardId.value,
-    content: row.content,
-    focusEnabled: enabled ? '1' : '0',
-  });
-  await tableApi.query();
-}
 
 function handleImportRule() {
   importRuleDrawerApi.setData({ standardId: standardId.value });
@@ -470,22 +556,17 @@ onUnmounted(() => {
 
 <template>
   <div class="detail-page-layout">
-    <div
-      v-if="layoutPreference.showAnchorNav && layoutPreference.navMode === 'side'"
-      class="side-nav-panel hide-scrollbar"
-      :style="{
+    <div v-if="layoutPreference.showAnchorNav && layoutPreference.navMode === 'side'"
+      class="side-nav-panel hide-scrollbar" :style="{
         width: `${layoutPreference.anchorNavWidth}px`,
         margin: `20px ${layoutPreference.anchorNavMarginRight}px 20px ${layoutPreference.anchorNavMarginLeft}px`,
-      }"
-    >
+      }">
       <AnchorNav :items="anchorNavItems" :container="scrollContainer" />
     </div>
 
-    <div
-      class="main-scroll-area hide-scrollbar"
+    <div class="main-scroll-area hide-scrollbar"
       :style="{ left: layoutPreference.showAnchorNav && layoutPreference.navMode === 'side' ? `${layoutPreference.anchorNavMarginLeft + layoutPreference.anchorNavWidth + layoutPreference.anchorNavMarginRight}px` : '0' }"
-      ref="scrollContainer"
-    >
+      ref="scrollContainer">
       <div :style="containerStyle">
         <!-- 顶部概览 -->
         <div id="overview" class="header-card" :style="cardRadiusStyle">
@@ -498,7 +579,9 @@ onUnmounted(() => {
               <Tag v-else color="default" style="margin-left: 4px;">专用</Tag>
             </span>
             <Space>
-              <Button type="default" size="small" @click="goBack"><ArrowLeftOutlined /> 返回</Button>
+              <Button type="default" size="small" @click="goBack">
+                <ArrowLeftOutlined /> 返回
+              </Button>
             </Space>
           </div>
           <!-- 描述 -->
@@ -538,17 +621,11 @@ onUnmounted(() => {
         </div>
 
         <!-- 横向锚点菜单条 -->
-        <div
-          v-if="layoutPreference.showAnchorNav && layoutPreference.navMode === 'horizontal'"
-          class="horizontal-nav-bar"
-          :style="{ borderRadius: `${layoutPreference.cardRadius}px` }"
-        >
-          <a
-            v-for="item in anchorNavItems"
-            :key="item.key"
+        <div v-if="layoutPreference.showAnchorNav && layoutPreference.navMode === 'horizontal'"
+          class="horizontal-nav-bar" :style="{ borderRadius: `${layoutPreference.cardRadius}px` }">
+          <a v-for="item in anchorNavItems" :key="item.key"
             :class="['horizontal-nav-item', { 'horizontal-nav-item-active': activeAnchor === item.key }]"
-            @click="scrollToAnchor(item.key)"
-          >
+            @click="scrollToAnchor(item.key)">
             {{ item.title }}
           </a>
         </div>
@@ -577,11 +654,7 @@ onUnmounted(() => {
             </div>
 
             <div v-else class="knowledge-grid">
-              <div
-                v-for="kb in linkedKnowledgeBases"
-                :key="kb.id"
-                class="knowledge-card"
-              >
+              <div v-for="kb in linkedKnowledgeBases" :key="kb.id" class="knowledge-card">
                 <div class="knowledge-card-header">
                   <div class="knowledge-card-name">
                     <BookOutlined style="color: #1677ff; margin-right: 6px;" />
@@ -602,7 +675,8 @@ onUnmounted(() => {
                   </div>
                   <div class="knowledge-stat-item">
                     <span class="knowledge-stat-label">准确率</span>
-                    <span class="knowledge-stat-value" :style="{ color: (kb.accuracy ?? 0) >= 90 ? '#52c41a' : (kb.accuracy ?? 0) >= 80 ? '#faad14' : '#ff4d4f' }">
+                    <span class="knowledge-stat-value"
+                      :style="{ color: (kb.accuracy ?? 0) >= 90 ? '#52c41a' : (kb.accuracy ?? 0) >= 80 ? '#faad14' : '#ff4d4f' }">
                       {{ kb.accuracy ?? 0 }}%
                     </span>
                   </div>
@@ -620,39 +694,31 @@ onUnmounted(() => {
             </div>
           </Card>
 
-        <!-- 选择知识库弹窗 -->
-        <Modal
-          v-model:open="showKnowledgeSelectModal"
-          title="选择知识库"
-          ok-text="确认关联"
-          cancel-text="取消"
-          :width="560"
-          @ok="handleConfirmLinkKnowledge"
-        >
-          <p style="color: #666; margin-bottom: 12px;">选择需要关联到本标准的知识库，关联后每次审核将结合知识库经验增强识别效果。</p>
-          <div v-if="availableKnowledgeBases.length === 0" style="text-align: center; padding: 24px; color: #999;">
-            暂无可关联的知识库
-          </div>
-          <div v-else class="knowledge-select-list">
-            <div
-              v-for="kb in availableKnowledgeBases"
-              :key="kb.id"
-              :class="['knowledge-select-item', { 'knowledge-select-item-active': selectedKnowledgeIds.includes(String(kb.id)) }]"
-              @click="toggleKnowledgeSelect(kb.id)"
-            >
-              <div class="knowledge-select-item-left">
-                <BookOutlined style="color: #1677ff; margin-right: 8px; font-size: 16px;" />
-                <div>
-                  <div class="knowledge-select-item-name">{{ kb.name }}</div>
-                  <div class="knowledge-select-item-meta">{{ kb.caseCount ?? 0 }} 案例 · {{ kb.patternCount ?? 0 }} 模式</div>
-                </div>
-              </div>
-              <div class="knowledge-select-check" v-if="selectedKnowledgeIds.includes(String(kb.id))">✓</div>
+          <!-- 选择知识库弹窗 -->
+          <Modal v-model:open="showKnowledgeSelectModal" title="选择知识库" ok-text="确认关联" cancel-text="取消" :width="560"
+            @ok="handleConfirmLinkKnowledge">
+            <p style="color: #666; margin-bottom: 12px;">选择需要关联到本标准的知识库，关联后每次审核将结合知识库经验增强识别效果。</p>
+            <div v-if="availableKnowledgeBases.length === 0" style="text-align: center; padding: 24px; color: #999;">
+              暂无可关联的知识库
             </div>
-          </div>
-        </Modal>
+            <div v-else class="knowledge-select-list">
+              <div v-for="kb in availableKnowledgeBases" :key="kb.id"
+                :class="['knowledge-select-item', { 'knowledge-select-item-active': selectedKnowledgeIds.includes(String(kb.id)) }]"
+                @click="toggleKnowledgeSelect(kb.id)">
+                <div class="knowledge-select-item-left">
+                  <BookOutlined style="color: #1677ff; margin-right: 8px; font-size: 16px;" />
+                  <div>
+                    <div class="knowledge-select-item-name">{{ kb.name }}</div>
+                    <div class="knowledge-select-item-meta">{{ kb.caseCount ?? 0 }} 案例 · {{ kb.patternCount ?? 0 }} 模式
+                    </div>
+                  </div>
+                </div>
+                <div class="knowledge-select-check" v-if="selectedKnowledgeIds.includes(String(kb.id))">✓</div>
+              </div>
+            </div>
+          </Modal>
 
-        <!-- 规则列表 -->
+          <!-- 规则列表 -->
           <Card id="rule-list" class="mb-4 detail-card" :style="cardRadiusStyle">
             <template #title>
               <span class="card-title">
@@ -669,15 +735,15 @@ onUnmounted(() => {
             </template>
 
             <div class="mb-3 flex items-center justify-between">
-              <CommonFilter
-                :filter-data="ruleFilterData"
-                type="both"
-                @handle-query="handleRuleFilterQuery"
-              />
+              <CommonFilter :filter-data="ruleFilterData" type="both" @handle-query="handleRuleFilterQuery" />
               <Space>
                 <Button size="small" @click="handleExportRule">导出规则</Button>
-                <Button size="small" @click="handleImportRule"><ImportOutlined /> 导入规则</Button>
-                <Button type="primary" size="small" @click="handleAddRule"><PlusOutlined /> 添加规则</Button>
+                <Button size="small" @click="handleImportRule">
+                  <ImportOutlined /> 导入规则
+                </Button>
+                <Button type="primary" size="small" @click="handleAddRule">
+                  <PlusOutlined /> 添加规则
+                </Button>
               </Space>
             </div>
 
@@ -707,52 +773,31 @@ onUnmounted(() => {
                 </template>
                 <template #weight="{ row }">
                   <Tooltip :title="`权重 ${row.weight}%：该规则在审核评分中的占比`">
-                    <span
-                      class="weight-badge"
-                      :class="{
+                    <span class="weight-badge" :class="{
                         'weight-high': row.weight >= 80,
                         'weight-medium': row.weight >= 50 && row.weight < 80,
                         'weight-low': row.weight < 50,
-                      }"
-                    >{{ row.weight }}</span>
+                      }">{{ row.weight }}</span>
                   </Tooltip>
                 </template>
                 <template #confidence="{ row }">
                   <Tooltip :title="`识别 ${row.hitCount} 次，误判 ${row.missCount} 次`">
                     <div class="confidence-cell">
                       <template v-if="row.hitCount > 0">
-                        <Progress
-                          :percent="Math.round((1 - row.missCount / row.hitCount) * 100)"
-                          :size="[80, 6]"
+                        <Progress :percent="Math.round((1 - row.missCount / row.hitCount) * 100)" :size="[80, 6]"
                           :stroke-color="Math.round((1 - row.missCount / row.hitCount) * 100) >= 90 ? '#52c41a' : Math.round((1 - row.missCount / row.hitCount) * 100) >= 75 ? '#faad14' : '#ff4d4f'"
-                          :show-info="false"
-                        />
-                        <span
-                          class="confidence-text"
-                          :style="{ color: Math.round((1 - row.missCount / row.hitCount) * 100) >= 90 ? '#52c41a' : Math.round((1 - row.missCount / row.hitCount) * 100) >= 75 ? '#faad14' : '#ff4d4f' }"
-                        >{{ Math.round((1 - row.missCount / row.hitCount) * 100) }}%</span>
+                          :show-info="false" />
+                        <span class="confidence-text"
+                          :style="{ color: Math.round((1 - row.missCount / row.hitCount) * 100) >= 90 ? '#52c41a' : Math.round((1 - row.missCount / row.hitCount) * 100) >= 75 ? '#faad14' : '#ff4d4f' }">{{
+                          Math.round((1 - row.missCount / row.hitCount) * 100) }}%</span>
                       </template>
                       <span v-else class="confidence-text" style="color: #999;">暂无数据</span>
                     </div>
                   </Tooltip>
                 </template>
-                <template #focusEnabled="{ row }">
-                  <Switch
-                    :checked="row.focusEnabled === '1'"
-                    checked-children="是"
-                    un-checked-children="否"
-                    size="small"
-                    @change="(val: boolean) => handleToggleFocusEnabled(row, val)"
-                  />
-                </template>
                 <template #status="{ row }">
-                  <Switch
-                    :checked="row.status !== '1'"
-                    checked-children="启用"
-                    un-checked-children="停用"
-                    size="small"
-                    @change="(val: boolean) => handleToggleRuleStatus(row, val)"
-                  />
+                  <Switch :checked="row.status !== '1'" checked-children="启用" un-checked-children="停用" size="small"
+                    @change="(val: boolean) => handleToggleRuleStatus(row, val)" />
                 </template>
                 <template #action="{ row }">
                   <Space>
@@ -774,12 +819,63 @@ onUnmounted(() => {
               </BasicTable>
             </div>
           </Card>
+
+          <!-- 关注列表 -->
+          <Card id="focus-list" class="mb-4 detail-card" :style="cardRadiusStyle">
+            <template #title>
+              <span class="card-title">
+                <FileTextOutlined class="card-title-icon" />
+                关注列表
+              </span>
+            </template>
+            <template #extra>
+              <Button type="primary" size="small" @click="handleAddFocus">
+                <PlusOutlined /> 添加关注要点
+              </Button>
+            </template>
+
+            <!-- <div class="focus-tip">
+              关注要点用于让 AI 在文档中定位并提取对应原文，显示在审查结果的「关注列表」中（不参与评分）。每条对应一个要点。
+            </div> -->
+
+            <div class="table-style-wrapper" :style="tableCssVars">
+              <BasicFocusTable>
+                <template #focusStatus="{ row }">
+                  <Switch
+                    :checked="row.status !== '1'"
+                    checked-children="启用"
+                    un-checked-children="停用"
+                    size="small"
+                    @change="(val: boolean) => handleToggleFocusStatus(row, val)"
+                  />
+                </template>
+                <template #focusAction="{ row }">
+                  <Space>
+                    <ghost-button @click.stop="handleEditFocus(row)">编辑</ghost-button>
+                    <Dropdown placement="bottomRight">
+                      <template #overlay>
+                        <Menu>
+                          <MenuItem key="delete" @click="handleDeleteFocus(row)">
+                            <span class="text-red-500">删除</span>
+                          </MenuItem>
+                        </Menu>
+                      </template>
+                      <a-button size="small" type="link">
+                        <EllipsisOutlined />
+                      </a-button>
+                    </Dropdown>
+                  </Space>
+                </template>
+              </BasicFocusTable>
+            </div>
+          </Card>
         </div>
       </div>
     </div>
     <AddRuleDrawerComp @reload="handleReloadRules" />
     <ImportRuleDrawerComp @reload="handleReloadRules" />
     <SmartParseDrawerComp @reload="handleSmartParseReload" />
+    <AddFocusDrawerComp @reload="handleReloadFocus" />
   </div>
 </template>
 
@@ -811,8 +907,14 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-.hide-scrollbar::-webkit-scrollbar { display: none; }
-.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 .header-card {
   background: #fff;
@@ -878,9 +980,20 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.header-metric-icon-blue   { background: #e6f4ff; color: #1677ff; }
-.header-metric-icon-cyan   { background: #e6fffb; color: #13c2c2; }
-.header-metric-icon-purple { background: #f9f0ff; color: #722ed1; }
+.header-metric-icon-blue {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.header-metric-icon-cyan {
+  background: #e6fffb;
+  color: #13c2c2;
+}
+
+.header-metric-icon-purple {
+  background: #f9f0ff;
+  color: #722ed1;
+}
 
 .header-metric-body {
   display: flex;
@@ -937,9 +1050,14 @@ onUnmounted(() => {
   border-bottom-color: hsl(var(--primary));
 }
 
-.cards-wrapper { padding: 16px 0 24px; }
+.cards-wrapper {
+  padding: 16px 0 24px;
+}
 
-.detail-card { overflow: hidden; }
+.detail-card {
+  overflow: hidden;
+}
+
 .detail-card :deep(.ant-card-head) {
   min-height: 46px;
   border-bottom: 1px solid #f0f0f0;
@@ -1168,5 +1286,12 @@ onUnmounted(() => {
 .table-style-wrapper :deep(.vxe-body--column) {
   padding-top: var(--list-cell-padding-y) !important;
   padding-bottom: var(--list-cell-padding-y) !important;
+}
+
+/* 关注列表（表格复用规则列表的 vxe-grid + .table-style-wrapper，表头样式自动一致） */
+.focus-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 12px;
 }
 </style>

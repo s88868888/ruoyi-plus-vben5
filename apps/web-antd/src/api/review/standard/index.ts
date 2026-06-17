@@ -1,6 +1,6 @@
 import { requestClient } from '#/api/request';
 import type { PageQuery, PageResult } from '#/api/common';
-import type { ReviewStandard, ReviewStandardRule } from './model';
+import type { ReviewStandard, ReviewStandardRule, ReviewStandardFocus } from './model';
 import type { ReviewKnowledge } from '../knowledge/model';
 
 // 分页查询审核标准
@@ -51,6 +51,28 @@ export function reviewStandardRuleRemove(ids: (number | string)[]) {
 // 查询标准关联的知识库列表
 export function reviewStandardKnowledges(standardId: number | string) {
   return requestClient.get<ReviewKnowledge[]>(`/review/standard/${standardId}/knowledges`);
+}
+
+// ==================== 关注列表 ====================
+
+// 查询标准下的关注要点列表
+export function reviewStandardFocusList(standardId: number | string) {
+  return requestClient.get<ReviewStandardFocus[]>(`/review/standard/${standardId}/focus`);
+}
+
+// 新增关注要点
+export function reviewStandardFocusAdd(data: Partial<ReviewStandardFocus>) {
+  return requestClient.postWithMsg<void>('/review/standard/focus', data);
+}
+
+// 修改关注要点
+export function reviewStandardFocusUpdate(data: Partial<ReviewStandardFocus>) {
+  return requestClient.putWithMsg<void>('/review/standard/focus', data);
+}
+
+// 删除关注要点
+export function reviewStandardFocusRemove(ids: (number | string)[]) {
+  return requestClient.deleteWithMsg<void>(`/review/standard/focus/${ids.join(',')}`);
 }
 
 // 关联知识库
