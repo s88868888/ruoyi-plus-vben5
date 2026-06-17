@@ -44,6 +44,12 @@ const severityOptions = [
 ];
 
 const EXCEL_EXTS = ['xlsx', 'xls'];
+
+const severityWeightMap: Record<string, number> = {
+  must: 90,
+  should: 70,
+  suggest: 40,
+};
 const AI_EXTS = ['doc', 'docx', 'pdf', 'txt'];
 const MAX_FILE_MB = 150;
 
@@ -170,7 +176,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
         category: r.category,
         checkField: r.checkField,
         checkMethod: r.checkMethod,
-        weight: r.weight ?? 10,
+        weight: r.weight ?? severityWeightMap[r.severity] ?? 50,
       })));
     } else {
       message.warning('标准已创建，但未返回 ID，规则未关联，请到详情页手动导入');

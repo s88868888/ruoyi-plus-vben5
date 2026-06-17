@@ -26,6 +26,12 @@ const severityMap: Record<string, { label: string; color: string }> = {
   suggest: { label: '提示', color: 'blue' },
 };
 
+const severityWeightMap: Record<string, number> = {
+  must: 90,
+  should: 70,
+  suggest: 40,
+};
+
 const columns = [
   { title: '规则内容', dataIndex: 'content', key: 'content' },
   { title: '等级', dataIndex: 'severity', key: 'severity', width: 80, align: 'center' as const },
@@ -111,7 +117,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           content: r.content,
           severity: r.severity,
           category: r.category,
-          weight: r.weight ?? 10,
+          weight: r.weight ?? severityWeightMap[r.severity] ?? 50,
         })));
         emit('reload');
         drawerApi.close();

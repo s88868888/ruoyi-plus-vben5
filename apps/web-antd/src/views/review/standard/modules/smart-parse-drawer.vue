@@ -24,6 +24,12 @@ const parsedRules = ref<any[]>([]);
 
 const EXCEL_EXTS = ['xlsx', 'xls'];
 
+const severityWeightMap: Record<string, number> = {
+  must: 90,
+  should: 70,
+  suggest: 40,
+};
+
 const severityOptions = [
   { label: '严重', value: 'must' },
   { label: '警告', value: 'should' },
@@ -161,7 +167,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           category: r.category,
           checkField: r.checkField,
           checkMethod: r.checkMethod,
-          weight: r.weight ?? 10,
+          weight: r.weight ?? severityWeightMap[r.severity] ?? 50,
         })));
         emit('reload');
         drawerApi.close();

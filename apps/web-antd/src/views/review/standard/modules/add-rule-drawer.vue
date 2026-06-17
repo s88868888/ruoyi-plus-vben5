@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
-import { Form, FormItem, Input, Select, AutoComplete, Slider, InputNumber, Progress, Tooltip, Divider, message } from 'ant-design-vue';
+import { Form, FormItem, Input, Select, Slider, InputNumber, Progress, Tooltip, Divider, message } from 'ant-design-vue';
 import { InfoCircleOutlined } from '@ant-design/icons-vue';
 import { reviewStandardRuleAdd, reviewStandardRuleUpdate } from '#/api/review/standard';
 
@@ -89,7 +89,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       return;
     }
     if (!formData.value.category) {
-      message.warning('请选择或输入分类');
+      message.warning('请选择分类');
       return;
     }
     if (isEdit.value) {
@@ -140,11 +140,13 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           />
         </FormItem>
         <FormItem label="分类" required>
-          <AutoComplete
+          <Select
             v-model:value="formData.category"
-            placeholder="请选择或输入分类"
+            placeholder="请选择分类"
             :options="categoryOptions"
-            :filter-option="(input: string, option: any) => option.value.includes(input)"
+            show-search
+            option-filter-prop="label"
+            :filter-option="(input: string, option: any) => (option.label ?? '').toLowerCase().includes(input.toLowerCase())"
           />
         </FormItem>
       </div>
