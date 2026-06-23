@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
-import { Form, FormItem, Input, Select, Slider, InputNumber, Progress, Tooltip, Divider, message } from 'ant-design-vue';
+import { Form, FormItem, Input, Select, Slider, InputNumber, Tooltip, Divider, message } from 'ant-design-vue';
 import { InfoCircleOutlined } from '@ant-design/icons-vue';
 import { reviewStandardRuleAdd, reviewStandardRuleUpdate } from '#/api/review/standard';
 
@@ -16,9 +16,6 @@ const formData = ref({
   severity: undefined as string | undefined,
   category: undefined as string | undefined,
   weight: 80,
-  confidence: undefined as number | undefined,
-  hitCount: undefined as number | undefined,
-  missCount: undefined as number | undefined,
 });
 
 const severityWeightMap: Record<string, number> = {
@@ -69,14 +66,11 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           severity: data.severity,
           category: data.category,
           weight: data.weight ?? 80,
-          confidence: data.confidence,
-          hitCount: data.hitCount,
-          missCount: data.missCount,
         };
       }
     } else {
       isEdit.value = false;
-      formData.value = { content: '', severity: undefined, category: undefined, weight: 80, confidence: undefined, hitCount: undefined, missCount: undefined };
+      formData.value = { content: '', severity: undefined, category: undefined, weight: 80 };
     }
   },
   onConfirm: async () => {
@@ -185,36 +179,6 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           <span v-else style="color: #1677ff;">低权重 — 不通过将作为提示建议</span>
         </div>
       </FormItem>
-
-      <template v-if="isEdit && formData.hitCount != null && formData.hitCount > 0">
-        <Divider orientation="left" class="section-title-divider">
-          <span class="section-title">置信度</span>
-        </Divider>
-        <FormItem>
-          <template #label>
-            <span>
-              AI置信度
-              <Tooltip title="由 AI 审核结果自动计算，反映该规则被正确识别的概率">
-                <InfoCircleOutlined style="color: #999; margin-left: 4px;" />
-              </Tooltip>
-            </span>
-          </template>
-          <div class="confidence-display">
-            <Progress
-              :percent="Math.round((1 - (formData.missCount ?? 0) / formData.hitCount!) * 100)"
-              :stroke-color="Math.round((1 - (formData.missCount ?? 0) / formData.hitCount!) * 100) >= 90 ? '#52c41a' : Math.round((1 - (formData.missCount ?? 0) / formData.hitCount!) * 100) >= 75 ? '#faad14' : '#ff4d4f'"
-              :size="[220, 8]"
-            />
-            <div class="confidence-stats">
-              <span>识别命中: <b>{{ formData.hitCount ?? 0 }}</b> 次</span>
-              <span>误判: <b>{{ formData.missCount ?? 0 }}</b> 次</span>
-            </div>
-            <div v-if="Math.round((1 - (formData.missCount ?? 0) / formData.hitCount!) * 100) < 75" class="confidence-warn">
-              置信度偏低，建议结合知识库增强学习或调整规则描述
-            </div>
-          </div>
-        </FormItem>
-      </template>
     </Form>
   </BasicDrawer>
 </template>
@@ -266,28 +230,4 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
   margin-top: 4px;
 }
 
-.confidence-display {
-  padding: 12px 14px;
-  background: #fafafa;
-  border-radius: 8px;
-  border: 1px solid #f0f0f0;
-}
-
-.confidence-stats {
-  display: flex;
-  gap: 20px;
-  margin-top: 8px;
-  font-size: 13px;
-  color: #666;
-}
-
-.confidence-warn {
-  margin-top: 8px;
-  padding: 6px 10px;
-  background: #fff7e6;
-  border: 1px solid #ffd591;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #d46b08;
-}
 </style>

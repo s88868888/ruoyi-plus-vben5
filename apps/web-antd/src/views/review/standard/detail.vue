@@ -6,7 +6,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
-import { Card, Tag, Button, Space, Switch, Dropdown, Menu, MenuItem, Progress, Tooltip, Modal, message } from 'ant-design-vue';
+import { Card, Tag, Button, Space, Switch, Dropdown, Menu, MenuItem, Tooltip, Modal, message } from 'ant-design-vue';
 import {
   ArrowLeftOutlined,
   PlusOutlined,
@@ -278,13 +278,6 @@ const gridOptions: VxeGridProps = {
       width: 90,
       align: 'center',
       slots: { default: 'weight', header: 'weightHeader' },
-    },
-    {
-      field: 'confidence',
-      title: '置信度',
-      width: 130,
-      align: 'center',
-      slots: { default: 'confidence', header: 'confidenceHeader' },
     },
     {
       field: 'status',
@@ -757,14 +750,6 @@ onUnmounted(() => {
                     </Tooltip>
                   </span>
                 </template>
-                <template #confidenceHeader>
-                  <span class="header-with-info">
-                    置信度
-                    <Tooltip title="由 AI 审核历史自动计算，反映该规则被正确识别的概率。置信度低的规则会自动标记为「需人工确认」。">
-                      <InfoCircleOutlined class="header-info-icon" />
-                    </Tooltip>
-                  </span>
-                </template>
                 <template #severity="{ row }">
                   <Tag :color="severityMap[row.severity]?.color">{{ severityMap[row.severity]?.label }}</Tag>
                 </template>
@@ -778,21 +763,6 @@ onUnmounted(() => {
                         'weight-medium': row.weight >= 50 && row.weight < 80,
                         'weight-low': row.weight < 50,
                       }">{{ row.weight }}</span>
-                  </Tooltip>
-                </template>
-                <template #confidence="{ row }">
-                  <Tooltip :title="`识别 ${row.hitCount} 次，误判 ${row.missCount} 次`">
-                    <div class="confidence-cell">
-                      <template v-if="row.hitCount > 0">
-                        <Progress :percent="Math.round((1 - row.missCount / row.hitCount) * 100)" :size="[80, 6]"
-                          :stroke-color="Math.round((1 - row.missCount / row.hitCount) * 100) >= 90 ? '#52c41a' : Math.round((1 - row.missCount / row.hitCount) * 100) >= 75 ? '#faad14' : '#ff4d4f'"
-                          :show-info="false" />
-                        <span class="confidence-text"
-                          :style="{ color: Math.round((1 - row.missCount / row.hitCount) * 100) >= 90 ? '#52c41a' : Math.round((1 - row.missCount / row.hitCount) * 100) >= 75 ? '#faad14' : '#ff4d4f' }">{{
-                          Math.round((1 - row.missCount / row.hitCount) * 100) }}%</span>
-                      </template>
-                      <span v-else class="confidence-text" style="color: #999;">暂无数据</span>
-                    </div>
                   </Tooltip>
                 </template>
                 <template #status="{ row }">
@@ -1253,20 +1223,6 @@ onUnmounted(() => {
 .weight-low {
   background: #e6f4ff;
   color: #1677ff;
-}
-
-/* 置信度 cell */
-.confidence-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.confidence-text {
-  font-size: 12px;
-  font-weight: 600;
-  min-width: 36px;
-  text-align: right;
 }
 
 .table-style-wrapper :deep(.vxe-table--header-wrapper),

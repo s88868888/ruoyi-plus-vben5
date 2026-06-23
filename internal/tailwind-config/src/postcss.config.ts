@@ -8,7 +8,12 @@ export default {
     // 修复 element-plus 和 ant-design-vue 的样式和tailwindcss冲突问题
     'postcss-antd-fixes': { prefixes: ['ant', 'el'] },
     'postcss-import': {},
-    'postcss-preset-env': {},
+    'postcss-preset-env': {
+      features: {
+        'is-pseudo-class': false,
+        'logical-properties-and-values': false,
+      },
+    },
     tailwindcss: { config },
     'tailwindcss/nesting': {},
   },

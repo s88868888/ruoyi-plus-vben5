@@ -4,15 +4,14 @@ import type { VxeGridProps } from '#/adapter/vxe-table';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { Page, useVbenDrawer } from '@vben/common-ui';
+import { Page } from '@vben/common-ui';
 
-import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, Tooltip, message } from 'ant-design-vue';
-import { EllipsisOutlined, PlusOutlined } from '@ant-design/icons-vue';
+import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tooltip, message } from 'ant-design-vue';
+import { DiffOutlined, EllipsisOutlined, FileSearchOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
 import CommonFilter from '#/components/CommonFilter/index.vue';
-import CreateReviewDrawer from './modules/create-review-drawer.vue';
 import { reviewTaskList, reviewTaskRemove, reviewTaskExecute } from '#/api/review/task';
 import { DictEnum } from '@vben/constants';
 import { getDictOptions } from '#/utils/dict';
@@ -42,22 +41,6 @@ const filterData = ref([
     type: 'a-select',
     data: '',
     options: getDictOptions(DictEnum.REVIEW_TASK_TYPE),
-    isCommon: true,
-  },
-  {
-    field: 'status',
-    label: '状态',
-    type: 'a-select',
-    data: '',
-    options: getDictOptions(DictEnum.REVIEW_TASK_STATUS),
-    isCommon: true,
-  },
-  {
-    field: 'passResult',
-    label: '通过状态',
-    type: 'a-select',
-    data: '',
-    options: getDictOptions(DictEnum.REVIEW_PASS_STATUS),
     isCommon: true,
   },
   {
@@ -100,15 +83,6 @@ const handleFilterQuery = (conditions: any[]) => {
   tableApi.query();
 };
 
-const taskTypeOptions = getDictOptions(DictEnum.REVIEW_TASK_TYPE);
-const taskStatusOptions = getDictOptions(DictEnum.REVIEW_TASK_STATUS);
-const passStatusOptions = getDictOptions(DictEnum.REVIEW_PASS_STATUS);
-
-function getDictLabel(options: any[], value: string) {
-  const item = options.find((o: any) => o.value === value);
-  return item?.label || value;
-}
-
 function tooltipDotStyle(color: string) {
   return {
     display: 'inline-block',
@@ -146,13 +120,6 @@ const gridOptions: VxeGridProps = {
       align: 'left',
     },
     {
-      field: 'passStatus',
-      title: '通过状态',
-      width: 110,
-      align: 'center',
-      slots: { default: 'passResult' },
-    },
-    {
       field: 'version',
       title: '审核次数',
       width: 90,
@@ -165,13 +132,6 @@ const gridOptions: VxeGridProps = {
       width: 160,
       align: 'center',
       slots: { default: 'issueCount' },
-    },
-    {
-      field: 'misjudgedCount',
-      title: '误判数',
-      width: 90,
-      align: 'center',
-      slots: { default: 'misjudgedCount' },
     },
     {
       field: 'createTime',
@@ -190,7 +150,7 @@ const gridOptions: VxeGridProps = {
     {
       field: 'action',
       title: '操作',
-      width: 120,
+      width: 180,
       fixed: 'right',
       slots: { default: 'action' },
     },
@@ -230,25 +190,31 @@ const [BasicTable, tableApi] = useVbenVxeGrid({
   },
 } as any);
 
-// 抽屉
-const [CreateDrawerComp, createDrawerApi] = useVbenDrawer({
-  connectedComponent: CreateReviewDrawer,
-});
-
-function handleAdd() {
-  createDrawerApi.open();
-}
-
-async function handleReload() {
-  await tableApi.query();
-}
-
 function handleView(row: any) {
+  // 工具任务（附件对比 / 内容审查）→ 跳对应向导页并带 taskId，直接打开查看器
+  const type = String(row.taskType || '').toUpperCase();
+  if (type.includes('COMPARE')) {
+    router.push(`/review/tool/compare?taskId=${row.id}&fullscreen=1`);
+    return;
+  }
+  if (type.includes('AUDIT')) {
+    router.push(`/review/tool/audit?taskId=${row.id}&fullscreen=1`);
+    return;
+  }
+  handleReviewDetail(row);
+}
+
+function handleReviewDetail(row: any) {
   if (row.docType === 'finance') {
     router.push(`/review/task/result-finance?id=${row.id}`);
   } else {
     router.push(`/review/task/result?id=${row.id}`);
   }
+}
+
+// 顶部「做对比 / 审核分析」按钮：跳工具向导页
+function goTool(kind: 'audit' | 'compare') {
+  router.push(kind === 'compare' ? '/review/tool/compare' : '/review/tool/audit');
 }
 
 function handleDelete(row: any) {
@@ -278,32 +244,6 @@ function handleExecute(row: any) {
   });
 }
 
-function handleTransferManual(row: any) {
-  Modal.confirm({
-    title: `确认将【${row.taskName}】转为人工审核吗？`,
-    content: '转为人工审核后，将由人工审核员进行复核',
-    okText: '确认',
-    cancelText: '取消',
-    onOk() {
-      // message.success('已转为人工审核');
-      tableApi.query();
-    },
-  });
-}
-
-function handleRerun(row: any) {
-  Modal.confirm({
-    title: `确认重新审核【${row.taskName}】吗？`,
-    content: '将清除当前审核结果并重新执行AI审核',
-    okText: '确认',
-    cancelText: '取消',
-    async onOk() {
-      await reviewTaskExecute(row.id);
-      message.success('已重新提交审核');
-      await tableApi.query();
-    },
-  });
-}
 </script>
 
 <template>
@@ -318,9 +258,13 @@ function handleRerun(row: any) {
             @handle-query="handleFilterQuery"
           />
           <Space>
-            <Button type="primary" @click="handleAdd">
-              <PlusOutlined />
-              新建审核
+            <Button @click="goTool('compare')">
+              <DiffOutlined />
+              附件对比
+            </Button>
+            <Button @click="goTool('audit')">
+              <FileSearchOutlined />
+              审核分析
             </Button>
           </Space>
         </div>
@@ -336,14 +280,10 @@ function handleRerun(row: any) {
                 <component :is="renderDict(row.status, DictEnum.REVIEW_TASK_STATUS)" />
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-400">
-                <component :is="renderDict(row.taskType, DictEnum.REVIEW_TASK_TYPE)" />
+                <component v-if="row.passStatus" :is="renderDict(row.passStatus, DictEnum.REVIEW_PASS_STATUS)" />
+                <span v-else>-</span>
               </div>
             </div>
-          </template>
-
-          <template #passResult="{ row }">
-            <component v-if="row.passStatus" :is="renderDict(row.passStatus, DictEnum.REVIEW_PASS_STATUS)" />
-            <span v-else class="text-gray-400">-</span>
           </template>
 
           <template #issueCount="{ row }">
@@ -376,15 +316,6 @@ function handleRerun(row: any) {
             <span v-else class="text-gray-400">-</span>
           </template>
 
-          <template #misjudgedCount="{ row }">
-            <span v-if="row.misjudgedCount > 0" class="misjudged-count">
-              <span class="text-base font-semibold">{{ row.misjudgedCount }}</span>
-              <span class="text-xs font-normal ml-0.5">个</span>
-            </span>
-            <span v-else-if="row.status === 'completed'" class="text-gray-300">0</span>
-            <span v-else class="text-gray-400">-</span>
-          </template>
-
           <template #reviewVersion="{ row }">
             <span v-if="(row.version || 0) > 1" class="text-black">
               <span class="text-base font-semibold">{{ row.version }}</span>
@@ -408,18 +339,15 @@ function handleRerun(row: any) {
               <ghost-button v-if="row.status === 'completed'" @click.stop="handleView(row)">
                 查看
               </ghost-button>
+              <ghost-button v-if="row.status === 'completed'" @click.stop="handleReviewDetail(row)">
+                审核详情
+              </ghost-button>
               <ghost-button v-if="row.status === 'pending'" @click.stop="handleExecute(row)">
                 执行审核
               </ghost-button>
               <Dropdown placement="bottomRight">
                 <template #overlay>
-                  <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); if (key === 'manual') handleTransferManual(row); if (key === 'rerun') handleRerun(row); }">
-                    <MenuItem v-if="row.status === 'completed' || row.status === 'failed'" key="rerun">
-                      重新审核
-                    </MenuItem>
-                    <MenuItem v-if="row.status === 'completed' && row.passStatus !== 'manual'" key="manual">
-                      转人工审核
-                    </MenuItem>
+                  <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); }">
                     <MenuItem key="delete">
                       <span class="text-red-500">删除</span>
                     </MenuItem>
@@ -434,7 +362,6 @@ function handleRerun(row: any) {
         </BasicTable>
       </div>
     </div>
-    <CreateDrawerComp @reload="handleReload" />
   </Page>
 </template>
 
@@ -469,10 +396,6 @@ function handleRerun(row: any) {
 .table-style-wrapper :deep(.vxe-body--column) {
   padding-top: var(--list-cell-padding-y) !important;
   padding-bottom: var(--list-cell-padding-y) !important;
-}
-
-.misjudged-count {
-  color: #8c8c8c;
 }
 
 .issue-dots {

@@ -28,3 +28,11 @@ export interface ReviewStandardRule extends BaseEntity {
   sortOrder?: number;
   status?: string;
 }
+
+export interface ReviewStandardFocus extends BaseEntity {
+  id: number | string;
+  standardId: number | string;
+  keyword: string;
+  sortOrder?: number;
+  status?: string;
+}
