@@ -150,7 +150,7 @@ const gridOptions: VxeGridProps = {
     {
       field: 'action',
       title: '操作',
-      width: 180,
+      width: 130,
       fixed: 'right',
       slots: { default: 'action' },
     },
@@ -191,13 +191,17 @@ const [BasicTable, tableApi] = useVbenVxeGrid({
 } as any);
 
 function handleView(row: any) {
-  // 工具任务（附件对比 / 内容审查）→ 跳对应向导页并带 taskId，直接打开查看器
+  // 工具任务（附件对比 / 内容审查）→ 跳对应向导页并带 taskId，直接打开查看器。
+  // taskType 兼作提示词模板类型，可能是 Document_Review 等自定义值，故：
+  // 含 COMPARE → 对比；含 AUDIT 或来源是 AI 工具（OA_AI_TOOL/CS_AI_TOOL/AI_TOOL）→ 内容审查。
   const type = String(row.taskType || '').toUpperCase();
+  const source = String(row.sourceType || '').toUpperCase();
+  const isTool = source.includes('AI_TOOL');
   if (type.includes('COMPARE')) {
     router.push(`/review/tool/compare?taskId=${row.id}&fullscreen=1`);
     return;
   }
-  if (type.includes('AUDIT')) {
+  if (type.includes('AUDIT') || isTool) {
     router.push(`/review/tool/audit?taskId=${row.id}&fullscreen=1`);
     return;
   }
@@ -242,6 +246,16 @@ function handleExecute(row: any) {
       await tableApi.query();
     },
   });
+}
+
+function handleActionMenuClick(key: string | number, row: any) {
+  if (key === 'review-detail') {
+    handleReviewDetail(row);
+    return;
+  }
+  if (key === 'delete') {
+    handleDelete(row);
+  }
 }
 
 </script>
@@ -339,15 +353,15 @@ function handleExecute(row: any) {
               <ghost-button v-if="row.status === 'completed'" @click.stop="handleView(row)">
                 查看
               </ghost-button>
-              <ghost-button v-if="row.status === 'completed'" @click.stop="handleReviewDetail(row)">
-                审核详情
-              </ghost-button>
               <ghost-button v-if="row.status === 'pending'" @click.stop="handleExecute(row)">
                 执行审核
               </ghost-button>
               <Dropdown placement="bottomRight">
                 <template #overlay>
-                  <Menu @click="({ key }: any) => { if (key === 'delete') handleDelete(row); }">
+                  <Menu @click="({ key }: any) => handleActionMenuClick(key, row)">
+                    <MenuItem v-if="row.status === 'completed'" key="review-detail">
+                      审核详情
+                    </MenuItem>
                     <MenuItem key="delete">
                       <span class="text-red-500">删除</span>
                     </MenuItem>

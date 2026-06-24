@@ -4,7 +4,7 @@
   出 SUCCESS → 「查看结果」打开内容审查查看器(全屏 Drawer)。
 -->
 <template>
-  <div v-if="fullscreenMode" class="tool-result-fullscreen">
+  <div v-if="resultFullscreenActive" class="tool-result-fullscreen">
     <ContentAuditViewer
       v-if="resultStatus === 'success' && result"
       :task-id="result.id || ''"
@@ -17,7 +17,7 @@
       :focus-items="result.focusItems || []"
       :focus-keywords="result.focusKeywords || []"
       :status="result.status || ''"
-      @close="goList"
+      @close="closeResultFullscreen"
     />
     <div v-else class="tool-result-state">
       <div v-if="resultStatus === 'running'" class="result-loading">
@@ -94,7 +94,7 @@
               sub-title="AI 已完成内容审查，可查看筛查结果"
             >
               <template #extra>
-                <Button type="primary" @click="auditDrawer = true">
+                <Button type="primary" @click="openResultFullscreen">
                   <template #icon><EyeOutlined /></template>
                   查看结果
                 </Button>
@@ -112,29 +112,6 @@
     </Card>
 
     <!-- 内容审查查看器（单文档，全屏 Drawer） -->
-    <Drawer
-      v-model:open="auditDrawer"
-      :width="'100%'"
-      :closable="false"
-      :body-style="{ padding: '0', overflow: 'hidden' }"
-      class="tool-fullscreen-drawer"
-      destroy-on-close
-    >
-      <ContentAuditViewer
-        v-if="auditDrawer && result"
-        :task-id="result.id || ''"
-        :doc-url="result.signFileUrl || ''"
-        :doc-searchable-url="result.signSearchableUrl || ''"
-        :doc-oss-id="result.signOssId || null"
-        :doc-ocr-status="result.signOcrStatus || ''"
-        :doc-label="auditDocLabel"
-        :issues="result.issues || []"
-        :focus-items="result.focusItems || []"
-        :focus-keywords="result.focusKeywords || []"
-        :status="result.status || ''"
-        @close="auditDrawer = false"
-      />
-    </Drawer>
   </Page>
 </template>
 
@@ -145,7 +122,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Page } from '@vben/common-ui';
 import { EyeOutlined, LoadingOutlined } from '@ant-design/icons-vue';
-import { Button, Card, Drawer, message, Result } from 'ant-design-vue';
+import { Button, Card, message, Result } from 'ant-design-vue';
 import ReviewWizard from '../components/ReviewWizard.vue';
 import SingleFileUpload from '../components/SingleFileUpload.vue';
 import StandardPicker from '../components/StandardPicker.vue';
@@ -184,10 +161,11 @@ const result = ref<ReviewToolResult | null>(null);
 const resultStatus = ref<'running' | 'success' | 'fail'>('running');
 const resultError = ref('');
 const checking = ref(false);
-const auditDrawer = ref(false);
+const resultFullscreen = ref(false);
 // 从任务列表「查看」带 taskId 进来：直接看历史结果，成功后自动打开查看器
 const fromHistory = ref(false);
 const fullscreenMode = computed(() => route.query.fullscreen === '1');
+const resultFullscreenActive = computed(() => fullscreenMode.value || resultFullscreen.value);
 
 function cleanDocLabel(v: any) {
   const s = String(v || '').trim();
@@ -258,7 +236,7 @@ async function pollOnce() {
     if (r && r.status === 'SUCCESS') {
       result.value = r;
       resultStatus.value = 'success';
-      if (fromHistory.value && !fullscreenMode.value) auditDrawer.value = true;
+      if (fromHistory.value && !fullscreenMode.value) resultFullscreen.value = true;
       stopPoll();
       return;
     }
@@ -281,6 +259,20 @@ async function checkNow() {
   } finally {
     checking.value = false;
   }
+}
+
+function openResultFullscreen() {
+  if (resultStatus.value === 'success' && result.value) {
+    resultFullscreen.value = true;
+  }
+}
+
+function closeResultFullscreen() {
+  if (fullscreenMode.value) {
+    goList();
+    return;
+  }
+  resultFullscreen.value = false;
 }
 
 function goList() {
@@ -318,7 +310,8 @@ onBeforeUnmount(stopPoll);
   flex: 1;
 }
 .tool-result-fullscreen {
-  height: 100vh;
+  height: var(--vben-content-height, 100%);
+  max-height: var(--vben-content-height, 100%);
   min-height: 0;
   overflow: hidden;
   background: #f5f7fb;
@@ -332,6 +325,7 @@ onBeforeUnmount(stopPoll);
 }
 .tool-result-fullscreen :deep(.ca-viewer) {
   height: 100%;
+  min-height: 0;
 }
 .step-pane {
   display: flex;

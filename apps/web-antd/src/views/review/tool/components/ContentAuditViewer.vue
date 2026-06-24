@@ -827,15 +827,12 @@ function locateFocusItems() {
     const normVal = normalizeText(it.extractedValue)
     let occs = []
     if (normVal && normVal.length >= 2) {
-      // 先尝试完整匹配（全文所有出现位置）
+      // 1) 先尝试整串完整匹配（全文所有出现位置）——短摘录、单句最理想
       occs = searchAllInPages(pages, normVal, idx)
-      // 如果找不到且含省略号，用省略号前的片段重试
-      if (!occs.length && (normVal.includes('...') || normVal.includes('…'))) {
-        const segments = normVal.split(/\.{3}|…/).filter((s) => s.length >= 4)
-        for (const seg of segments) {
-          occs = searchAllInPages(pages, seg, idx)
-          if (occs.length) break
-        }
+      // 2) 整串没命中：长摘录多为跨段/重排文本，按子句拆分逐句染色，作为"一处"汇总
+      if (!occs.length) {
+        const one = searchFocusSegmentsAsOne(pages, focusSegments(it.extractedValue))
+        if (one) occs = [one]
       }
     }
     focusOccSpans[idx] = occs.map((o) => o.spans)
@@ -863,6 +860,50 @@ function searchAllInPages(pages, text, idx) {
     }
   }
   return results
+}
+
+// 关注摘录值常是跨多段/多句的长文本（AI 会重排、补列表号、漏标点），整串 indexOf 必然落空。
+// 拆成可独立检索的子句：剥方括号标注、行首列表序号(1./一、)，按标点+换行切段，去噪去占位词。
+// 阈值取 ≥6（比 looseSegments 的 2 更高），子句更独特、避免短串误命中；保留文档阅读顺序。
+function focusSegments(raw) {
+  let s = String(raw || '')
+  s = s.replace(/[\[【][^\]】]*[\]】]/g, ' ')
+  const parts = s.split(/[\s:：,，;；、。.!！?？（）()「」『』“”"'《》<>\-—~…]+|\.{2,}/)
+  const segs = []
+  for (let p of parts) {
+    // 剥行首列表序号：1. / 1、/ 1) / 一、/ （1） 等（这些在 PDF 里常和正文分属不同 span，会断开匹配）
+    p = p.replace(/^\s*[（(]?(?:[0-9]{1,3}|[一二三四五六七八九十]{1,3})[）).、]\s*/, '')
+    p = normalizeText(p)
+    if (p.length < 6) continue
+    if (NOISE_TOKENS.includes(p)) continue
+    segs.push(p)
+  }
+  return Array.from(new Set(segs))
+}
+
+// 把多个子句作为"一处"染色：逐句在全文找首次出现并打 ca-focus，汇总全部 span，
+// 区域取阅读顺序最靠前的子句（供 gotoFocus 滚动定位）。命中任一子句即视为已定位。
+function searchFocusSegmentsAsOne(pages, segments) {
+  if (!segments.length) return null
+  const allSpans = []
+  let topRegion = null
+  for (const seg of segments) {
+    for (const pg of pages) {
+      const i = pg.text.indexOf(seg)
+      if (i < 0) continue
+      const spans = uniqueSpans(pg.refs, i, i + seg.length)
+      spans.forEach((s) => s.classList.add('ca-focus'))
+      allSpans.push(...spans)
+      const region = regionOf(spans)
+      if (region && (!topRegion || region.page < topRegion.page
+          || (region.page === topRegion.page && region.yTop < topRegion.yTop))) {
+        topRegion = region
+      }
+      break // 每个子句只取首次出现，避免重复累计
+    }
+  }
+  if (!allSpans.length) return null
+  return { region: topRegion, spans: allSpans }
 }
 
 // 点击关注项：定位到该要点。若该要点在文中出现多次，重复点击循环跳转下一处
@@ -1525,9 +1566,11 @@ onBeforeUnmount(() => {
 <style scoped>
 .ca-viewer {
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: #f5f6f8;
+  overflow: hidden;
 }
 .ca-toolbar {
   flex-shrink: 0;
@@ -1654,7 +1697,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .pdf-toolbar .tb-zoom:hover { color: #409eff; }
-.ca-body { position: relative; flex: 1; display: flex; min-height: 0; }
+.ca-body { position: relative; flex: 1; display: flex; min-height: 0; overflow: hidden; }
 .issue-conn-overlay {
   position: absolute;
   inset: 0;
@@ -1677,7 +1720,7 @@ onBeforeUnmount(() => {
 }
 .issue-conn-dot.dt-del { stroke: #f56c6c; }
 .issue-conn-dot.dt-modify { stroke: #e6a23c; }
-.ca-doc { flex: 1; min-width: 0; display: flex; position: relative; }
+.ca-doc { flex: 1; min-width: 0; min-height: 0; display: flex; position: relative; overflow: hidden; }
 /* 缩放重渲遮罩：等定位加载完毕才撤掉 */
 .zoom-mask {
   position: absolute;

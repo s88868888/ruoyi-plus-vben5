@@ -4,7 +4,7 @@
   出 SUCCESS → 「查看结果」打开附件对比查看器(全屏 Drawer)。
 -->
 <template>
-  <div v-if="fullscreenMode" class="tool-result-fullscreen">
+  <div v-if="resultFullscreenActive" class="tool-result-fullscreen">
     <FileDiffViewer
       v-if="resultStatus === 'success' && result"
       :source-a-url="result.printPdfUrl || ''"
@@ -16,7 +16,7 @@
       source-a-label="基准文件"
       source-b-label="对比文件"
       :ai-review="result"
-      @close="goList"
+      @close="closeResultFullscreen"
     />
     <div v-else class="tool-result-state">
       <div v-if="resultStatus === 'running'" class="result-loading">
@@ -91,7 +91,7 @@
               sub-title="AI 已完成附件对比，可查看差异结果"
             >
               <template #extra>
-                <Button type="primary" @click="diffDrawer = true">
+                <Button type="primary" @click="openResultFullscreen">
                   <template #icon><EyeOutlined /></template>
                   查看结果
                 </Button>
@@ -109,28 +109,6 @@
     </Card>
 
     <!-- 附件对比查看器（全屏 Drawer） -->
-    <Drawer
-      v-model:open="diffDrawer"
-      :width="'100%'"
-      :closable="false"
-      :body-style="{ padding: '0', overflow: 'hidden' }"
-      class="tool-fullscreen-drawer"
-      destroy-on-close
-    >
-      <FileDiffViewer
-        v-if="diffDrawer && result"
-        :source-a-url="result.printPdfUrl || ''"
-        :source-b-url="result.signFileUrl || ''"
-        :source-a-searchable-url="result.printSearchableUrl || ''"
-        :source-b-searchable-url="result.signSearchableUrl || ''"
-        :source-b-oss-id="result.signOssId || null"
-        :source-b-ocr-status="result.signOcrStatus || ''"
-        source-a-label="基准文件"
-        source-b-label="对比文件"
-        :ai-review="result"
-        @close="diffDrawer = false"
-      />
-    </Drawer>
   </Page>
 </template>
 
@@ -141,7 +119,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Page } from '@vben/common-ui';
 import { EyeOutlined, LoadingOutlined } from '@ant-design/icons-vue';
-import { Button, Card, Drawer, message, Result } from 'ant-design-vue';
+import { Button, Card, message, Result } from 'ant-design-vue';
 import ReviewWizard from '../components/ReviewWizard.vue';
 import SingleFileUpload from '../components/SingleFileUpload.vue';
 import StandardPicker from '../components/StandardPicker.vue';
@@ -179,10 +157,11 @@ const result = ref<ReviewToolResult | null>(null);
 const resultStatus = ref<'running' | 'success' | 'fail'>('running');
 const resultError = ref('');
 const checking = ref(false);
-const diffDrawer = ref(false);
+const resultFullscreen = ref(false);
 // 从任务列表「查看」带 taskId 进来：直接看历史结果，成功后自动打开查看器
 const fromHistory = ref(false);
 const fullscreenMode = computed(() => route.query.fullscreen === '1');
+const resultFullscreenActive = computed(() => fullscreenMode.value || resultFullscreen.value);
 
 const nextDisabled = computed(() => {
   if (current.value === 0) return !baseFile.value;
@@ -251,7 +230,7 @@ async function pollOnce() {
     if (r && r.status === 'SUCCESS') {
       result.value = r;
       resultStatus.value = 'success';
-      if (fromHistory.value && !fullscreenMode.value) diffDrawer.value = true;
+      if (fromHistory.value && !fullscreenMode.value) resultFullscreen.value = true;
       stopPoll();
       return;
     }
@@ -274,6 +253,20 @@ async function checkNow() {
   } finally {
     checking.value = false;
   }
+}
+
+function openResultFullscreen() {
+  if (resultStatus.value === 'success' && result.value) {
+    resultFullscreen.value = true;
+  }
+}
+
+function closeResultFullscreen() {
+  if (fullscreenMode.value) {
+    goList();
+    return;
+  }
+  resultFullscreen.value = false;
 }
 
 function goList() {
@@ -311,7 +304,8 @@ onBeforeUnmount(stopPoll);
   flex: 1;
 }
 .tool-result-fullscreen {
-  height: 100vh;
+  height: var(--vben-content-height, 100%);
+  max-height: var(--vben-content-height, 100%);
   min-height: 0;
   overflow: hidden;
   background: #f5f7fb;
@@ -325,6 +319,7 @@ onBeforeUnmount(stopPoll);
 }
 .tool-result-fullscreen :deep(.file-diff-viewer) {
   height: 100%;
+  min-height: 0;
 }
 .step-pane {
   display: flex;

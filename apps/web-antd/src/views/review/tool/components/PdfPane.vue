@@ -272,6 +272,7 @@ defineExpose({
 .pdf-pane {
   flex: 1;
   height: 100%;
+  min-height: 0;
   overflow-y: auto;
   background: #525659;
 }

@@ -1902,6 +1902,7 @@ onBeforeUnmount(() => {
   --title-center-offset: 0px;
   position: relative;
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: #fff;
@@ -2371,6 +2372,7 @@ onBeforeUnmount(() => {
 .comparison-list .pane {
   flex: 1 1 0;
   height: 100%;
+  min-height: 0;
   position: relative;
   border-right: 1px solid #ebeef5;
   overflow: hidden;
