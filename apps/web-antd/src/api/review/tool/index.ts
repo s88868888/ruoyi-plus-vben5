@@ -31,6 +31,11 @@ export function saveIssueNote(data: { itemId: number | string; note: string }) {
   return requestClient.post<void>('/review/tool/issueNote', data);
 }
 
+/** 保存内容审查脱敏手动框选 */
+export function saveRedactData(data: { taskId: number | string; redactData: string }) {
+  return requestClient.post<void>('/review/tool/redactData', data);
+}
+
 /** 查询附件 OCR 状态（查看器轮询；状态为空的 PDF 会懒触发） */
 export function getOcrStatus(ossId: number | string) {
   return requestClient.get<OcrStatusResult>('/review/tool/ocr/status', {

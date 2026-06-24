@@ -16,8 +16,10 @@
       :issues="result.issues || []"
       :focus-items="result.focusItems || []"
       :focus-keywords="result.focusKeywords || []"
+      :redact-data="result.redactData || ''"
       :status="result.status || ''"
       @close="closeResultFullscreen"
+      @redact-saved="onRedactSaved"
     />
     <div v-else class="tool-result-state">
       <div v-if="resultStatus === 'running'" class="result-loading">
@@ -162,10 +164,13 @@ const resultStatus = ref<'running' | 'success' | 'fail'>('running');
 const resultError = ref('');
 const checking = ref(false);
 const resultFullscreen = ref(false);
+const leavingFullscreenResult = ref(false);
 // 从任务列表「查看」带 taskId 进来：直接看历史结果，成功后自动打开查看器
 const fromHistory = ref(false);
 const fullscreenMode = computed(() => route.query.fullscreen === '1');
-const resultFullscreenActive = computed(() => fullscreenMode.value || resultFullscreen.value);
+const resultFullscreenActive = computed(
+  () => leavingFullscreenResult.value || fullscreenMode.value || resultFullscreen.value,
+);
 
 function cleanDocLabel(v: any) {
   const s = String(v || '').trim();
@@ -275,9 +280,16 @@ function closeResultFullscreen() {
   resultFullscreen.value = false;
 }
 
+function onRedactSaved(redactData: string) {
+  if (result.value) result.value.redactData = redactData;
+}
+
 function goList() {
   stopPoll();
-  router.push('/review/task');
+  leavingFullscreenResult.value = resultFullscreenActive.value;
+  router.push('/review/task').catch(() => {
+    leavingFullscreenResult.value = false;
+  });
 }
 
 // 任务列表「查看」带 ?taskId 进来：直接进结果步轮询，成功自动开查看器

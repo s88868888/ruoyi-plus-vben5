@@ -54,6 +54,17 @@
         </Button>
         <Button
           type="link"
+          size="small"
+          class="ca-action-link"
+          :disabled="!docBytes"
+          title="脱敏导出：在文档上框选敏感区域，导出像素涂黑的不可逆脱敏件"
+          @click="openRedact"
+        >
+          <EyeInvisibleOutlined />
+          <span>脱敏</span>
+        </Button>
+        <Button
+          type="link"
           class="close-btn"
           title="关闭"
           @click="$emit('close')"
@@ -348,6 +359,17 @@
         <Empty v-else :image-style="{ height: '70px' }" :description="rulesError || '该审核任务未配置规则'" />
       </template>
     </Modal>
+
+    <!-- 脱敏编辑器：在文档上框选敏感区，导出像素涂黑、无文字层的不可逆脱敏件 -->
+    <RedactEditor
+      v-model:open="redactOpen"
+      :pdf-bytes="redactBytes"
+      :init-boxes="redactInitBoxes"
+      :saved-boxes="redactSavedBoxes"
+      :file-name="redactFileName"
+      :saving="redactSaving"
+      @save="saveRedactBoxes"
+    />
   </div>
 </template>
 
@@ -357,11 +379,12 @@ import { Button, Empty, Input, Modal, Table, Tag, message } from 'ant-design-vue
 import {
   LoadingOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined,
   ProfileOutlined, AimOutlined, EditOutlined, FileTextOutlined,
-  InfoCircleFilled, WarningFilled
+  InfoCircleFilled, WarningFilled, EyeInvisibleOutlined
 } from '@ant-design/icons-vue'
 import PdfPane from './PdfPane.vue'
+import RedactEditor from './RedactEditor.vue'
 import { exportAnnotatedPdf } from '#/utils/exportAnnotatedPdf'
-import { saveIssueNote, getToolRules, getOcrStatus } from '#/api/review/tool'
+import { saveIssueNote, saveRedactData, getToolRules, getOcrStatus } from '#/api/review/tool'
 
 const props = defineProps({
   // 本地审核任务ID（cs_biz_ai_review.id），保存批注时回写用；为空则保存按钮禁用
@@ -377,9 +400,11 @@ const props = defineProps({
   focusItems: { type: Array, default: () => [] },
   // 关注要点列表：规则库中 focusEnabled=1 且填写要点的 [{keyword,category}]（前端按要点生成列表与缺漏占位）
   focusKeywords: { type: Array, default: () => [] },
+  // 已保存的手动脱敏框 JSON（仅保存用户手动框）
+  redactData: { type: String, default: '' },
   status: { type: String, default: '' }
 })
-defineEmits(['close', 'reanalyze'])
+const emit = defineEmits(['close', 'reanalyze', 'redact-saved'])
 
 function normalizeDocLabel(value) {
   const s = String(value || '').trim()
@@ -1096,6 +1121,7 @@ function normalizeText(s) {
 }
 function buildPageChars(node) {
   const refs = []
+  const charRefs = []
   let text = ''
   node.querySelectorAll('span').forEach((span) => {
     if (span.childElementCount > 0) return
@@ -1105,9 +1131,10 @@ function buildPageChars(node) {
       if (!c) continue
       text += c
       refs.push(span)
+      charRefs.push({ span, start: i, end: i + 1 })
     }
   })
-  return { node, text, refs }
+  return { node, text, refs, charRefs }
 }
 function uniqueSpans(refs, start, end) {
   const seen = new Set()
@@ -1540,6 +1567,270 @@ async function onExportAudit() {
     message.error('导出失败：' + (e?.message || e))
   } finally {
     exporting.value = false
+  }
+}
+
+// ===== 脱敏导出（独立弹窗 RedactEditor）：拍平成图 + 像素涂黑，不可逆 =====
+const redactOpen = ref(false)
+const redactBytes = ref(null)
+const redactInitBoxes = ref([])
+const redactSaving = ref(false)
+const redactFileName = computed(() => {
+  const fname = displayDocLabel.value.replace(/[\\/:*?"<>|]/g, '_')
+  return `${fname}_脱敏件.pdf`
+})
+function clamp01(v) { return Math.max(0, Math.min(1, v)) }
+
+function normalizeRedactBox(box) {
+  const page = Number(box?.page)
+  const x0 = clamp01(Number(box?.x0))
+  const y0 = clamp01(Number(box?.y0))
+  const x1 = clamp01(Number(box?.x1))
+  const y1 = clamp01(Number(box?.y1))
+  if (!Number.isFinite(page) || page < 1) return null
+  if (![x0, y0, x1, y1].every(Number.isFinite)) return null
+  if (Math.abs(x1 - x0) < 0.002 || Math.abs(y1 - y0) < 0.002) return null
+  return {
+    page: Math.floor(page),
+    x0: Math.min(x0, x1),
+    y0: Math.min(y0, y1),
+    x1: Math.max(x0, x1),
+    y1: Math.max(y0, y1)
+  }
+}
+
+function parseRedactData(data) {
+  if (!data) return []
+  try {
+    const parsed = JSON.parse(data)
+    const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.boxes) ? parsed.boxes : [])
+    return arr.map(normalizeRedactBox).filter(Boolean)
+  } catch (e) {
+    console.warn('[ContentAudit] 解析脱敏框选数据失败', e)
+    return []
+  }
+}
+
+const redactSavedBoxes = computed(() => parseRedactData(props.redactData))
+
+async function saveRedactBoxes(manualBoxes) {
+  if (!props.taskId) { message.warning('缺少任务ID，无法保存框选'); return }
+  const boxes = (manualBoxes || []).map(normalizeRedactBox).filter(Boolean)
+  const redactData = JSON.stringify({ boxes })
+  redactSaving.value = true
+  try {
+    await saveRedactData({ taskId: props.taskId, redactData })
+    emit('redact-saved', redactData)
+    message.success(`已保存 ${boxes.length} 个手动脱敏框`)
+  } catch (e) {
+    console.error('[ContentAudit] 保存脱敏框选失败', e)
+    message.error('保存失败：' + (e?.message || e))
+  } finally {
+    redactSaving.value = false
+  }
+}
+
+function rangeRectsForMatch(pg, start, end) {
+  const charRefs = pg.charRefs || []
+  const groups = []
+  for (let i = start; i < end && i < charRefs.length; i++) {
+    const ref = charRefs[i]
+    if (!ref?.span) continue
+    const last = groups[groups.length - 1]
+    if (last && last.span === ref.span && ref.start <= last.rawEnd) {
+      last.rawEnd = ref.end
+    } else {
+      groups.push({ span: ref.span, rawStart: ref.start, rawEnd: ref.end })
+    }
+  }
+
+  const out = []
+  groups.forEach((g) => {
+    const textNode = Array.from(g.span.childNodes || []).find((n) => n.nodeType === Node.TEXT_NODE)
+    let rects = []
+    if (textNode) {
+      const range = document.createRange()
+      try {
+        const max = textNode.textContent?.length || 0
+        range.setStart(textNode, Math.max(0, Math.min(g.rawStart, max)))
+        range.setEnd(textNode, Math.max(0, Math.min(g.rawEnd, max)))
+        rects = Array.from(range.getClientRects()).filter((r) => r.width && r.height)
+      } catch (e) {
+        rects = []
+      } finally {
+        range.detach?.()
+      }
+    }
+    if (!rects.length) {
+      const r = g.span.getBoundingClientRect()
+      if (r.width || r.height) rects = [r]
+    }
+    rects.forEach((rect) => out.push({ page: pageOfSpan(g.span), rect }))
+  })
+  return out.filter((x) => x.page)
+}
+
+function searchAllRectsReadonly(pages, text) {
+  const out = []
+  const normVal = normalizeText(text)
+  if (!normVal || normVal.length < 2) return out
+  for (const pg of pages) {
+    let from = 0
+    let i = pg.text.indexOf(normVal, from)
+    while (i >= 0) {
+      out.push(...rangeRectsForMatch(pg, i, i + normVal.length))
+      from = i + Math.max(normVal.length, 1)
+      i = pg.text.indexOf(normVal, from)
+    }
+  }
+  return out
+}
+
+function firstRectsReadonly(pages, text) {
+  const normVal = normalizeText(text)
+  if (!normVal || normVal.length < 2) return []
+  for (const pg of pages) {
+    const i = pg.text.indexOf(normVal)
+    if (i >= 0) return rangeRectsForMatch(pg, i, i + normVal.length)
+  }
+  return []
+}
+
+function pageOfSpan(span) {
+  const wrap = span?.closest?.('.pdf-page-wrap')
+  return wrap ? (parseInt(wrap.dataset.pageNumber, 10) || 1) : 0
+}
+
+function stripFocusLabelPrefix(text, item) {
+  let s = String(text || '').trim()
+  const labels = [
+    item?.fieldLabel,
+    item?.fieldName,
+    item?.keyword,
+    focusCategoryLabel(item)
+  ].map((x) => String(x || '').trim()).filter(Boolean)
+
+  for (const label of labels) {
+    if (!label || s === label) continue
+    if (s.startsWith(label)) {
+      s = s.slice(label.length).trim()
+      s = s.replace(/^[\s:：,，;；、.\-—_（）()【】\[\]]+/, '').trim()
+      break
+    }
+  }
+  return s
+}
+
+function focusValueCandidates(item) {
+  const raw = String(item?.extractedValue || '').trim()
+  if (!raw) return []
+  if (/^(文中未提及|未提及|未填写|空缺|无|暂无|—|-)$/.test(raw)) return []
+
+  const candidates = []
+  const chunks = raw
+    .split(/[\n\r]+|[；;。]+/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+
+  for (const chunk of chunks.length ? chunks : [raw]) {
+    let value = stripFocusLabelPrefix(chunk, item)
+    const colonIdx = value.search(/[:：]/)
+    if (colonIdx >= 0 && colonIdx < value.length - 1) {
+      value = value.slice(colonIdx + 1).trim()
+    }
+    value = value.replace(/^[\s:：,，;；、.\-—_]+/, '').replace(/[\s,，;；。]+$/, '').trim()
+    if (normalizeText(value).length >= 2) candidates.push(value)
+  }
+
+  const seen = new Set()
+  return candidates.filter((x) => {
+    const key = normalizeText(x)
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function collectFocusValueRectsReadonly() {
+  const pane = paneRef.value
+  if (!pane) return []
+  const nodes = pane.getTextLayerNodes?.() || []
+  if (!nodes.length) return []
+  const pages = nodes.map(buildPageChars)
+  const allRects = []
+  ;(props.focusItems || []).forEach((it) => {
+    const candidates = focusValueCandidates(it)
+    candidates.forEach((candidate) => {
+      const rects = searchAllRectsReadonly(pages, candidate)
+      if (rects.length) {
+        allRects.push(...rects)
+      } else {
+        for (const seg of focusSegments(candidate)) {
+          allRects.push(...firstRectsReadonly(pages, seg))
+        }
+      }
+    })
+  })
+  return allRects
+}
+
+function rectGroupsToBoxes(byPage) {
+  const out = []
+  byPage.forEach((rects, page) => {
+    const pageEl = paneRef.value?.getPageEl?.(page)
+    if (!pageEl) return
+    const pr = pageEl.getBoundingClientRect()
+    if (!pr.width || !pr.height) return
+    rects.sort((a, b) => a.top - b.top)
+    // 行聚类：新矩形纵向中点落在当前行带内 → 同行合并，否则起新行
+    const lines = []
+    rects.forEach((r) => {
+      const last = lines[lines.length - 1]
+      const mid = (r.top + r.bottom) / 2
+      if (last && mid >= last.top && mid <= last.bottom) {
+        last.left = Math.min(last.left, r.left)
+        last.right = Math.max(last.right, r.right)
+        last.top = Math.min(last.top, r.top)
+        last.bottom = Math.max(last.bottom, r.bottom)
+      } else {
+        lines.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
+      }
+    })
+    const padX = pr.width * 0.004
+    const padY = pr.height * 0.004
+    lines.forEach((ln) => {
+      const x0 = clamp01((ln.left - pr.left - padX) / pr.width)
+      const y0 = clamp01((ln.top - pr.top - padY) / pr.height)
+      const x1 = clamp01((ln.right - pr.left + padX) / pr.width)
+      const y1 = clamp01((ln.bottom - pr.top + padY) / pr.height)
+      if (x1 - x0 > 0.002 && y1 - y0 > 0.002) out.push({ page, x0, y0, x1, y1 })
+    })
+  })
+  return out
+}
+
+function rectsToBoxes(pageRects) {
+  const byPage = new Map()
+  pageRects.forEach(({ page, rect }) => {
+    if (!page || !rect || (!rect.width && !rect.height)) return
+    if (!byPage.has(page)) byPage.set(page, [])
+    byPage.get(page).push(rect)
+  })
+  return rectGroupsToBoxes(byPage)
+}
+function openRedact() {
+  if (!docBytes.value) { message.warning('文档尚未就绪'); return }
+  let valueBoxes = []
+  try {
+    valueBoxes = rectsToBoxes(collectFocusValueRectsReadonly())
+  } catch (e) {
+    console.warn('[ContentAudit] 计算自动脱敏框失败', e)
+  }
+  redactInitBoxes.value = valueBoxes
+  redactBytes.value = docBytes.value.slice(0)
+  redactOpen.value = true
+  if (!valueBoxes.length) {
+    message.info('未自动匹配到关注文档值区域，请在文档上手动框选脱敏')
   }
 }
 

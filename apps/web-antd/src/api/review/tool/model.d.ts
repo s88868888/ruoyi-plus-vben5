@@ -64,6 +64,8 @@ export interface ReviewToolResult {
   updatetime?: string;
   /** 附件对比差异清单批注 JSON */
   noteData?: string;
+  /** 内容审查脱敏手动框选 JSON */
+  redactData?: string;
   issues?: ToolIssueItem[];
   focusItems?: ToolFocusItem[];
   focusCategories?: string[];
