@@ -100,6 +100,8 @@ const gridOptions: VxeGridProps = {
   checkboxConfig: {
     highlight: true,
     reserve: true,
+    // 点整行任意位置即可勾选（操作按钮带 @click.stop 不受影响）
+    trigger: 'row',
   },
   height: 'auto',
   columns: [
