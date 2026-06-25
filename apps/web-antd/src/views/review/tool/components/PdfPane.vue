@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount, nextTick } from 'vue';
+import { ref, watch, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue';
 import { LoadingOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue';
 import { pdfjsLib, loadViewer } from '#/utils/pdfjsSetup';
 
@@ -251,6 +251,19 @@ onBeforeUnmount(() => {
       pdfWorker.destroy();
     } catch (e) {}
     pdfWorker = null;
+  }
+});
+
+// KeepAlive 缓存本页：切走时中止在途渲染（bump token 让 renderAllPages 在下一个
+// await 边界提前 return），避免 view.draw() 还在往缓存子树里 append 节点，
+// 与路由 <Transition> 搬动 DOM 抢节点（insertBefore 报错根因）。
+onDeactivated(() => {
+  renderToken++;
+});
+// 重新激活：若在途渲染被打断（pageViews 空但有数据），补渲一次；否则保留缓存 DOM 不动。
+onActivated(() => {
+  if (props.data && pageViews.length === 0 && !loading.value) {
+    nextTick(loadAndRender);
   }
 });
 

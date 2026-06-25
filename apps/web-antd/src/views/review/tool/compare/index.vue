@@ -115,7 +115,7 @@
 <script setup lang="ts">
 import type { CSSProperties } from 'vue';
 
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Page } from '@vben/common-ui';
 import { EyeOutlined, LoadingOutlined } from '@ant-design/icons-vue';
@@ -160,7 +160,11 @@ const checking = ref(false);
 const resultFullscreen = ref(false);
 // 从任务列表「查看」带 taskId 进来：直接看历史结果，成功后自动打开查看器
 const fromHistory = ref(false);
-const fullscreenMode = computed(() => route.query.fullscreen === '1');
+// 快照读取，不用 computed(route.query)：fullscreen 由进入本 tab 的导航决定，tab 存活期间
+// 不该随路由变。若依赖 route.query，切走 tab 时 route 变→本(被 KeepAlive 缓存的)组件重渲→
+// 根元素在 <Transition out-in> 搬动缓存子树时从 <div> 翻成 <Page>，insertBefore 崩。
+// 不同 query=不同 tabKey=全新实例，故 setup 时快照即正确。
+const fullscreenMode = ref(route.query.fullscreen === '1');
 const resultFullscreenActive = computed(() => fullscreenMode.value || resultFullscreen.value);
 
 const nextDisabled = computed(() => {
@@ -287,6 +291,12 @@ onMounted(() => {
 });
 
 onBeforeUnmount(stopPoll);
+// KeepAlive 缓存本页：切走时停轮询，避免后台 setTimeout 继续写 result/resultStatus/
+// resultFullscreen，在已脱离文档的缓存子树上触发 patch。重新激活时若仍在比对中再续轮询。
+onDeactivated(stopPoll);
+onActivated(() => {
+  if (taskId.value && resultStatus.value === 'running') pollOnce();
+});
 </script>
 
 <style scoped>

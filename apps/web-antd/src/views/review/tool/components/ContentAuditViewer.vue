@@ -26,15 +26,6 @@
           type="link"
           size="small"
           class="ca-action-link"
-          @click="openRules"
-        >
-          <FileTextOutlined />
-          <span>查看规则</span>
-        </Button>
-        <Button
-          type="link"
-          size="small"
-          class="ca-action-link"
           @click="listPanelOpen = !listPanelOpen"
         >
           <ProfileOutlined />
@@ -374,11 +365,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { Button, Empty, Input, Modal, Table, Tag, message } from 'ant-design-vue'
 import {
   LoadingOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined,
-  ProfileOutlined, AimOutlined, EditOutlined, FileTextOutlined,
+  ProfileOutlined, AimOutlined, EditOutlined,
   InfoCircleFilled, WarningFilled, EyeInvisibleOutlined
 } from '@ant-design/icons-vue'
 import PdfPane from './PdfPane.vue'
@@ -447,13 +438,6 @@ function countRuleSev(key) {
   const alias = { must: ['must', 'error'], should: ['should', 'warning'], suggest: ['suggest', 'info'] }[key] || [key]
   return rulesList.value.filter((r) => alias.includes((r.severity || '').toLowerCase())).length
 }
-function openRules() {
-  if (!props.taskId) {
-    message.warning('缺少审核任务ID，无法查看规则')
-    return
-  }
-  rulesDialog.value = true
-}
 async function loadRules() {
   if (rulesLoaded || !props.taskId) return
   rulesLoading.value = true
@@ -482,6 +466,10 @@ const ruleColumns = [
 
 const paneRef = ref(null)
 const bodyRef = ref(null)
+// KeepAlive 缓存本页：切走是 deactivated 而非 unmount。该标志为 false 时，
+// 一切异步回调（RAF/MO/轮询/监听）都不得再碰 DOM 或写响应式，避免与路由
+// <Transition> 移动缓存子树时抢同一批节点（insertBefore 报错根因）。
+let viewerActive = true
 const docBytes = ref(null)
 const docError = ref('')
 const currentIdx = ref(-1)
@@ -600,7 +588,7 @@ function isVerticallyVisible(rect, containerRect) {
 function computeIssueConn() {
   const base = bodyRef.value
   const idx = currentIdx.value
-  if (!base || idx < 0 || !listPanelOpen.value || activeListTab.value !== 'issues') {
+  if (!viewerActive || !base || idx < 0 || !listPanelOpen.value || activeListTab.value !== 'issues') {
     issueConn.value = null
     return
   }
@@ -640,7 +628,7 @@ function computeIssueConn() {
 }
 
 function scheduleIssueConn() {
-  if (connRaf) return
+  if (!viewerActive || connRaf) return
   connRaf = requestAnimationFrame(() => {
     connRaf = 0
     computeIssueConn()
@@ -1414,6 +1402,7 @@ function locateIssues() {
 // 否则取到空文本 → 匹配不到 → 染色"消失"。逐帧重试直到 textLayer 有文本，再染色并揭示清单。
 let locateRaf = null
 function scheduleLocate() {
+  if (!viewerActive) return
   if (locateRaf) cancelAnimationFrame(locateRaf)
   let tries = 0
   const tick = () => {
@@ -1449,6 +1438,7 @@ function setupTextLayerObserver() {
   mo = new MutationObserver(() => {
     if (moDebounce) clearTimeout(moDebounce)
     moDebounce = setTimeout(() => {
+      if (!viewerActive) return
       if (hasTextLayerSource.value) applyAuditAlign()
       if (activeListTab.value === 'focus') locateFocusItems()
       else locateIssues()
@@ -1838,19 +1828,38 @@ function handleConnViewportChange() {
   scheduleIssueConn()
 }
 
-onMounted(() => {
-  startOcrPolling()
-  window.addEventListener('resize', handleConnViewportChange)
-  window.addEventListener('scroll', handleConnViewportChange, true)
-})
-onBeforeUnmount(() => {
+// 停掉一切会碰 DOM / 写响应式的异步活动。KeepAlive 切走(deactivated)与真正卸载
+// (unmount)都走这里，确保缓存子树被 <Transition> 搬动时没有游离回调在改它。
+function disarmViewer() {
+  viewerActive = false
   stopOcrPolling()
-  if (locateRaf) cancelAnimationFrame(locateRaf)
-  if (connRaf) cancelAnimationFrame(connRaf)
-  if (mo) mo.disconnect()
-  if (moDebounce) clearTimeout(moDebounce)
+  if (locateRaf) { cancelAnimationFrame(locateRaf); locateRaf = null }
+  if (connRaf) { cancelAnimationFrame(connRaf); connRaf = 0 }
+  if (mo) { mo.disconnect(); mo = null }
+  if (moDebounce) { clearTimeout(moDebounce); moDebounce = null }
   window.removeEventListener('resize', handleConnViewportChange)
   window.removeEventListener('scroll', handleConnViewportChange, true)
+}
+
+// 恢复活动：首次挂载与 KeepAlive 重新激活都走这里。监听器同引用重复 add 会被浏览器去重，
+// startOcrPolling 内部先 stop，故可安全重入。
+function armViewer() {
+  viewerActive = true
+  window.addEventListener('resize', handleConnViewportChange)
+  window.addEventListener('scroll', handleConnViewportChange, true)
+  startOcrPolling()
+}
+
+onMounted(armViewer)
+onBeforeUnmount(disarmViewer)
+onDeactivated(disarmViewer)
+onActivated(() => {
+  armViewer()
+  // 缓存恢复后 textLayer DOM 仍在，但观察器与染色已停：重挂观察器并重定位一次。
+  if (docBytes.value && paneRef.value) {
+    setupTextLayerObserver()
+    scheduleLocate()
+  }
 })
 </script>
 

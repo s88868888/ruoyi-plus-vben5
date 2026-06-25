@@ -454,7 +454,7 @@
 <script setup>
 import VueOfficeDocx from '@vue-office/docx/lib/v3/vue-office-docx.mjs'
 import '@vue-office/docx/lib/v3/index.css'
-import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { Button, Checkbox, Empty, Input, Tag, Tooltip, message } from 'ant-design-vue'
 import {
   LoadingOutlined, WarningFilled, ThunderboltOutlined, CloseOutlined,
@@ -1311,8 +1311,11 @@ function onPaneClick(side, e) {
 
 // rAF 节流的连线 + 图标重算（滚动/缩放/resize/点击调用）
 let connRaf = 0
+// KeepAlive 缓存本页：切走是 deactivated 而非 unmount。false 时一切异步回调
+// 不得再碰 DOM / 写响应式，避免与路由 <Transition> 搬动缓存子树时抢节点。
+let viewerActive = true
 function scheduleConn() {
-  if (connRaf) return
+  if (!viewerActive || connRaf) return
   connRaf = requestAnimationFrame(() => {
     connRaf = 0
     syncCurrentDiffFromScroll()
@@ -1885,13 +1888,31 @@ onMounted(() => {
   reload()
   startOcrPolling()
 })
-onBeforeUnmount(() => {
+
+// 停掉会碰 DOM / 写响应式的异步活动（KeepAlive deactivated 与真正 unmount 共用）。
+// 不撤 blobUrl，保留已载 PDF，重新激活即时恢复。
+function disarmViewer() {
+  viewerActive = false
   stopOcrPolling()
   unbindSyncScroll()
+  if (connRaf) { cancelAnimationFrame(connRaf); connRaf = 0 }
+  if (layoutRefitTimer) { clearTimeout(layoutRefitTimer); layoutRefitTimer = null }
+  if (autoFollowReleaseTimer) { clearTimeout(autoFollowReleaseTimer); autoFollowReleaseTimer = null }
+}
+
+onBeforeUnmount(() => {
+  disarmViewer()
   revokeBlobUrls()
-  if (connRaf) cancelAnimationFrame(connRaf)
-  if (layoutRefitTimer) clearTimeout(layoutRefitTimer)
-  if (autoFollowReleaseTimer) clearTimeout(autoFollowReleaseTimer)
+})
+onDeactivated(disarmViewer)
+onActivated(() => {
+  viewerActive = true
+  startOcrPolling()
+  // 缓存恢复后 PdfPane DOM 仍在：重绑同步滚动并重算连线/图标。
+  if (readyList.value?.[0] && readyList.value?.[1]) {
+    trySetupSyncScroll()
+    scheduleConn()
+  }
 })
 </script>
 
