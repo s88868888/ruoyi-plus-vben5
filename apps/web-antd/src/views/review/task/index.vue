@@ -7,12 +7,12 @@ import { useRouter } from 'vue-router';
 import { Page } from '@vben/common-ui';
 
 import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tooltip, message } from 'ant-design-vue';
-import { DiffOutlined, EllipsisOutlined, FileSearchOutlined } from '@ant-design/icons-vue';
+import { DiffOutlined, EllipsisOutlined, FileSearchOutlined, ExportOutlined, ImportOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
 import CommonFilter from '#/components/CommonFilter/index.vue';
-import { reviewTaskList, reviewTaskRemove, reviewTaskExecute } from '#/api/review/task';
+import { reviewTaskList, reviewTaskRemove, reviewTaskExecute, reviewTaskExport, reviewTaskImport } from '#/api/review/task';
 import { DictEnum } from '@vben/constants';
 import { getDictOptions } from '#/utils/dict';
 import { renderDict } from '#/utils/render';
@@ -258,6 +258,72 @@ function handleActionMenuClick(key: string | number, row: any) {
   }
 }
 
+// ==================== 工程包 导出 / 导入 ====================
+const exporting = ref(false);
+const importing = ref(false);
+const importInputRef = ref<HTMLInputElement | null>(null);
+
+// 导出：勾选行 → 打成 zip 工程包（附件原件 + 结果/关注/规则快照/脱敏框），不动后端原数据
+async function handleExport() {
+  const rows = tableApi.grid?.getCheckboxRecords?.() || [];
+  if (!rows.length) {
+    message.warning('请先勾选要导出的任务');
+    return;
+  }
+  exporting.value = true;
+  const hide = message.loading(`正在打包 ${rows.length} 个任务…`, 0);
+  try {
+    const ids = rows.map((r: any) => r.id);
+    const blob = await reviewTaskExport(ids);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date()
+      .toLocaleString('zh-CN', { hour12: false })
+      .replace(/[/:\s]/g, '')
+      .replace(/,/g, '');
+    a.href = url;
+    a.download = `审核工程包_${ts}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    message.success(`已导出 ${rows.length} 个任务`);
+  } catch (e: any) {
+    message.error('导出失败：' + (e?.message || e));
+  } finally {
+    hide();
+    exporting.value = false;
+  }
+}
+
+function triggerImport() {
+  importInputRef.value?.click();
+}
+
+// 导入：选 zip → 后端重新落库为全新任务（新 id、附件重传 OSS）→ 刷新列表
+async function handleImportFile(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = ''; // 清空，允许重复选同一文件
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.zip')) {
+    message.warning('请选择 .zip 工程包文件');
+    return;
+  }
+  importing.value = true;
+  const hide = message.loading('正在导入工程包…', 0);
+  try {
+    const newIds = await reviewTaskImport(file);
+    message.success(`导入成功，新建 ${newIds?.length || 0} 个任务`);
+    await tableApi.query();
+  } catch (e: any) {
+    message.error('导入失败：' + (e?.message || e));
+  } finally {
+    hide();
+    importing.value = false;
+  }
+}
+
 </script>
 
 <template>
@@ -272,6 +338,14 @@ function handleActionMenuClick(key: string | number, row: any) {
             @handle-query="handleFilterQuery"
           />
           <Space>
+            <Button :loading="exporting" @click="handleExport">
+              <ExportOutlined />
+              导出
+            </Button>
+            <Button :loading="importing" @click="triggerImport">
+              <ImportOutlined />
+              导入
+            </Button>
             <Button @click="goTool('compare')">
               <DiffOutlined />
               附件对比
@@ -281,6 +355,13 @@ function handleActionMenuClick(key: string | number, row: any) {
               审核分析
             </Button>
           </Space>
+          <input
+            ref="importInputRef"
+            type="file"
+            accept=".zip"
+            style="display: none"
+            @change="handleImportFile"
+          />
         </div>
       </div>
 

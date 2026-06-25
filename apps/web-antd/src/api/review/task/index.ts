@@ -36,3 +36,22 @@ export function reviewTaskMarkMisjudgment(taskId: number | string, resultItemId:
 export function reviewResultItemList(taskId: number | string) {
   return requestClient.get<ReviewResultItem[]>(`/review/task/${taskId}/results`);
 }
+
+// 导出选中任务为「工程包」zip（附件原件 + 结果/关注/规则快照/脱敏框）
+export function reviewTaskExport(taskIds: (number | string)[]) {
+  return requestClient.post<Blob>('/review/task/export', taskIds, {
+    isTransformResponse: false,
+    responseType: 'blob',
+    timeout: 300_000,
+  });
+}
+
+// 导入工程包 zip，在当前库重新落库为全新任务，返回新建的 taskId 列表
+export function reviewTaskImport(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  return requestClient.post<(number | string)[]>('/review/task/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 300_000,
+  });
+}
