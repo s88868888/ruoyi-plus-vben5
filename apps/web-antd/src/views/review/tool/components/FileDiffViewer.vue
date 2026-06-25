@@ -455,7 +455,7 @@
 import VueOfficeDocx from '@vue-office/docx/lib/v3/vue-office-docx.mjs'
 import '@vue-office/docx/lib/v3/index.css'
 import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { Button, Checkbox, Empty, Tag, Tooltip, message } from 'ant-design-vue'
+import { Button, Checkbox, Empty, Input, Tag, Tooltip, message } from 'ant-design-vue'
 import {
   LoadingOutlined, WarningFilled, ThunderboltOutlined, CloseOutlined,
   InfoCircleFilled, AimOutlined, EditOutlined, DeleteOutlined,
@@ -2828,6 +2828,16 @@ onBeforeUnmount(() => {
 <style>
 .diff-tooltip {
   max-width: 360px !important;
+}
+/* 悬浮气泡改白底：antd 默认黑底，配深色文字看不清；改白底深字 + 浅描边阴影 */
+.diff-tooltip .ant-tooltip-inner {
+  background-color: #fff !important;
+  color: #303133 !important;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+.diff-tooltip .ant-tooltip-arrow::before {
+  background-color: #fff !important;
 }
 .diff-tooltip .diff-tip {
   display: flex;
