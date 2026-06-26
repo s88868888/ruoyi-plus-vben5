@@ -103,107 +103,25 @@
         <LoadingOutlined spin />
         <span>缩放渲染中…</span>
       </div>
-      <!-- AI 审核侧栏 -->
+      <!-- AI 比对摘要侧栏 -->
       <aside
         v-if="aiReview && aiPanelOpen"
         class="ai-panel"
       >
         <div class="ai-panel-header">
           <ThunderboltOutlined class="ai-icon" />
-          <span class="ai-title">AI 审核结果</span>
+          <span class="ai-title">AI 比对摘要</span>
           <Tag :color="aiStatusType">{{ aiStatusText }}</Tag>
         </div>
 
-        <div class="ai-overview">
-          <div class="ai-overview-item">
-            <div class="oi-num">{{ aiReview.score == null ? '-' : aiReview.score }}</div>
-            <div class="oi-label">评分</div>
-          </div>
-          <div class="ai-overview-item">
-            <div class="oi-num danger">{{ aiReview.errorCount || 0 }}</div>
-            <div class="oi-label">错误</div>
-          </div>
-          <div class="ai-overview-item">
-            <div class="oi-num warning">{{ aiReview.warningCount || 0 }}</div>
-            <div class="oi-label">警告</div>
-          </div>
-          <div class="ai-overview-item">
-            <div class="oi-num info">{{ aiReview.infoCount || 0 }}</div>
-            <div class="oi-label">提示</div>
-          </div>
-        </div>
-
         <div v-if="aiReview.aiSummary" class="ai-summary">
-          <div class="ai-section-title">AI 摘要</div>
+          <div class="ai-section-title">比对摘要</div>
           <div class="ai-summary-content">{{ aiReview.aiSummary }}</div>
         </div>
 
-        <div class="ai-issues">
-          <div class="ai-section-header">
-            <span class="ai-section-title">问题明细（{{ filteredIssues.length }} / {{ (aiReview.issues || []).length }}）</span>
-            <div class="ai-filter">
-              <button
-                v-for="opt in severityFilterOptions"
-                :key="opt.key"
-                class="ai-filter-btn"
-                :class="{ active: severityFilter === opt.key, [`sev-${opt.key}`]: true }"
-                @click="severityFilter = opt.key"
-              >
-                <span class="dot"></span>{{ opt.label }}
-                <span class="ai-filter-count">{{ countBySeverity(opt.key) }}</span>
-              </button>
-            </div>
-          </div>
-          <div v-if="filteredIssues.length === 0" class="ai-empty">
-            <Empty description="无匹配问题" :image-style="{ height: '60px' }" />
-          </div>
-          <ul v-else class="ai-issue-list">
-            <li
-              v-for="(issue, idx) in filteredIssues"
-              :key="idx"
-              class="ai-issue-item"
-              :class="`sev-${(issue.severity || 'info').toLowerCase()}`"
-            >
-              <div class="ai-issue-head">
-                <span class="ai-sev-chip" :class="`sev-${(issue.severity || 'info').toLowerCase()}`">
-                  {{ severityLabel(issue.severity) }}
-                </span>
-                <span class="ai-issue-field" :title="issue.fieldLabel || issue.fieldName">
-                  {{ issue.fieldLabel || issue.fieldName || '未命名字段' }}
-                </span>
-                <span
-                  v-if="issue.matchStatus"
-                  class="ai-match-chip"
-                  :class="`match-${(issue.matchStatus || '').toLowerCase()}`"
-                >
-                  <span class="match-icon">{{ matchIcon(issue.matchStatus) }}</span>
-                  {{ matchLabel(issue.matchStatus) }}
-                </span>
-              </div>
-
-              <div v-if="issue.description" class="ai-issue-desc">{{ issue.description }}</div>
-
-              <div v-if="issue.formValue || issue.extractedValue" class="ai-issue-values">
-                <div v-if="issue.formValue" class="value-row form-row">
-                  <span class="value-tag">表单</span>
-                  <span class="value-text">{{ issue.formValue }}</span>
-                </div>
-                <div v-if="issue.extractedValue" class="value-row extract-row">
-                  <span class="value-tag">附件</span>
-                  <span class="value-text">{{ issue.extractedValue }}</span>
-                </div>
-              </div>
-
-              <div v-if="issue.suggestion" class="ai-issue-sugg">
-                <InfoCircleFilled class="sugg-icon" />
-                <span>{{ issue.suggestion }}</span>
-              </div>
-
-              <div v-if="issue.location" class="ai-issue-loc">
-                <AimOutlined />{{ issue.location }}
-              </div>
-            </li>
-          </ul>
+        <div v-else class="ai-summary">
+          <div class="ai-section-title">比对摘要</div>
+          <div class="ai-summary-content">差异清单由文档文本层实时计算，请以右侧差异清单为准。</div>
         </div>
       </aside>
 
@@ -458,8 +376,7 @@ import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, onActivat
 import { Button, Checkbox, Empty, Input, Tag, Tooltip, message } from 'ant-design-vue'
 import {
   LoadingOutlined, WarningFilled, ThunderboltOutlined, CloseOutlined,
-  InfoCircleFilled, AimOutlined, EditOutlined, DeleteOutlined,
-  ProfileOutlined, PrinterOutlined, DownOutlined, UpOutlined
+  EditOutlined, DeleteOutlined, ProfileOutlined, PrinterOutlined, DownOutlined, UpOutlined
 } from '@ant-design/icons-vue'
 import { diffDocumentAnchored, diffDocumentDetailed } from '#/utils/fileDiff'
 import { exportAnnotatedPdf } from '#/utils/exportAnnotatedPdf'
@@ -577,62 +494,6 @@ const aiStatusText = computed(() => {
 const aiStatusType = computed(() => {
   const s = props.aiReview?.status
   return { SUCCESS: 'success', FAIL: 'error', RUNNING: 'processing' }[s] || 'default'
-})
-
-function severityTagType(s) {
-  const k = (s || '').toString().toLowerCase()
-  return { error: 'danger', warning: 'warning', info: 'info' }[k] || 'info'
-}
-function severityLabel(s) {
-  const k = (s || '').toString().toLowerCase()
-  return { error: '错误', warning: '警告', info: '提示' }[k] || (s || '提示')
-}
-function matchTagType(s) {
-  const k = (s || '').toString().toLowerCase()
-  return {
-    matched: 'success',
-    mismatched: 'danger',
-    uncertain: 'warning',
-    not_found: 'info'
-  }[k] || 'info'
-}
-function matchLabel(s) {
-  const k = (s || '').toString().toLowerCase()
-  return {
-    matched: '一致',
-    mismatched: '不一致',
-    uncertain: '存疑',
-    not_found: '未找到'
-  }[k] || (s || '-')
-}
-function matchIcon(s) {
-  const k = (s || '').toString().toLowerCase()
-  return {
-    matched: '✓',
-    mismatched: '✗',
-    uncertain: '?',
-    not_found: '∅'
-  }[k] || '·'
-}
-
-const severityFilter = ref('all')
-const severityFilterOptions = [
-  { key: 'all', label: '全部' },
-  { key: 'error', label: '错误' },
-  { key: 'warning', label: '警告' },
-  { key: 'info', label: '提示' }
-]
-
-function countBySeverity(key) {
-  const list = props.aiReview?.issues || []
-  if (key === 'all') return list.length
-  return list.filter((i) => (i.severity || '').toLowerCase() === key).length
-}
-
-const filteredIssues = computed(() => {
-  const list = props.aiReview?.issues || []
-  if (severityFilter.value === 'all') return list
-  return list.filter((i) => (i.severity || '').toLowerCase() === severityFilter.value)
 })
 
 function detectType(url) {

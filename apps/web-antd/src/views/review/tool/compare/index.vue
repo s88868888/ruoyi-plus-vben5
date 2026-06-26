@@ -1,6 +1,6 @@
 <!--
-  附件对比向导（独立工具）。步骤：①上传基准文件 ②上传对比文件 ③选择规则(开始比对) ④比对结果
-  ③点「开始比对」→ toolCreateAndExecute(taskType=BCXY_COMPARE) → 进第④步轮询 getToolResult。
+  附件对比向导（独立工具）。步骤：①上传基准文件 ②上传对比文件(开始比对) ③比对结果
+  ②点「开始比对」→ toolCreateAndExecute(taskType=BCXY_COMPARE) → 进第③步轮询 getToolResult。
   出 SUCCESS → 「查看结果」打开附件对比查看器(全屏 Drawer)。
 -->
 <template>
@@ -50,7 +50,7 @@
       <ReviewWizard
         v-model:current="current"
         :steps="steps"
-        :action-step="2"
+        :action-step="1"
         :next-disabled="nextDisabled"
         :finish-loading="submitting"
         finish-text="开始比对"
@@ -70,12 +70,7 @@
             <SingleFileUpload v-model="compareFile" tip="上传对比文件" />
           </div>
 
-          <div v-show="cur === 2" class="step-pane">
-            <div class="pane-tip">选择本次比对使用的审核标准（规则），可预览规则和关注要点</div>
-            <StandardPicker v-model="standardIds" />
-          </div>
-
-          <div v-show="cur === 3" class="step-pane result-pane">
+          <div v-show="cur === 2" class="step-pane result-pane">
             <div v-if="resultStatus === 'running'" class="result-loading">
               <LoadingOutlined spin class="rl-spin" />
               <div class="rl-title">AI 正在比对中…</div>
@@ -122,7 +117,6 @@ import { EyeOutlined, LoadingOutlined } from '@ant-design/icons-vue';
 import { Button, Card, message, Result } from 'ant-design-vue';
 import ReviewWizard from '../components/ReviewWizard.vue';
 import SingleFileUpload from '../components/SingleFileUpload.vue';
-import StandardPicker from '../components/StandardPicker.vue';
 // @ts-expect-error 查看器为忠实移植的纯 JS SFC（含 pdfjs/canvas 复杂逻辑），不暴露 TS 类型
 import FileDiffViewer from '../components/FileDiffViewer.vue';
 import { getToolResult, toolCreateAndExecute } from '#/api/review/tool';
@@ -134,7 +128,6 @@ const route = useRoute();
 const steps = [
   { title: '上传基准文件' },
   { title: '上传对比文件' },
-  { title: '选择规则' },
   { title: '比对结果' },
 ];
 
@@ -148,7 +141,6 @@ const wizardCardBodyStyle: CSSProperties = {
 
 const current = ref(0);
 const baseFile = ref<any>(null);
-const standardIds = ref<any[]>([]);
 const compareFile = ref<any>(null);
 const submitting = ref(false);
 
@@ -170,7 +162,6 @@ const resultFullscreenActive = computed(() => fullscreenMode.value || resultFull
 const nextDisabled = computed(() => {
   if (current.value === 0) return !baseFile.value;
   if (current.value === 1) return !compareFile.value;
-  if (current.value === 2) return !standardIds.value.length;
   return false;
 });
 
@@ -186,7 +177,7 @@ async function onStart() {
       taskName: `工具-附件对比-${baseFile.value.name} ↔ ${compareFile.value.name}`,
       taskType: 'BCXY_COMPARE',
       sourceType: 'AI_TOOL',
-      standardIds: standardIds.value,
+      standardIds: [],
       files: [
         {
           ossId: baseFile.value.ossId,
@@ -207,7 +198,7 @@ async function onStart() {
     result.value = null;
     resultError.value = '';
     resultStatus.value = 'running';
-    current.value = 3;
+    current.value = 2;
     pollOnce();
   } catch (e: any) {
     message.error('提交比对失败：' + (e?.message || e));
@@ -284,7 +275,7 @@ onMounted(() => {
   if (qid) {
     taskId.value = String(qid);
     resultStatus.value = 'running';
-    current.value = 3;
+    current.value = 2;
     fromHistory.value = true;
     pollOnce();
   }
@@ -342,10 +333,6 @@ onActivated(() => {
 }
 .step-pane :deep(.single-upload) {
   flex: 0 1 340px;
-}
-.step-pane :deep(.std-picker) {
-  max-height: 100%;
-  overflow: auto;
 }
 .pane-tip {
   color: #606266;

@@ -94,6 +94,10 @@ function tooltipDotStyle(color: string) {
   };
 }
 
+function isCompareTask(row: any) {
+  return String(row?.taskType || '').toUpperCase().includes('COMPARE');
+}
+
 const loading = ref(false);
 
 const gridOptions: VxeGridProps = {
@@ -120,6 +124,7 @@ const gridOptions: VxeGridProps = {
       minWidth: 120,
       headerAlign: 'left',
       align: 'left',
+      slots: { default: 'standardNames' },
     },
     {
       field: 'version',
@@ -377,15 +382,19 @@ async function handleImportFile(e: Event) {
                 <component :is="renderDict(row.status, DictEnum.REVIEW_TASK_STATUS)" />
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-400">
-                <component v-if="row.passStatus" :is="renderDict(row.passStatus, DictEnum.REVIEW_PASS_STATUS)" />
+                <span v-if="isCompareTask(row) && row.status === 'completed'" class="compare-status-tag">
+                  已比对
+                </span>
+                <component v-else-if="row.passStatus" :is="renderDict(row.passStatus, DictEnum.REVIEW_PASS_STATUS)" />
                 <span v-else>-</span>
               </div>
             </div>
           </template>
 
           <template #issueCount="{ row }">
+            <span v-if="isCompareTask(row)" class="text-gray-400">-</span>
             <Tooltip
-              v-if="(row.errorCount || 0) + (row.warningCount || 0) + (row.infoCount || 0) > 0"
+              v-else-if="(row.errorCount || 0) + (row.warningCount || 0) + (row.infoCount || 0) > 0"
               placement="top"
             >
               <template #title>
@@ -411,6 +420,11 @@ async function handleImportFile(e: Event) {
               无
             </span>
             <span v-else class="text-gray-400">-</span>
+          </template>
+
+          <template #standardNames="{ row }">
+            <span v-if="isCompareTask(row)" class="text-gray-400">无需选择</span>
+            <span v-else>{{ row.standardNames || '-' }}</span>
           </template>
 
           <template #reviewVersion="{ row }">
@@ -528,6 +542,20 @@ async function handleImportFile(e: Event) {
 }
 
 .issue-dot-num {
+  line-height: 1;
+}
+
+.compare-status-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid #91d5ff;
+  border-radius: 10px;
+  color: #1677ff;
+  background: #e6f4ff;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
 }
 </style>
