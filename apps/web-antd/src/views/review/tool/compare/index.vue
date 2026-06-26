@@ -1,6 +1,6 @@
 <!--
   附件对比向导（独立工具）。步骤：①上传基准文件 ②上传对比文件(开始比对) ③比对结果
-  ②点「开始比对」→ toolCreateAndExecute(taskType=BCXY_COMPARE) → 进第③步轮询 getToolResult。
+  ②点「开始比对」→ toolCreateAndExecute(taskType=ATTACHMENT_COMPARE) → 进第③步轮询 getToolResult。
   出 SUCCESS → 「查看结果」打开附件对比查看器(全屏 Drawer)。
 -->
 <template>
@@ -175,7 +175,7 @@ async function onStart() {
   try {
     const id = await toolCreateAndExecute({
       taskName: `工具-附件对比-${baseFile.value.name} ↔ ${compareFile.value.name}`,
-      taskType: 'BCXY_COMPARE',
+      taskType: 'ATTACHMENT_COMPARE',
       sourceType: 'AI_TOOL',
       standardIds: [],
       files: [

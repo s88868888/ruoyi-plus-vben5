@@ -75,7 +75,7 @@ export interface ReviewToolResult {
 /** 工具建任务参数（复用 /review/task/createAndExecute） */
 export interface ToolCreateTaskParams {
   taskName: string;
-  /** BCXY_COMPARE（对比）/ CONTENT_AUDIT（审查） */
+  /** ATTACHMENT_COMPARE（对比）/ CONTENT_AUDIT（审查） */
   taskType: string;
   sourceType?: string;
   standardIds: (number | string)[];
