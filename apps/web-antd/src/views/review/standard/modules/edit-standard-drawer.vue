@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useVbenDrawer } from '@vben/common-ui';
 import {
-  message, Select, Switch, Input, Form, FormItem, Textarea, Divider,
+  Divider, Form, FormItem, Input, message, Select, Switch, Textarea,
 } from 'ant-design-vue';
 import { reviewStandardInfo, reviewStandardUpdate } from '#/api/review/standard';
+import { reviewPromptList } from '#/api/review/prompt';
+import type { ReviewPromptTemplate } from '#/api/review/prompt/model';
 
 const emit = defineEmits<{ reload: [] }>();
 
@@ -12,15 +14,34 @@ const formData = ref({
   id: '' as number | string,
   name: '',
   isSystem: '0',
-  version: '',
+  promptTemplateId: undefined as number | string | undefined,
   description: '',
   status: '',
 });
+const promptTemplates = ref<ReviewPromptTemplate[]>([]);
+const promptLoading = ref(false);
+
+const roleOptions = computed(() => promptTemplates.value
+  .filter((item) => item.status === '0')
+  .map((item) => ({
+    value: item.id,
+    label: `${item.name}（${item.type}）`,
+  })));
+
+async function loadRoleOptions() {
+  promptLoading.value = true;
+  try {
+    promptTemplates.value = await reviewPromptList();
+  } finally {
+    promptLoading.value = false;
+  }
+}
 
 const [BasicDrawer, drawerApi] = useVbenDrawer({
   title: '编辑审核标准',
   onOpenChange: async (visible) => {
     if (visible) {
+      await loadRoleOptions();
       const data = drawerApi.getData<{ id: number | string }>();
       if (data?.id) {
         const info = await reviewStandardInfo(data.id);
@@ -28,11 +49,13 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
           id: info.id,
           name: info.name,
           isSystem: info.isSystem || '0',
-          version: info.version || '',
+          promptTemplateId: info.promptTemplateId ?? undefined,
           description: info.description || '',
           status: info.status || '',
         };
       }
+    } else {
+      promptTemplates.value = [];
     }
   },
   onConfirm: async () => {
@@ -40,11 +63,15 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       message.warning('请输入规范名称');
       return;
     }
+    if (!formData.value.promptTemplateId) {
+      message.warning('请选择角色身份');
+      return;
+    }
     await reviewStandardUpdate({
       id: formData.value.id,
       name: formData.value.name,
       isSystem: formData.value.isSystem,
-      version: formData.value.version,
+      promptTemplateId: formData.value.promptTemplateId,
       description: formData.value.description,
       status: formData.value.status,
     });
@@ -69,11 +96,18 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
             :checked="formData.isSystem === '1'"
             checked-children="是"
             un-checked-children="否"
-            @change="(val: boolean) => formData.isSystem = val ? '1' : '0'"
+            @change="(val: any) => formData.isSystem = val ? '1' : '0'"
           />
         </FormItem>
-        <FormItem label="版本号">
-          <Input v-model:value="formData.version" placeholder="如：v1.0" />
+        <FormItem label="角色身份" required>
+          <Select
+            v-model:value="formData.promptTemplateId"
+            show-search
+            placeholder="请选择角色身份"
+            :filter-option="(input: string, option: any) => String(option?.label || '').toLowerCase().includes(input.toLowerCase())"
+            :loading="promptLoading"
+            :options="roleOptions"
+          />
         </FormItem>
         <FormItem label="状态">
           <Select

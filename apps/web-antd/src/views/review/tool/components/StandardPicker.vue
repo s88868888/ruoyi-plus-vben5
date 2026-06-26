@@ -1,25 +1,28 @@
 <!--
-  标准选择器：多选审核标准 + 每个选中标准的「规则/关注要点」只读预览。
-  数据：reviewStandardList（下拉）、reviewStandardRuleList/reviewStandardFocusList（预览）。emit standardIds[]。
+  标准选择器：单选审核标准 + 选中标准的「规则/关注要点」只读预览。
+  数据：reviewStandardList（下拉）、reviewStandardRuleList/reviewStandardFocusList（预览）。emit standardIds[] 兼容任务接口。
 -->
 <template>
   <div class="std-picker">
     <Select
       v-model:value="selected"
-      mode="multiple"
       :options="standardOptions"
       :filter-option="filterOption"
-      placeholder="请选择审核标准（可多选）"
+      placeholder="请选择一个审核标准"
       style="width: 100%"
-      max-tag-count="responsive"
+      allow-clear
+      show-search
       @change="onChange"
     />
 
-    <div v-if="selected.length" class="std-preview">
+    <div v-if="selectedIds.length" class="std-preview">
       <Collapse v-model:active-key="activePanels">
-        <CollapsePanel v-for="id in selected" :key="String(id)">
+        <CollapsePanel v-for="id in selectedIds" :key="String(id)">
           <template #header>
             <span class="std-title">{{ nameOf(id) }}</span>
+            <Tag v-if="roleNameOf(id)" color="blue" class="std-cnt">
+              {{ roleNameOf(id) }}
+            </Tag>
             <Tag class="std-cnt">规则 {{ (preview[id]?.rules || []).length }}</Tag>
             <Tag color="default" class="std-cnt">
               关注 {{ (preview[id]?.focus || []).length }}
@@ -55,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { LoadingOutlined } from '@ant-design/icons-vue';
 import { Collapse, Empty, message, Select, Tag } from 'ant-design-vue';
 
@@ -69,15 +72,31 @@ import StandardRulePreviewTable from './StandardRulePreviewTable.vue';
 
 const CollapsePanel = Collapse.Panel;
 
+const props = defineProps<{
+  modelValue?: any[];
+}>();
+
 const emit = defineEmits(['update:modelValue', 'change']);
 
-const standards = ref<{ id: any; name: string }[]>([]);
-const selected = ref<any[]>([]);
+const standards = ref<{ id: any; name: string; promptTemplateName?: string }[]>([]);
+const selected = ref<any>(props.modelValue?.[0] ?? undefined);
 const activePanels = ref<string[]>([]);
 const preview = ref<Record<string, any>>({});
 
 const standardOptions = computed(() =>
-  standards.value.map((s) => ({ label: s.name, value: s.id })),
+  standards.value.map((s) => ({
+    label: `${s.name}（${s.promptTemplateName || '未设角色'}）`,
+    value: s.id,
+    disabled: !s.promptTemplateName,
+  })),
+);
+const selectedIds = computed(() => toStandardIds(selected.value));
+
+watch(
+  () => props.modelValue,
+  (value) => {
+    selected.value = value?.[0] ?? undefined;
+  },
 );
 
 function filterOption(input: string, option: any) {
@@ -88,6 +107,14 @@ function nameOf(id: any) {
   return standards.value.find((s) => s.id === id)?.name || `标准 ${id}`;
 }
 
+function roleNameOf(id: any) {
+  return standards.value.find((s) => s.id === id)?.promptTemplateName || '';
+}
+
+function toStandardIds(value: any) {
+  return value === undefined || value === null || value === '' ? [] : [value];
+}
+
 onMounted(async () => {
   try {
     const res = await reviewStandardList({ pageNum: 1, pageSize: 1000 });
@@ -95,6 +122,7 @@ onMounted(async () => {
     standards.value = rows.map((r: any) => ({
       id: r.id,
       name: r.name || `标准 ${r.id}`,
+      promptTemplateName: r.promptTemplateName,
     }));
   } catch (e: any) {
     message.error('加载审核标准失败：' + (e?.message || e));
@@ -102,7 +130,8 @@ onMounted(async () => {
 });
 
 function onChange(val: any) {
-  const ids = Array.isArray(val) ? val : [];
+  const ids = toStandardIds(val);
+  activePanels.value = ids.map(String);
   emit('update:modelValue', ids);
   emit('change', ids);
   ids.forEach((id) => {

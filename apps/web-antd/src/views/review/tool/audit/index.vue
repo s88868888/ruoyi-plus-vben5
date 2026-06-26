@@ -69,7 +69,7 @@
           </div>
 
           <div v-show="cur === 1" class="step-pane">
-            <div class="pane-tip">选择本次审查使用的审核标准（规则），可多选并预览</div>
+            <div class="pane-tip">选择本次审查使用的审核标准（规则），可预览规则和关注要点</div>
             <StandardPicker v-model="standardIds" />
           </div>
 

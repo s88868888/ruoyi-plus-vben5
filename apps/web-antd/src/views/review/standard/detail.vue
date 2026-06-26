@@ -15,6 +15,7 @@ import {
   FieldNumberOutlined,
   BarChartOutlined,
   ClockCircleOutlined,
+  UserSwitchOutlined,
   ImportOutlined,
   BookOutlined,
   LinkOutlined,
@@ -567,7 +568,10 @@ onUnmounted(() => {
           <div class="header-title-row">
             <span class="header-project-name">
               {{ standardInfo.name }}
-              <Tag color="blue" style="margin-left: 8px;">{{ standardInfo.version }}</Tag>
+              <Tag v-if="standardInfo.promptTemplateName" color="blue" style="margin-left: 8px;">
+                {{ standardInfo.promptTemplateName }}
+              </Tag>
+              <Tag v-else color="default" style="margin-left: 8px;">未设角色</Tag>
               <Tag v-if="standardInfo.isSystem === '1'" color="purple" style="margin-left: 4px;">通用</Tag>
               <Tag v-else color="default" style="margin-left: 4px;">专用</Tag>
             </span>
@@ -598,6 +602,21 @@ onUnmounted(() => {
               <div class="header-metric-body">
                 <div class="header-metric-label">使用次数</div>
                 <div class="header-metric-value">{{ standardInfo.useCount ?? 0 }} 次</div>
+              </div>
+            </div>
+            <div class="header-metric-divider" />
+            <div class="header-metric">
+              <div class="header-metric-icon-wrap header-metric-icon-green">
+                <UserSwitchOutlined />
+              </div>
+              <div class="header-metric-body">
+                <div class="header-metric-label">角色身份</div>
+                <div class="header-metric-value">
+                  <Tag v-if="standardInfo.promptTemplateName" color="blue" class="m-0">
+                    {{ standardInfo.promptTemplateName }}
+                  </Tag>
+                  <Tag v-else color="default" class="m-0">未设角色</Tag>
+                </div>
               </div>
             </div>
             <div class="header-metric-divider" />
@@ -958,6 +977,11 @@ onUnmounted(() => {
 .header-metric-icon-cyan {
   background: #e6fffb;
   color: #13c2c2;
+}
+
+.header-metric-icon-green {
+  background: #f6ffed;
+  color: #52c41a;
 }
 
 .header-metric-icon-purple {

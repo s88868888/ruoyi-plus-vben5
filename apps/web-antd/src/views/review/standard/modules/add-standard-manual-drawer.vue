@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useVbenDrawer } from '@vben/common-ui';
 import {
-  message, Switch, Input, Form, FormItem, Textarea, Divider, Alert,
+  Alert, Divider, Form, FormItem, Input, message, Select, Switch, Textarea,
 } from 'ant-design-vue';
 import { reviewStandardAdd } from '#/api/review/standard';
+import { reviewPromptList } from '#/api/review/prompt';
+import type { ReviewPromptTemplate } from '#/api/review/prompt/model';
 
 const emit = defineEmits<{ reload: [] }>();
 
@@ -14,27 +16,54 @@ const router = useRouter();
 const defaultForm = () => ({
   name: '',
   isSystem: '0',
-  version: 'v1.0',
+  promptTemplateId: undefined as number | string | undefined,
   description: '',
 });
 
 const formData = ref(defaultForm());
+const promptTemplates = ref<ReviewPromptTemplate[]>([]);
+const promptLoading = ref(false);
+
+const roleOptions = computed(() => promptTemplates.value
+  .filter((item) => item.status === '0')
+  .map((item) => ({
+    value: item.id,
+    label: `${item.name}（${item.type}）`,
+  })));
+
+async function loadRoleOptions() {
+  promptLoading.value = true;
+  try {
+    promptTemplates.value = await reviewPromptList();
+  } finally {
+    promptLoading.value = false;
+  }
+}
 
 const [BasicDrawer, drawerApi] = useVbenDrawer({
   title: '手动新增审核标准',
-  onOpenChange: (visible) => {
-    if (!visible) formData.value = defaultForm();
+  onOpenChange: async (visible) => {
+    if (visible) {
+      await loadRoleOptions();
+    } else {
+      formData.value = defaultForm();
+      promptTemplates.value = [];
+    }
   },
   onConfirm: async () => {
     if (!formData.value.name.trim()) {
       message.warning('请输入规范名称');
       return;
     }
+    if (!formData.value.promptTemplateId) {
+      message.warning('请选择角色身份');
+      return;
+    }
     const createdId = await reviewStandardAdd({
       name: formData.value.name,
       type: '1',
       isSystem: formData.value.isSystem,
-      version: formData.value.version || 'v1.0',
+      promptTemplateId: formData.value.promptTemplateId,
       description: formData.value.description,
       status: '0',
     } as any);
@@ -71,11 +100,18 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
             :checked="formData.isSystem === '1'"
             checked-children="是"
             un-checked-children="否"
-            @change="(val: boolean) => (formData.isSystem = val ? '1' : '0')"
+            @change="(val: any) => (formData.isSystem = val ? '1' : '0')"
           />
         </FormItem>
-        <FormItem label="版本号">
-          <Input v-model:value="formData.version" placeholder="如：v1.0" />
+        <FormItem label="角色身份" required>
+          <Select
+            v-model:value="formData.promptTemplateId"
+            show-search
+            placeholder="请选择角色身份"
+            :filter-option="(input: string, option: any) => String(option?.label || '').toLowerCase().includes(input.toLowerCase())"
+            :loading="promptLoading"
+            :options="roleOptions"
+          />
         </FormItem>
         <FormItem label="补充说明（可选）" class="col-span-2">
           <Textarea

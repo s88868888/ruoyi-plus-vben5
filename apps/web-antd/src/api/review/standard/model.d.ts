@@ -4,7 +4,8 @@ export interface ReviewStandard extends BaseEntity {
   id: number | string;
   name: string;
   type: string;
-  version?: string;
+  promptTemplateId?: null | number | string;
+  promptTemplateName?: string;
   description?: string;
   ruleCount?: number;
   useCount?: number;

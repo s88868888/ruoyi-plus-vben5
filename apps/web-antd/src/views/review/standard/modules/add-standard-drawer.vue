@@ -13,6 +13,8 @@ import {
   batchAddStandardRules,
   type ParsedRule,
 } from '#/api/review/standard';
+import { reviewPromptList } from '#/api/review/prompt';
+import type { ReviewPromptTemplate } from '#/api/review/prompt/model';
 import { uploadApi } from '#/api/core/upload';
 import { commonDownloadExcel } from '#/utils/file/download';
 
@@ -26,16 +28,13 @@ const parseProgress = ref('');
 const formData = ref({
   name: '',
   isSystem: '0' as string,
+  promptTemplateId: undefined as number | string | undefined,
   description: '',
 });
 
 const parsedRules = ref<(ParsedRule & { id: number })[]>([]);
-
-const severityMap: Record<string, { label: string; color: string }> = {
-  must: { label: '严重', color: 'red' },
-  should: { label: '警告', color: 'orange' },
-  suggest: { label: '提示', color: 'blue' },
-};
+const promptTemplates = ref<ReviewPromptTemplate[]>([]);
+const promptLoading = ref(false);
 
 const severityOptions = [
   { label: '严重', value: 'must' },
@@ -67,13 +66,30 @@ const ruleStats = computed(() => ({
   suggest: parsedRules.value.filter((r) => r.severity === 'suggest').length,
 }));
 
+const roleOptions = computed(() => promptTemplates.value
+  .filter((item) => item.status === '0')
+  .map((item) => ({
+    value: item.id,
+    label: `${item.name}（${item.type}）`,
+  })));
+
+async function loadRoleOptions() {
+  promptLoading.value = true;
+  try {
+    promptTemplates.value = await reviewPromptList();
+  } finally {
+    promptLoading.value = false;
+  }
+}
+
 function resetState() {
   currentStep.value = 0;
   fileList.value = [];
   parsing.value = false;
   parseProgress.value = '';
-  formData.value = { name: '', isSystem: '0', description: '' };
+  formData.value = { name: '', isSystem: '0', promptTemplateId: undefined, description: '' };
   parsedRules.value = [];
+  promptTemplates.value = [];
 }
 
 function getExt(name: string) {
@@ -145,12 +161,20 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
     return `新增审核标准 - ${stepNames[currentStep.value]}`;
   }),
   onOpenChange: (visible) => {
-    if (!visible) resetState();
+    if (visible) {
+      loadRoleOptions();
+    } else {
+      resetState();
+    }
   },
   onConfirm: async () => {
     if (currentStep.value === 0) {
       if (!formData.value.name.trim()) {
         message.warning('请输入规范名称');
+        return;
+      }
+      if (!formData.value.promptTemplateId) {
+        message.warning('请选择角色身份');
         return;
       }
       const ok = await runParse();
@@ -166,7 +190,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
       type: '1',
       isSystem: formData.value.isSystem,
       description: formData.value.description,
-      version: 'v1.0',
+      promptTemplateId: formData.value.promptTemplateId,
       status: '0',
     } as any);
     if (createdId) {
@@ -219,7 +243,17 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
                 :checked="formData.isSystem === '1'"
                 checked-children="是"
                 un-checked-children="否"
-                @change="(val: boolean) => (formData.isSystem = val ? '1' : '0')"
+                @change="(val: any) => (formData.isSystem = val ? '1' : '0')"
+              />
+            </FormItem>
+            <FormItem label="角色身份" required>
+              <Select
+                v-model:value="formData.promptTemplateId"
+                show-search
+                placeholder="请选择角色身份"
+                :filter-option="(input: string, option: any) => String(option?.label || '').toLowerCase().includes(input.toLowerCase())"
+                :loading="promptLoading"
+                :options="roleOptions"
               />
             </FormItem>
             <FormItem label="补充说明（可选）" class="col-span-2">
@@ -236,7 +270,7 @@ const [BasicDrawer, drawerApi] = useVbenDrawer({
                 :file-list="fileList"
                 :before-upload="beforeUpload"
                 :max-count="1"
-                @remove="() => (fileList = [])"
+                @remove="() => { fileList = []; }"
               >
                 <p class="ant-upload-drag-icon"><InboxOutlined /></p>
                 <p class="ant-upload-text">点击或拖拽规范文件到此区域</p>

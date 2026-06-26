@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
-import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, Badge, message } from 'ant-design-vue';
+import { Badge, Button, Dropdown, Menu, MenuItem, Modal, Space, Tag } from 'ant-design-vue';
 import { EllipsisOutlined, PlusOutlined, ThunderboltOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -16,9 +16,6 @@ import AddStandardManualDrawer from './modules/add-standard-manual-drawer.vue';
 import AddStandardDrawer from './modules/add-standard-drawer.vue';
 import EditStandardDrawer from './modules/edit-standard-drawer.vue';
 import { reviewStandardList, reviewStandardRemove } from '#/api/review/standard';
-import { DictEnum } from '@vben/constants';
-import { getDictOptions } from '#/utils/dict';
-import { renderDict } from '#/utils/render';
 
 const router = useRouter();
 const tablePreference = useListTablePreference();
@@ -97,6 +94,14 @@ const gridOptions: VxeGridProps = {
       width: 90,
       align: 'center',
       slots: { default: 'ruleCount' },
+    },
+    {
+      field: 'promptTemplateName',
+      title: '角色身份',
+      minWidth: 160,
+      headerAlign: 'left',
+      align: 'left',
+      slots: { default: 'roleIdentity' },
     },
     {
       field: 'useCount',
@@ -252,7 +257,6 @@ function handleDisable(row: any) {
                   class="doc-name-text cursor-pointer hover:underline"
                   @click="handleViewDetail(row)"
                 >{{ row.name }}</span>
-                <span class="text-xs text-gray-400">{{ row.version }}</span>
                 <Tag v-if="row.isSystem === '1'" color="purple" class="m-0">通用</Tag>
                 <Tag v-else color="default" class="m-0">专用</Tag>
               </div>
@@ -260,6 +264,13 @@ function handleDisable(row: any) {
                 {{ row.description }}
               </div>
             </div>
+          </template>
+
+          <template #roleIdentity="{ row }">
+            <Tag v-if="row.promptTemplateName" color="blue" class="m-0">
+              {{ row.promptTemplateName }}
+            </Tag>
+            <Tag v-else color="default" class="m-0">未设角色</Tag>
           </template>
 
           <template #ruleCount="{ row }">

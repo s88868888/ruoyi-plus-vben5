@@ -38,7 +38,7 @@ async function loadStandardOptions() {
     const res = await reviewStandardList({ pageSize: 100 });
     standardOptions.value = (res.rows || []).map((item) => ({
       value: item.id,
-      label: item.name + (item.version ? ` ${item.version}` : ''),
+      label: item.name + (item.promptTemplateName ? `（${item.promptTemplateName}）` : ''),
       ruleCount: item.ruleCount,
     }));
   } catch {
