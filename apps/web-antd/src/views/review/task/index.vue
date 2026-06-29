@@ -6,8 +6,8 @@ import { useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
 
-import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tooltip, message } from 'ant-design-vue';
-import { DiffOutlined, EllipsisOutlined, FileSearchOutlined, ExportOutlined, ImportOutlined } from '@ant-design/icons-vue';
+import { Button, Dropdown, Menu, MenuItem, Modal, Space, Tag, Tooltip, message } from 'ant-design-vue';
+import { DiffOutlined, EllipsisOutlined, EyeInvisibleOutlined, FileSearchOutlined, ExportOutlined, ImportOutlined } from '@ant-design/icons-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { useListTablePreference } from '#/preferences/userPreference';
@@ -96,6 +96,24 @@ function tooltipDotStyle(color: string) {
 
 function isCompareTask(row: any) {
   return String(row?.taskType || '').toUpperCase().includes('COMPARE');
+}
+
+function isRedactTask(row: any) {
+  return String(row?.taskType || '').toUpperCase().includes('REDACT');
+}
+
+function redactStatusTag(row: any) {
+  const status = String(row?.status || '').toLowerCase();
+  if (status === 'completed') return { color: 'success', text: '定位完成' };
+  if (status === 'reviewing' || status === 'running') return { color: 'processing', text: '定位中' };
+  if (status === 'failed' || status === 'fail') return { color: 'error', text: '定位失败' };
+  return { color: 'warning', text: '待定位' };
+}
+
+function viewActionText(row: any) {
+  if (isCompareTask(row)) return '查看对比';
+  if (isRedactTask(row)) return '查看脱敏';
+  return '查看审核';
 }
 
 const loading = ref(false);
@@ -198,7 +216,7 @@ const [BasicTable, tableApi] = useVbenVxeGrid({
 } as any);
 
 function handleView(row: any) {
-  // 工具任务（附件对比 / 内容审查）→ 跳对应向导页并带 taskId，直接打开查看器。
+  // 工具任务（附件对比 / 内容审查 / 文件脱敏）→ 跳对应向导页并带 taskId，直接打开查看器。
   // taskType 兼作提示词模板类型，可能是 Document_Review 等自定义值，故：
   // 含 COMPARE → 对比；含 AUDIT 或来源是 AI 工具（OA_AI_TOOL/CS_AI_TOOL/AI_TOOL）→ 内容审查。
   const type = String(row.taskType || '').toUpperCase();
@@ -206,6 +224,10 @@ function handleView(row: any) {
   const isTool = source.includes('AI_TOOL');
   if (type.includes('COMPARE')) {
     router.push(`/review/tool/compare?taskId=${row.id}&fullscreen=1`);
+    return;
+  }
+  if (type.includes('REDACT')) {
+    router.push(`/review/tool/redact?taskId=${row.id}&fullscreen=1`);
     return;
   }
   if (type.includes('AUDIT') || isTool) {
@@ -224,8 +246,13 @@ function handleReviewDetail(row: any) {
 }
 
 // 顶部「做对比 / 审核分析」按钮：跳工具向导页
-function goTool(kind: 'audit' | 'compare') {
-  router.push(kind === 'compare' ? '/review/tool/compare' : '/review/tool/audit');
+function goTool(kind: 'audit' | 'compare' | 'redact') {
+  const pathMap = {
+    audit: '/review/tool/audit',
+    compare: '/review/tool/compare',
+    redact: '/review/tool/redact',
+  };
+  router.push(pathMap[kind]);
 }
 
 function handleDelete(row: any) {
@@ -243,8 +270,9 @@ function handleDelete(row: any) {
 }
 
 function handleExecute(row: any) {
+  const actionText = isCompareTask(row) ? '开始比对' : '执行审核';
   Modal.confirm({
-    title: `确认执行审核【${row.taskName}】吗？`,
+    title: `确认${actionText}【${row.taskName}】吗？`,
     okText: '确认',
     cancelText: '取消',
     async onOk() {
@@ -361,6 +389,10 @@ async function handleImportFile(e: Event) {
               <FileSearchOutlined />
               审核分析
             </Button>
+            <Button @click="goTool('redact')">
+              <EyeInvisibleOutlined />
+              文件脱敏
+            </Button>
           </Space>
           <input
             ref="importInputRef"
@@ -379,10 +411,20 @@ async function handleImportFile(e: Event) {
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
                 <span class="doc-name-text">{{ row.taskName }}</span>
-                <component :is="renderDict(row.status, DictEnum.REVIEW_TASK_STATUS)" />
+                <Tag
+                  v-if="isRedactTask(row)"
+                  class="tag-sm"
+                  :color="redactStatusTag(row).color"
+                >
+                  {{ redactStatusTag(row).text }}
+                </Tag>
+                <component v-else :is="renderDict(row.status, DictEnum.REVIEW_TASK_STATUS)" />
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-400">
-                <span v-if="isCompareTask(row) && row.status === 'completed'" class="compare-status-tag">
+                <span v-if="isRedactTask(row) && row.status === 'completed'" class="compare-status-tag">
+                  定位完成
+                </span>
+                <span v-else-if="isCompareTask(row) && row.status === 'completed'" class="compare-status-tag">
                   已比对
                 </span>
                 <component v-else-if="row.passStatus" :is="renderDict(row.passStatus, DictEnum.REVIEW_PASS_STATUS)" />
@@ -392,7 +434,7 @@ async function handleImportFile(e: Event) {
           </template>
 
           <template #issueCount="{ row }">
-            <span v-if="isCompareTask(row)" class="text-gray-400">-</span>
+            <span v-if="isCompareTask(row) || isRedactTask(row)" class="text-gray-400">-</span>
             <Tooltip
               v-else-if="(row.errorCount || 0) + (row.warningCount || 0) + (row.infoCount || 0) > 0"
               placement="top"
@@ -424,7 +466,7 @@ async function handleImportFile(e: Event) {
 
           <template #standardNames="{ row }">
             <span v-if="isCompareTask(row)" class="text-gray-400">无需选择</span>
-            <span v-else>{{ row.standardNames || '-' }}</span>
+            <span v-else>{{ row.standardNames || (isRedactTask(row) ? '关注点定位' : '-') }}</span>
           </template>
 
           <template #reviewVersion="{ row }">
@@ -447,16 +489,19 @@ async function handleImportFile(e: Event) {
 
           <template #action="{ row }">
             <Space>
-              <ghost-button v-if="row.status === 'completed'" @click.stop="handleView(row)">
-                查看
+              <ghost-button
+                v-if="row.status === 'completed' || isCompareTask(row) || isRedactTask(row)"
+                @click.stop="handleView(row)"
+              >
+                {{ viewActionText(row) }}
               </ghost-button>
-              <ghost-button v-if="row.status === 'pending'" @click.stop="handleExecute(row)">
+              <ghost-button v-else-if="row.status === 'pending'" @click.stop="handleExecute(row)">
                 执行审核
               </ghost-button>
               <Dropdown placement="bottomRight">
                 <template #overlay>
                   <Menu @click="({ key }: any) => handleActionMenuClick(key, row)">
-                    <MenuItem v-if="row.status === 'completed'" key="review-detail">
+                    <MenuItem v-if="row.status === 'completed' && !isRedactTask(row)" key="review-detail">
                       审核详情
                     </MenuItem>
                     <MenuItem key="delete">

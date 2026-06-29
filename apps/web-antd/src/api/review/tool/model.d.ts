@@ -39,7 +39,7 @@ export interface ToolFocusKeyword {
 export interface ReviewToolResult {
   id: string;
   reviewTaskId: number;
-  /** COMPARE 双文档对比 / AUDIT 单文档内容审查 */
+  /** COMPARE 双文档对比 / AUDIT 单文档内容审查 / REDACT 文件脱敏 */
   reviewtype: string;
   /** PENDING/RUNNING/SUCCESS/FAIL */
   status: string;
@@ -75,7 +75,7 @@ export interface ReviewToolResult {
 /** 工具建任务参数（复用 /review/task/createAndExecute） */
 export interface ToolCreateTaskParams {
   taskName: string;
-  /** ATTACHMENT_COMPARE（对比）/ CONTENT_AUDIT（审查） */
+  /** ATTACHMENT_COMPARE（对比）/ CONTENT_AUDIT（审查）/ FILE_REDACT（脱敏） */
   taskType: string;
   sourceType?: string;
   standardIds: (number | string)[];

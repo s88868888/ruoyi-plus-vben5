@@ -7,10 +7,10 @@
   <div class="ca-viewer">
     <div class="ca-toolbar">
       <span class="ca-label">
-        <Tag color="default" class="side-tag audit-tag">审</Tag>
-        <span class="ca-title" :title="displayDocLabel">内容审查：{{ displayDocLabel }}</span>
-        <Tag v-if="status === 'RUNNING'" color="warning">审核中…</Tag>
-        <Tag v-else-if="status === 'FAIL'" color="error">审核失败</Tag>
+        <Tag color="default" class="side-tag audit-tag">{{ isRedactMode ? '脱敏' : '审' }}</Tag>
+        <span class="ca-title" :title="displayDocLabel">{{ isRedactMode ? '文件脱敏' : '内容审查' }}：{{ displayDocLabel }}</span>
+        <Tag v-if="status === 'RUNNING'" color="warning">{{ isRedactMode ? '定位中…' : '审核中…' }}</Tag>
+        <Tag v-else-if="status === 'FAIL'" color="error">{{ isRedactMode ? '定位失败' : '审核失败' }}</Tag>
         <span v-if="ocrTip" class="ca-ocr">
           <LoadingOutlined v-if="ocrLoading" spin />{{ ocrTip }}
         </span>
@@ -23,6 +23,7 @@
           <button class="tb-btn" @click="zoom(0.1)" title="放大">＋</button>
         </span>
         <Button
+          v-if="!isRedactMode"
           type="link"
           size="small"
           class="ca-action-link"
@@ -32,6 +33,7 @@
           <span>{{ listPanelOpen ? '收起清单' : '差异清单' }}</span>
         </Button>
         <Button
+          v-if="!isRedactMode"
           type="link"
           size="small"
           class="ca-action-link"
@@ -44,6 +46,7 @@
           <span>打印</span>
         </Button>
         <Button
+          v-if="canUseRedact"
           type="link"
           size="small"
           class="ca-action-link"
@@ -67,7 +70,7 @@
 
     <div ref="bodyRef" class="ca-body">
       <svg
-        v-if="issueConn && listPanelOpen && activeListTab === 'issues'"
+        v-if="!isRedactMode && issueConn && listPanelOpen && activeListTab === 'issues'"
         class="issue-conn-overlay"
         :width="issueConn.w"
         :height="issueConn.h"
@@ -101,7 +104,7 @@
 
       <div v-show="listPanelOpen" class="ca-list">
         <!-- Tab 切换：异常清单 / 关注列表 -->
-        <div class="ca-list-tabs">
+        <div v-if="!isRedactMode && canUseRedact" class="ca-list-tabs">
           <button
             class="ca-tab-btn"
             :class="{ active: activeListTab === 'issues' }"
@@ -121,7 +124,7 @@
         </div>
 
         <!-- ============ Tab 1: 异常清单 ============ -->
-        <template v-if="activeListTab === 'issues'">
+        <template v-if="!isRedactMode && activeListTab === 'issues'">
 
         <!-- 严重程度过滤（与附件对比 AI 面板一致：严重/警告/提示） -->
         <div v-if="items.length && ready" class="ca-filter">
@@ -222,7 +225,7 @@
         </template>
 
         <!-- ============ Tab 2: 关注列表 ============ -->
-        <template v-if="activeListTab === 'focus'">
+        <template v-if="canUseRedact && activeListTab === 'focus'">
           <!-- 定位状态过滤（全部 / 已定位 / 缺漏），与异常清单过滤条样式一致 -->
           <div v-if="focusEntries.length && ready" class="ca-filter">
             <button
@@ -308,6 +311,7 @@
 
     <!-- 查看规则：展示该审核任务实际使用的规则库（按 taskId 透传引擎规则） -->
     <Modal
+      v-if="!isRedactMode"
       v-model:open="rulesDialog"
       title="AI 审核规则"
       :width="780"
@@ -378,6 +382,8 @@ import { exportAnnotatedPdf } from '#/utils/exportAnnotatedPdf'
 import { saveIssueNote, saveRedactData, getToolRules, getOcrStatus } from '#/api/review/tool'
 
 const props = defineProps({
+  // audit=内容审查；redact=文件脱敏，只显示关注列表和脱敏导出，不显示异常清单。
+  viewerMode: { type: String, default: 'audit' },
   // 本地审核任务ID（cs_biz_ai_review.id），保存批注时回写用；为空则保存按钮禁用
   taskId: { type: [String, Number], default: '' },
   docUrl: { type: String, default: '' },
@@ -391,11 +397,16 @@ const props = defineProps({
   focusItems: { type: Array, default: () => [] },
   // 关注要点列表：规则库中 focusEnabled=1 且填写要点的 [{keyword,category}]（前端按要点生成列表与缺漏占位）
   focusKeywords: { type: Array, default: () => [] },
+  // 内容审核中是否展示关注定位+脱敏；文件脱敏模式始终展示。
+  redactEnabled: { type: Boolean, default: true },
   // 已保存的手动脱敏框 JSON（仅保存用户手动框）
   redactData: { type: String, default: '' },
   status: { type: String, default: '' }
 })
 const emit = defineEmits(['close', 'reanalyze', 'redact-saved'])
+
+const isRedactMode = computed(() => props.viewerMode === 'redact')
+const canUseRedact = computed(() => isRedactMode.value || props.redactEnabled !== false)
 
 function normalizeDocLabel(value) {
   const s = String(value || '').trim()
@@ -661,7 +672,7 @@ let mo = null
 let moDebounce = null
 
 // ===== 右侧面板 Tab：异常清单 / 关注列表 =====
-const activeListTab = ref('issues')
+const activeListTab = ref(isRedactMode.value ? 'focus' : 'issues')
 const issueEmptyText = computed(() => props.status === 'RUNNING' ? '审核中，请稍候…' : '暂无异常（或尚未审查，点右上角【重新审查】）')
 
 // ===== 关注列表：要点粒度 + 定位 =====
@@ -731,6 +742,7 @@ function focusCategoryKey(entry) {
 // - 完全无命中 → "文中未提及"缺漏占位（idx=-1）
 // - idx 指向 props.focusItems 原始下标，供 gotoFocus/高亮/focusLocatedPos 复用
 const focusEntries = computed(() => {
+  if (!canUseRedact.value) return []
   const items = props.focusItems || []
   const keywords = props.focusKeywords || []
   const usedIdx = new Set()
@@ -1013,6 +1025,17 @@ watch(activeListTab, () => {
   issueConn.value = null
   if (docBytes.value) scheduleLocate()
 })
+
+watch([isRedactMode, canUseRedact], ([redactMode, enabled]) => {
+  if (redactMode) {
+    listPanelOpen.value = true
+    activeListTab.value = 'focus'
+    return
+  }
+  if (!enabled && activeListTab.value === 'focus') {
+    activeListTab.value = 'issues'
+  }
+}, { immediate: true })
 
 watch([listPanelOpen, severityFilter, filteredItems], () => {
   nextTick(scheduleIssueConn)
@@ -1419,7 +1442,7 @@ function scheduleLocate() {
       else calibrateAuditAlign()
     }
     // 只渲染当前 Tab 对应的高亮，避免两套高亮叠加（互相覆盖颜色）
-    if (activeListTab.value === 'focus') {
+    if (canUseRedact.value && (isRedactMode.value || activeListTab.value === 'focus')) {
       locateFocusItems()
     } else {
       locateIssues()
@@ -1440,7 +1463,7 @@ function setupTextLayerObserver() {
     moDebounce = setTimeout(() => {
       if (!viewerActive) return
       if (hasTextLayerSource.value) applyAuditAlign()
-      if (activeListTab.value === 'focus') locateFocusItems()
+      if (canUseRedact.value && (isRedactMode.value || activeListTab.value === 'focus')) locateFocusItems()
       else locateIssues()
       scheduleIssueConn()
     }, 100)
@@ -1809,6 +1832,7 @@ function rectsToBoxes(pageRects) {
   return rectGroupsToBoxes(byPage)
 }
 function openRedact() {
+  if (!canUseRedact.value) return
   if (!docBytes.value) { message.warning('文档尚未就绪'); return }
   let valueBoxes = []
   try {

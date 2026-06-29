@@ -1,22 +1,21 @@
 <!--
-  内容审查向导（独立工具）。步骤：①上传被审文件 ②选择规则 ③填写基准值(开始审查) ④审查结果
-  ③点「开始审查」→ toolCreateAndExecute(taskType=CONTENT_AUDIT, formSnapshot=基准值JSON) → 轮询 getToolResult。
-  出 SUCCESS → 「查看结果」打开内容审查查看器(全屏 Drawer)。
+  文件脱敏向导（独立工具）。步骤：①上传待脱敏文件 ②选择关注点(开始定位) ③脱敏结果。
+  后端 taskType=FILE_REDACT，只提取 focus_items，不保存审核异常明细、不评分。
 -->
 <template>
   <div v-if="resultFullscreenActive" class="tool-result-fullscreen">
     <ContentAuditViewer
       v-if="resultStatus === 'success' && result"
+      viewer-mode="redact"
       :task-id="result.id || ''"
       :doc-url="result.signFileUrl || ''"
       :doc-searchable-url="result.signSearchableUrl || ''"
       :doc-oss-id="result.signOssId || null"
       :doc-ocr-status="result.signOcrStatus || ''"
-      :doc-label="auditDocLabel"
-      :issues="result.issues || []"
+      :doc-label="docLabel"
+      :issues="[]"
       :focus-items="result.focusItems || []"
       :focus-keywords="result.focusKeywords || []"
-      :redact-enabled="contentAuditRedactEnabled"
       :redact-data="result.redactData || ''"
       :status="result.status || ''"
       @close="closeResultFullscreen"
@@ -25,8 +24,8 @@
     <div v-else class="tool-result-state">
       <div v-if="resultStatus === 'running'" class="result-loading">
         <LoadingOutlined spin class="rl-spin" />
-        <div class="rl-title">AI 正在审查中…</div>
-        <div class="rl-sub">每 5 秒自动刷新一次，您也可以立即刷新</div>
+        <div class="rl-title">AI 正在定位关注点...</div>
+        <div class="rl-sub">完成后可直接查看定位结果，并导出不可逆脱敏件</div>
         <Button type="link" :loading="checking" class="rl-now" @click="checkNow">
           立即刷新
         </Button>
@@ -34,8 +33,8 @@
       <Result
         v-else
         status="error"
-        title="审查失败"
-        :sub-title="resultError || 'AI 审核执行失败，请稍后在审核任务列表重试'"
+        title="定位失败"
+        :sub-title="resultError || '关注点定位失败，请稍后重试'"
       >
         <template #extra>
           <Button @click="goList">返回审核任务列表</Button>
@@ -54,10 +53,10 @@
       <ReviewWizard
         v-model:current="current"
         :steps="steps"
-        :action-step="2"
+        :action-step="1"
         :next-disabled="nextDisabled"
         :finish-loading="submitting"
-        finish-text="开始审查"
+        finish-text="开始定位"
         :show-restart="true"
         restart-text="返回审核任务列表"
         @finish="onStart"
@@ -65,27 +64,24 @@
       >
         <template #default="{ current: cur }">
           <div v-show="cur === 0" class="step-pane">
-            <div class="pane-tip">上传需要审查的文档（如合同、协议、申报材料）</div>
-            <SingleFileUpload v-model="docFile" tip="上传被审查文件" />
+            <div class="pane-tip">上传需要脱敏的文件。Word 会自动转 PDF，以便预览和框选。</div>
+            <SingleFileUpload
+              v-model="docFile"
+              accept=".pdf,.docx,.doc"
+              tip="上传待脱敏文件"
+            />
           </div>
 
           <div v-show="cur === 1" class="step-pane">
-            <div class="pane-tip">选择本次审查使用的审核标准（规则），可预览规则和关注要点</div>
-            <StandardPicker v-model="standardIds" />
+            <div class="pane-tip">选择需要定位并脱敏的关注点。这里不会执行内容审核、评分或审批。</div>
+            <FocusPointPicker v-model="focusPoints" v-model:standard-id="standardId" />
           </div>
 
-          <div v-show="cur === 2" class="step-pane">
-            <div class="pane-tip">
-              填写文档应符合的「标准值」，AI 据此判定错填/漏填（可留空，仅按规则审查）
-            </div>
-            <ReferenceEditor v-model="referenceData" />
-          </div>
-
-          <div v-show="cur === 3" class="step-pane result-pane">
+          <div v-show="cur === 2" class="step-pane result-pane">
             <div v-if="resultStatus === 'running'" class="result-loading">
               <LoadingOutlined spin class="rl-spin" />
-              <div class="rl-title">AI 正在审查中…</div>
-              <div class="rl-sub">每 5 秒自动刷新一次，您也可以先返回任务列表稍后查看</div>
+              <div class="rl-title">AI 正在定位关注点...</div>
+              <div class="rl-sub">每 5 秒自动刷新一次，也可以稍后从审核任务列表查看</div>
               <Button type="link" :loading="checking" class="rl-now" @click="checkNow">
                 立即刷新
               </Button>
@@ -93,28 +89,26 @@
             <Result
               v-else-if="resultStatus === 'success'"
               status="success"
-              title="审查完成"
-              sub-title="AI 已完成内容审查，可查看筛查结果"
+              title="关注点定位完成"
+              sub-title="可查看文档定位结果，并导出不可逆脱敏件"
             >
               <template #extra>
                 <Button type="primary" @click="openResultFullscreen">
                   <template #icon><EyeOutlined /></template>
-                  查看结果
+                  查看并脱敏
                 </Button>
               </template>
             </Result>
             <Result
               v-else
               status="error"
-              title="审查失败"
-              :sub-title="resultError || 'AI 审核执行失败，请稍后在审核任务列表重试'"
+              title="定位失败"
+              :sub-title="resultError || '关注点定位失败，请稍后重试'"
             />
           </div>
         </template>
       </ReviewWizard>
     </Card>
-
-    <!-- 内容审查查看器（单文档，全屏 Drawer） -->
   </Page>
 </template>
 
@@ -123,27 +117,28 @@ import type { CSSProperties } from 'vue';
 
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+
 import { Page } from '@vben/common-ui';
+
 import { EyeOutlined, LoadingOutlined } from '@ant-design/icons-vue';
 import { Button, Card, message, Result } from 'ant-design-vue';
-import ReviewWizard from '../components/ReviewWizard.vue';
-import SingleFileUpload from '../components/SingleFileUpload.vue';
-import StandardPicker from '../components/StandardPicker.vue';
-import ReferenceEditor from '../components/ReferenceEditor.vue';
-// @ts-expect-error 查看器为忠实移植的纯 JS SFC（含 pdfjs/canvas 复杂逻辑），不暴露 TS 类型
-import ContentAuditViewer from '../components/ContentAuditViewer.vue';
+
 import { getToolResult, toolCreateAndExecute } from '#/api/review/tool';
 import type { ReviewToolResult } from '#/api/review/tool/model';
-import { configInfoByKey } from '#/api/system/config';
+
+import FocusPointPicker from '../components/FocusPointPicker.vue';
+import ReviewWizard from '../components/ReviewWizard.vue';
+import SingleFileUpload from '../components/SingleFileUpload.vue';
+// @ts-expect-error 查看器为纯 JS SFC（含 pdfjs/canvas 复杂逻辑），不暴露 TS 类型
+import ContentAuditViewer from '../components/ContentAuditViewer.vue';
 
 const router = useRouter();
 const route = useRoute();
 
 const steps = [
-  { title: '上传被审文件' },
-  { title: '选择规则' },
-  { title: '填写基准值' },
-  { title: '审查结果' },
+  { title: '上传文件' },
+  { title: '选择关注点' },
+  { title: '脱敏结果' },
 ];
 
 const wizardCardBodyStyle: CSSProperties = {
@@ -156,8 +151,8 @@ const wizardCardBodyStyle: CSSProperties = {
 
 const current = ref(0);
 const docFile = ref<any>(null);
-const standardIds = ref<any[]>([]);
-const referenceData = ref('');
+const focusPoints = ref<string[]>([]);
+const standardId = ref<any>();
 const submitting = ref(false);
 
 const taskId = ref<any>('');
@@ -166,47 +161,16 @@ const resultStatus = ref<'running' | 'success' | 'fail'>('running');
 const resultError = ref('');
 const checking = ref(false);
 const resultFullscreen = ref(false);
-const leavingFullscreenResult = ref(false);
-const contentAuditRedactEnabled = ref(true);
-const CONTENT_AUDIT_REDACT_CONFIG_KEY = 'review.contentAudit.redact.enabled';
-// 从任务列表「查看」带 taskId 进来：直接看历史结果，成功后自动打开查看器
 const fromHistory = ref(false);
-// 快照读取，不用 computed(route.query)：fullscreen 由进入本 tab 的导航决定，tab 存活期间
-// 不该随路由变。若依赖 route.query，切走 tab 时 route 变→本(被 KeepAlive 缓存的)组件重渲→
-// 根元素在 <Transition out-in> 搬动缓存子树时从 <div> 翻成 <Page>，insertBefore 崩。
-// 不同 query=不同 tabKey=全新实例，故 setup 时快照即正确。
 const fullscreenMode = ref(route.query.fullscreen === '1');
-const resultFullscreenActive = computed(
-  () => leavingFullscreenResult.value || fullscreenMode.value || resultFullscreen.value,
-);
+const resultFullscreenActive = computed(() => fullscreenMode.value || resultFullscreen.value);
 
-function cleanDocLabel(v: any) {
-  const s = String(v || '').trim();
-  return s && s !== '被审查文档' ? s : '';
-}
-const auditDocLabel = computed(
-  () => cleanDocLabel(result.value?.signFileName) || cleanDocLabel(docFile.value?.name) || '',
-);
-
-function parseConfigBool(value: any, fallback = true) {
-  const text = String(value ?? '').trim().toLowerCase();
-  if (!text) return fallback;
-  return !['false', '0', 'n', 'no', 'off'].includes(text);
-}
-
-async function loadContentAuditRedactConfig() {
-  try {
-    const value = await configInfoByKey(CONTENT_AUDIT_REDACT_CONFIG_KEY);
-    contentAuditRedactEnabled.value = parseConfigBool(value, true);
-  } catch {
-    contentAuditRedactEnabled.value = true;
-  }
-}
+const docLabel = computed(() => result.value?.signFileName || docFile.value?.name || '待脱敏文件');
 
 const nextDisabled = computed(() => {
   if (current.value === 0) return !docFile.value;
-  if (current.value === 1) return !standardIds.value.length;
-  return false; // 第③步基准值可留空
+  if (current.value === 1) return !focusPoints.value.length;
+  return false;
 });
 
 function extOf(name: string) {
@@ -218,11 +182,14 @@ async function onStart() {
   submitting.value = true;
   try {
     const id = await toolCreateAndExecute({
-      taskName: `工具-内容审查-${docFile.value.name}`,
-      taskType: 'CONTENT_AUDIT',
+      taskName: `工具-文件脱敏-${docFile.value.name}`,
+      taskType: 'FILE_REDACT',
       sourceType: 'AI_TOOL',
-      standardIds: standardIds.value,
-      formSnapshot: referenceData.value || undefined,
+      standardIds: standardId.value ? [standardId.value] : [],
+      formSnapshot: JSON.stringify({
+        focusPoints: focusPoints.value,
+        standardId: standardId.value || null,
+      }),
       files: [
         {
           ossId: docFile.value.ossId,
@@ -237,10 +204,10 @@ async function onStart() {
     result.value = null;
     resultError.value = '';
     resultStatus.value = 'running';
-    current.value = 3;
+    current.value = 2;
     pollOnce();
   } catch (e: any) {
-    message.error('提交审查失败：' + (e?.message || e));
+    message.error('提交文件脱敏失败：' + (e?.message || e));
   } finally {
     submitting.value = false;
   }
@@ -309,28 +276,21 @@ function onRedactSaved(redactData: string) {
 
 function goList() {
   stopPoll();
-  leavingFullscreenResult.value = resultFullscreenActive.value;
-  router.push('/review/task').catch(() => {
-    leavingFullscreenResult.value = false;
-  });
+  router.push('/review/task');
 }
 
-// 任务列表「查看」带 ?taskId 进来：直接进结果步轮询，成功自动开查看器
-onMounted(async () => {
-  await loadContentAuditRedactConfig();
+onMounted(() => {
   const qid = route.query.taskId;
   if (qid) {
     taskId.value = String(qid);
     resultStatus.value = 'running';
-    current.value = 3;
+    current.value = 2;
     fromHistory.value = true;
     pollOnce();
   }
 });
 
 onBeforeUnmount(stopPoll);
-// KeepAlive 缓存本页：切走时停轮询，避免后台 setTimeout 继续写 result/resultStatus/
-// resultFullscreen，在已脱离文档的缓存子树上触发 patch。重新激活时若仍在审查中再续轮询。
 onDeactivated(stopPoll);
 onActivated(() => {
   if (taskId.value && resultStatus.value === 'running') pollOnce();
@@ -381,8 +341,7 @@ onActivated(() => {
 .step-pane :deep(.single-upload) {
   flex: 0 1 340px;
 }
-.step-pane :deep(.std-picker),
-.step-pane :deep(.ref-editor) {
+.step-pane :deep(.focus-picker) {
   max-height: 100%;
   overflow: auto;
 }
@@ -401,7 +360,7 @@ onActivated(() => {
 }
 .rl-spin {
   font-size: 42px;
-  color: #52c41a;
+  color: #1677ff;
 }
 .rl-title {
   font-size: 17px;
