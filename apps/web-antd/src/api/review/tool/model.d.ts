@@ -39,6 +39,8 @@ export interface ToolFocusKeyword {
 export interface ReviewToolResult {
   id: string;
   reviewTaskId: number;
+  /** AI_TOOL 为审核系统内置工具；其他值多为外部平台任务 */
+  sourceType?: string;
   /** COMPARE 双文档对比 / AUDIT 单文档内容审查 / REDACT 文件脱敏 */
   reviewtype: string;
   /** PENDING/RUNNING/SUCCESS/FAIL */

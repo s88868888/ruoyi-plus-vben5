@@ -16,7 +16,7 @@
       :issues="result.issues || []"
       :focus-items="result.focusItems || []"
       :focus-keywords="result.focusKeywords || []"
-      :redact-enabled="contentAuditRedactEnabled"
+      :redact-enabled="resultRedactEnabled"
       :redact-data="result.redactData || ''"
       :status="result.status || ''"
       @close="closeResultFullscreen"
@@ -187,6 +187,10 @@ function cleanDocLabel(v: any) {
 const auditDocLabel = computed(
   () => cleanDocLabel(result.value?.signFileName) || cleanDocLabel(docFile.value?.name) || '',
 );
+const resultRedactEnabled = computed(() => {
+  const sourceType = String(result.value?.sourceType || '').toUpperCase();
+  return sourceType === 'AI_TOOL' ? contentAuditRedactEnabled.value : true;
+});
 
 function parseConfigBool(value: any, fallback = true) {
   const text = String(value ?? '').trim().toLowerCase();
