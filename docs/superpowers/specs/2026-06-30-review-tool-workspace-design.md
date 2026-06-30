@@ -1,129 +1,135 @@
-# AI Review Tool Workspace Design
+# AI 审核工具工作台设计
 
-Date: 2026-06-30
-Project: `apps/web-antd`
+日期：2026-06-30
+项目：`apps/web-antd`
 
-## Goal
+## 目标
 
-Add an independent AI review tool workspace route without changing the existing wizard routes:
+新增一个独立的 AI 审核工具工作台路由，不改动现有步骤条向导页。
 
-- Existing routes stay available: `/review/tool/compare`, `/review/tool/audit`, `/review/tool/redact`.
-- New route: `/review/tool/workspace`.
-- The new route starts with three centered tool cards: attachment compare, content audit, and file redact.
-- Clicking a card opens the matching workspace in the same route and does not navigate to the step wizard pages.
+- 现有页面继续保留：`/review/tool/compare`、`/review/tool/audit`、`/review/tool/redact`。
+- 新增页面：`/review/tool/workspace`。
+- 新页面首屏居中展示三个不同颜色的工具盒子：附件对比、内容审核、文件脱敏。
+- 点击工具盒子后，在当前页面内切换到对应工作台，不跳转到现有步骤条页面。
 
-## User Flows
+## 使用流程
 
-### Entry
+### 工具入口
 
-`/review/tool/workspace` shows three colored cards in the center of the page:
+`/review/tool/workspace` 首屏展示三个工具盒子：
 
-- Attachment Compare
-- Content Audit
-- File Redact
+- 附件对比
+- 内容审核
+- 文件脱敏
 
-Each card switches the local workspace mode. A back action returns to the card entry state.
+点击盒子后进入对应工作台。工作台提供返回入口，可回到三个盒子的选择页。
 
-### Attachment Compare
+### 附件对比
 
-The workspace shows a viewer-style surface with two upload panes:
+进入后直接展示预览器式工作台：
 
-- Left: upload base file.
-- Right: upload compare file.
+- 左侧上传基准文件。
+- 右侧上传对比文件。
 
-Top-right actions:
+右上角操作：
 
-- Import Project
-- Export Project
-- Start Compare, then Recompare after a task exists
+- 导入工程文件
+- 导出工程文件
+- 开始对比；已有任务后显示重新对比
 
-On start, create an `ATTACHMENT_COMPARE` task through `toolCreateAndExecute`, poll `getToolResult`, show loading while the task is pending/running, and render the existing `FileDiffViewer` when the result is `SUCCESS`.
+点击开始对比后，通过 `toolCreateAndExecute` 创建 `ATTACHMENT_COMPARE` 任务，轮询 `getToolResult`。任务执行中展示 loading，成功后使用现有 `FileDiffViewer` 展示对比结果。
 
-### Content Audit
+### 内容审核
 
-The workspace shows a single document upload area plus review controls:
+进入后展示单文档工作台：
 
-- Upload file in the center.
-- Select review rules.
-- Optional reference values can be left empty.
+- 中间上传待审核文件。
+- 选择规则。
+- 可填写基准值；基准值允许为空。
 
-Top-right actions:
+右上角操作：
 
-- Import Project
-- Export Project
-- Start Audit, then Reaudit after a task exists
+- 导入工程文件
+- 导出工程文件
+- 开始审核；已有任务后显示重新审核
 
-On start, create a `CONTENT_AUDIT` task, poll `getToolResult`, show loading, and render the existing `ContentAuditViewer` when the result is `SUCCESS`.
+点击开始审核后，创建 `CONTENT_AUDIT` 任务，轮询 `getToolResult`。任务执行中展示 loading，成功后使用现有 `ContentAuditViewer` 展示审核结果。
 
-### File Redact
+### 文件脱敏
 
-File redact uses the same single-document workspace shape as content audit:
+文件脱敏与内容审核使用相同的单文档工作台结构：
 
-- Upload file in the center.
-- Select focus points.
+- 中间上传待脱敏文件。
+- 选择关注点。
 
-Top-right actions:
+右上角操作：
 
-- Import Project
-- Export Project
-- Start Redact, then Reredact after a task exists
+- 导入工程文件
+- 导出工程文件
+- 开始脱敏；已有任务后显示重新脱敏
 
-On start, create a `FILE_REDACT` task, poll `getToolResult`, show loading, and render `ContentAuditViewer` in redact mode when the result is `SUCCESS`.
+点击开始脱敏后，创建 `FILE_REDACT` 任务，轮询 `getToolResult`。任务执行中展示 loading，成功后使用 `ContentAuditViewer` 的脱敏模式展示结果。
 
-## Architecture
+## 技术设计
 
-Implement a new workspace page under `apps/web-antd/src/views/review/tool/workspace/index.vue`.
+新增页面文件：
 
-Reuse existing components and APIs:
+- `apps/web-antd/src/views/review/tool/workspace/index.vue`
 
-- `SingleFileUpload` for uploads and Word-to-PDF conversion.
-- `StandardPicker` for content audit rule selection.
-- `ReferenceEditor` for optional content audit reference values.
-- `FocusPointPicker` for file redact focus selection.
-- `FileDiffViewer` for attachment compare results.
-- `ContentAuditViewer` for content audit and file redact results.
-- `toolCreateAndExecute` and `getToolResult` for task lifecycle.
-- `reviewTaskExport` and `reviewTaskImport` for project package export/import.
+复用现有组件和接口：
 
-Keep result viewers mostly untouched. The new page composes them from the outside instead of adding upload/start controls inside viewer internals.
+- `SingleFileUpload`：文件上传和 Word 转 PDF。
+- `StandardPicker`：内容审核规则选择。
+- `ReferenceEditor`：内容审核基准值编辑。
+- `FocusPointPicker`：文件脱敏关注点选择。
+- `FileDiffViewer`：附件对比结果展示。
+- `ContentAuditViewer`：内容审核和文件脱敏结果展示。
+- `toolCreateAndExecute`、`getToolResult`：任务创建和轮询。
+- `reviewTaskExport`、`reviewTaskImport`：工程文件导出和导入。
 
-## Project Import And Export
+结果查看器主体尽量不改。新工作台只在外层编排上传、规则/关注点选择、任务启动、轮询、导入导出和结果展示，避免影响现有预览器代码。
 
-Each workspace mode exposes Import Project and Export Project buttons.
+## 工程文件导入导出
 
-- Import accepts a `.zip` project package, calls `reviewTaskImport`, and opens the first returned task result in the current workspace if possible.
-- Export requires a completed or existing task in the current workspace, calls `reviewTaskExport([taskId])`, and downloads the generated zip.
-- If there is no current task to export, show a warning.
+三个工作台都展示导入工程文件、导出工程文件按钮。
 
-## Polling And Error Handling
+- 导入工程文件：选择 `.zip` 工程包，调用 `reviewTaskImport`，成功后在当前工作台打开导入后的第一个任务结果。
+- 导出工程文件：当前工作台已有任务后，调用 `reviewTaskExport([taskId])` 下载 zip。
+- 当前没有任务时点击导出，提示“请先完成一次任务后再导出工程文件”。
 
-- Poll every 5 seconds while the task is not complete.
-- Stop polling on unmount/deactivation.
-- `SUCCESS` renders the viewer.
-- `FAIL` shows a concise failure state with retry available.
-- Upload or missing configuration errors are shown with Ant Design Vue messages.
+## 轮询和异常处理
 
-## Routing
+- 任务未完成时每 5 秒轮询一次。
+- 页面卸载或缓存停用时停止轮询。
+- `SUCCESS` 展示对应查看器。
+- `FAIL` 展示失败状态，并保留重新对比、重新审核或重新脱敏入口。
+- 上传失败、未选择规则、未选择关注点、文件缺失等场景使用 Ant Design Vue `message` 提示。
 
-The new route must be available by path `/review/tool/workspace`.
+## 路由
 
-Because this app primarily receives menu routes from the backend, the page component should also be reachable when a backend menu points to component `review/tool/workspace/index`.
+新增路由路径必须可访问：
 
-Task-list shortcuts for creating new tool tasks will open the new workspace. Existing history result viewing remains on the current wizard-result routes.
+- `/review/tool/workspace`
 
-## Verification
+当前应用主要使用后端菜单动态路由，因此新页面也需要支持后端菜单组件路径：
 
-Manual verification:
+- `review/tool/workspace/index`
 
-- Open `/review/tool/workspace`.
-- Switch between all three cards and back to entry.
-- Upload required files and validate disabled/enabled start actions.
-- Submit one compare task, one audit task, and one redact task against the existing backend.
-- Confirm loading, success viewer, failure state, and re-run buttons.
-- Confirm project export warns before a task exists and downloads after a task exists.
-- Confirm project import accepts zip and opens an imported task result.
+任务列表顶部“附件对比 / 审核分析 / 文件脱敏”的新建入口改为进入新工作台。历史任务查看继续保持现有跳转逻辑，仍然使用已有向导结果页打开查看器。
 
-Automated verification:
+## 验证
 
-- Run the app typecheck or build command used by this repo if available.
-- Run lint for touched frontend files if available.
+手动验证：
+
+- 打开 `/review/tool/workspace`。
+- 三个工具盒子能正常进入对应工作台，并能返回入口页。
+- 附件对比：未上传两个文件时不能开始；上传后可开始对比；执行中展示 loading；成功后展示 `FileDiffViewer`。
+- 内容审核：未上传文件或未选择规则时不能开始；成功后展示 `ContentAuditViewer`。
+- 文件脱敏：未上传文件或未选择关注点时不能开始；成功后展示脱敏模式。
+- 无任务时导出工程文件给出提示；有任务后能下载工程包。
+- 导入 `.zip` 工程包后能打开导入任务结果。
+
+自动验证：
+
+- 运行本项目已有的类型检查或构建命令。
+- 如项目提供 lint 命令，运行与本次改动相关的前端 lint。
