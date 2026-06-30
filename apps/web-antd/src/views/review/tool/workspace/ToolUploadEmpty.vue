@@ -46,6 +46,10 @@ function updateFile(file: null | ToolFile) {
 <style scoped>
 .viewer-upload-empty {
   display: flex;
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: flex-start;
   justify-content: center;
   min-height: 100%;
   padding: 16px 0;

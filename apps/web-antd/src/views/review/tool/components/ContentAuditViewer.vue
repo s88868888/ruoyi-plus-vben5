@@ -4,7 +4,7 @@
        支持导出批注（与附件对比同一套 exportAnnotatedPdf，单文档的被审查文档即对比里的 B 件）。
        染色定位来自审核结果：错填(mismatched)/存疑(uncertain) 按 extractedValue 在 textLayer 检索命中后染色；
        漏填(not_found) 文档里本无文字，只进清单、无法染色。 -->
-  <div class="ca-viewer">
+  <div class="ca-viewer" :class="{ 'list-panel-visible': listPanelOpen }">
     <div class="ca-toolbar">
       <span class="ca-label">
         <Tag color="default" class="side-tag audit-tag">{{ isRedactMode ? '脱敏' : '审' }}</Tag>
@@ -23,11 +23,23 @@
           <button class="tb-btn" @click="zoom(0.1)" title="放大">＋</button>
         </span>
         <Button
+          v-if="isRedactMode"
+          type="link"
+          size="small"
+          class="ca-action-link"
+          :disabled="listActionDisabled"
+          @click="toggleListPanel"
+        >
+          <ProfileOutlined />
+          <span>{{ listPanelOpen ? '隐藏列表' : '关注列表' }}</span>
+        </Button>
+        <Button
           v-if="!isRedactMode"
           type="link"
           size="small"
           class="ca-action-link"
-          @click="listPanelOpen = !listPanelOpen"
+          :disabled="listActionDisabled"
+          @click="toggleListPanel"
         >
           <ProfileOutlined />
           <span>{{ listPanelOpen ? '收起清单' : '差异清单' }}</span>
@@ -38,7 +50,7 @@
           size="small"
           class="ca-action-link"
           :loading="exporting"
-          :disabled="!items.length"
+          :disabled="!items.length || printActionDisabled"
           title="导出被审查文档，异常作为批注嵌入"
           @click="onExportAudit"
         >
@@ -104,7 +116,7 @@
         </div>
       </div>
 
-      <div v-show="listPanelOpen" class="ca-list">
+      <div v-show="listPanelOpen" class="ca-list" :class="{ 'is-tool-empty': emptyListVisible }">
         <!-- Tab 切换：异常清单 / 关注列表 -->
         <div v-if="!isRedactMode && canUseRedact" class="ca-list-tabs">
           <button
@@ -408,6 +420,9 @@ const props = defineProps({
   // 已保存的手动脱敏框 JSON（仅保存用户手动框）
   redactData: { type: String, default: '' },
   emptyListVisible: { type: Boolean, default: false },
+  initialListPanelOpen: { type: Boolean, default: true },
+  listActionDisabled: { type: Boolean, default: false },
+  printActionDisabled: { type: Boolean, default: false },
   redactActionDisabled: { type: Boolean, default: false },
   status: { type: String, default: '' }
 })
@@ -416,6 +431,8 @@ const emit = defineEmits(['close', 'reanalyze', 'redact-saved'])
 const isRedactMode = computed(() => props.viewerMode === 'redact')
 const canUseRedact = computed(() => isRedactMode.value || props.redactEnabled !== false)
 const emptyListVisible = computed(() => props.emptyListVisible)
+const listActionDisabled = computed(() => props.listActionDisabled)
+const printActionDisabled = computed(() => props.printActionDisabled)
 const redactActionDisabled = computed(() => props.redactActionDisabled)
 
 function normalizeDocLabel(value) {
@@ -496,12 +513,18 @@ const docError = ref('')
 const currentIdx = ref(-1)
 const exporting = ref(false)
 // 异常清单面板显示/隐藏（顶部「差异清单」按钮控制）
-const listPanelOpen = ref(true)
+const listPanelOpen = ref(props.initialListPanelOpen)
 // 当前缩放比例（用于顶部缩放控件中间显示百分比）。默认 100%
 const zoomScale = ref(1)
 const zoomPercent = computed(() => (zoomScale.value ? Math.round(zoomScale.value * 100) : 100))
 // 缩放重渲中：盖遮罩，等定位染色完成后撤掉
 const zooming = ref(false)
+
+function toggleListPanel() {
+  if (listActionDisabled.value) return
+  if (isRedactMode.value) activeListTab.value = 'focus'
+  listPanelOpen.value = !listPanelOpen.value
+}
 
 // 本地可编辑清单：从 props.issues 派生，每条带可改写的 note（默认填好摘要，导出即写入）
 const items = ref([])
@@ -1036,16 +1059,27 @@ watch(activeListTab, () => {
   if (docBytes.value) scheduleLocate()
 })
 
-watch([isRedactMode, canUseRedact], ([redactMode, enabled]) => {
-  if (redactMode) {
-    listPanelOpen.value = true
-    activeListTab.value = 'focus'
-    return
-  }
-  if (!enabled && activeListTab.value === 'focus') {
-    activeListTab.value = 'issues'
-  }
-}, { immediate: true })
+watch(
+  () => [
+    props.viewerMode,
+    props.redactEnabled,
+    props.initialListPanelOpen,
+    props.emptyListVisible,
+    props.taskId,
+  ],
+  () => {
+    if (isRedactMode.value) {
+      activeListTab.value = 'focus'
+      listPanelOpen.value = props.emptyListVisible ? false : Boolean(props.initialListPanelOpen)
+      return
+    }
+    if (!canUseRedact.value && activeListTab.value === 'focus') {
+      activeListTab.value = 'issues'
+    }
+    listPanelOpen.value = Boolean(props.initialListPanelOpen)
+  },
+  { immediate: true },
+)
 
 watch([listPanelOpen, severityFilter, filteredItems], () => {
   nextTick(scheduleIssueConn)
@@ -1568,6 +1602,7 @@ async function fitWidth() {
 // ===== 导出批注（与附件对比同一套 exportAnnotatedPdf）=====
 function exportTypeLabel(t) { return { add: '新增', del: '错填', modify: '疑似' }[t] || '审查' }
 async function onExportAudit() {
+  if (printActionDisabled.value) return
   if (exporting.value) return
   if (!docBytes.value) { message.warning('文档尚未就绪'); return }
   if (!items.value.length) { message.warning('暂无可标注的异常'); return }
@@ -1991,9 +2026,20 @@ onActivated(() => {
 .ca-action-link:hover {
   color: #409eff;
 }
+.ca-action-link:disabled,
+.ca-action-link:disabled:hover,
+.ca-action-link.ant-btn-disabled,
+.ca-action-link.ant-btn-disabled:hover {
+  color: #c0c4cc;
+  cursor: not-allowed;
+}
 .ca-action-link :deep(.anticon) {
   font-size: 14px;
   margin-right: 3px;
+}
+.ca-action-link:disabled :deep(.anticon),
+.ca-action-link.ant-btn-disabled :deep(.anticon) {
+  color: #c0c4cc;
 }
 .close-btn {
   margin-left: 4px;

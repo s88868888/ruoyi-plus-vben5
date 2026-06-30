@@ -50,14 +50,13 @@
     <ToolSingleDocPreviewer
       v-else
       v-model:doc-file="docFile"
-      v-model:focus-points="focusPoints"
-      v-model:focus-standard-id="focusStandardId"
       v-model:reference-data="referenceData"
       v-model:standard-ids="standardIds"
       :checking="checking"
       :exporting="exporting"
       :importing="importing"
       :mode="singleMode"
+      :redact-enabled="contentAuditRedactEnabled"
       :result="result"
       :result-error="resultError"
       :result-status="resultStatus"
@@ -68,8 +67,18 @@
       @close-result="backToEntry"
       @export-project="handleExport"
       @import-project="triggerImport"
+      @open-rules="openAuditRules"
       @redact-saved="onRedactSaved"
       @start="startTask"
+    />
+
+    <AuditRuleDialog
+      v-model="standardIds"
+      v-model:open="auditRuleOpen"
+      v-model:reference-data="referenceData"
+      :mode="singleMode"
+      :submitting="submitting"
+      @confirm="confirmAuditRules"
     />
 
     <input
@@ -98,7 +107,9 @@ import { message } from 'ant-design-vue';
 import { reviewTaskExport, reviewTaskImport } from '#/api/review/task';
 import { getToolResult, toolCreateAndExecute } from '#/api/review/tool';
 import type { ReviewToolResult } from '#/api/review/tool/model';
+import { configInfoByKey } from '#/api/system/config';
 
+import AuditRuleDialog from './AuditRuleDialog.vue';
 import ToolComparePreviewer from './ToolComparePreviewer.vue';
 import ToolSingleDocPreviewer from './ToolSingleDocPreviewer.vue';
 
@@ -124,7 +135,7 @@ const tools = [
     title: '内容审核',
   },
   {
-    description: '上传文件并选择关注点，直接在预览器里定位并脱敏导出。',
+    description: '上传文件并选择规则，直接在预览器里定位并脱敏导出。',
     icon: EyeInvisibleOutlined,
     key: 'redact',
     title: '文件脱敏',
@@ -139,8 +150,7 @@ const compareFile = ref<null | ToolFile>(null);
 const docFile = ref<null | ToolFile>(null);
 const standardIds = ref<any[]>([]);
 const referenceData = ref('');
-const focusPoints = ref<string[]>([]);
-const focusStandardId = ref<any>();
+const redactFocusPoints = ref<string[]>([]);
 
 const submitting = ref(false);
 const checking = ref(false);
@@ -152,6 +162,9 @@ const taskId = ref('');
 const result = ref<ReviewToolResult | null>(null);
 const resultStatus = ref<'fail' | 'idle' | 'running' | 'success'>('idle');
 const resultError = ref('');
+const auditRuleOpen = ref(false);
+const contentAuditRedactEnabled = ref(true);
+const CONTENT_AUDIT_REDACT_CONFIG_KEY = 'review.contentAudit.redact.enabled';
 
 const activeTitle = computed(() => {
   return tools.find((item) => item.key === activeTool.value)?.title || '审核工具';
@@ -159,6 +172,21 @@ const activeTitle = computed(() => {
 const singleMode = computed<'audit' | 'redact'>(() =>
   activeTool.value === 'redact' ? 'redact' : 'audit',
 );
+
+function parseConfigBool(value: any, fallback = true) {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (!text) return fallback;
+  return !['false', '0', 'n', 'no', 'off'].includes(text);
+}
+
+async function loadContentAuditRedactConfig() {
+  try {
+    const value = await configInfoByKey(CONTENT_AUDIT_REDACT_CONFIG_KEY);
+    contentAuditRedactEnabled.value = parseConfigBool(value, true);
+  } catch {
+    contentAuditRedactEnabled.value = true;
+  }
+}
 
 function selectTool(key: ToolKey) {
   activeTool.value = key;
@@ -189,8 +217,7 @@ function resetAllInputs() {
   docFile.value = null;
   standardIds.value = [];
   referenceData.value = '';
-  focusPoints.value = [];
-  focusStandardId.value = undefined;
+  redactFocusPoints.value = [];
 }
 
 function resetResult() {
@@ -219,7 +246,8 @@ function canStartTask(tool: ToolKey) {
   if (submitting.value || resultStatus.value === 'running') return false;
   if (tool === 'compare') return !!baseFile.value && !!compareFile.value;
   if (tool === 'audit') return !!docFile.value && standardIds.value.length > 0;
-  return !!docFile.value && focusPoints.value.length > 0;
+  if (tool === 'redact') return !!docFile.value && redactFocusPoints.value.length > 0;
+  return false;
 }
 
 async function startTask() {
@@ -240,6 +268,22 @@ async function startTask() {
   } finally {
     submitting.value = false;
   }
+}
+
+function openAuditRules() {
+  if (activeTool.value !== 'audit' && activeTool.value !== 'redact') return;
+  if (!docFile.value) {
+    message.warning(activeTool.value === 'redact' ? '请先上传待脱敏文件' : '请先上传待审核文件');
+    return;
+  }
+  auditRuleOpen.value = true;
+}
+
+async function confirmAuditRules(ids: any[], focusPoints?: string[]) {
+  standardIds.value = ids;
+  redactFocusPoints.value = focusPoints || [];
+  auditRuleOpen.value = false;
+  await startTask();
 }
 
 function buildTaskPayload(tool: ToolKey) {
@@ -265,11 +309,11 @@ function buildTaskPayload(tool: ToolKey) {
   return {
     files: [taskFile(docFile.value!)],
     formSnapshot: JSON.stringify({
-      focusPoints: focusPoints.value,
-      standardId: focusStandardId.value || null,
+      focusPoints: redactFocusPoints.value,
+      standardId: standardIds.value[0] || null,
     }),
     sourceType: 'AI_TOOL',
-    standardIds: focusStandardId.value ? [focusStandardId.value] : [],
+    standardIds: standardIds.value,
     taskName: `工具-文件脱敏-${docFile.value!.name}`,
     taskType: 'FILE_REDACT',
   };
@@ -402,7 +446,8 @@ onDeactivated(stopPoll);
 onActivated(() => {
   if (taskId.value && resultStatus.value === 'running') pollOnce();
 });
-onMounted(() => {
+onMounted(async () => {
+  await loadContentAuditRedactConfig();
   const queryTool = route.query.tool;
   const tool = Array.isArray(queryTool) ? queryTool[0] : queryTool;
   if (isToolKey(tool)) {

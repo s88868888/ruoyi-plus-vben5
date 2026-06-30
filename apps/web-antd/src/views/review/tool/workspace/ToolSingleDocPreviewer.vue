@@ -9,9 +9,12 @@
     :focus-items="resultStatus === 'success' ? result?.focusItems || [] : []"
     :focus-keywords="resultStatus === 'success' ? result?.focusKeywords || [] : []"
     :issues="resultStatus === 'success' && mode !== 'redact' ? result?.issues || [] : []"
+    :initial-list-panel-open="false"
+    :list-action-disabled="resultStatus !== 'success'"
+    :print-action-disabled="resultStatus !== 'success'"
     :redact-data="result?.redactData || ''"
     :redact-action-disabled="resultStatus !== 'success'"
-    :redact-enabled="mode === 'redact' || resultStatus === 'success'"
+    :redact-enabled="mode === 'redact' || redactEnabled"
     :status="viewerStatus"
     :task-id="result?.id || taskId || ''"
     :viewer-mode="mode === 'redact' ? 'redact' : 'audit'"
@@ -19,57 +22,6 @@
     @redact-saved="handleRedactSaved"
   >
     <template #toolbar-actions>
-      <Popover
-        v-if="isAudit"
-        v-model:open="configOpen"
-        placement="bottomRight"
-        trigger="click"
-        overlay-class-name="tool-config-popover"
-      >
-        <template #content>
-          <div class="config-popover">
-            <div class="config-title">选择规则</div>
-            <StandardPicker
-              :model-value="standardIds"
-              @update:model-value="updateStandardIds"
-            />
-            <div class="config-title config-title--secondary">基准值</div>
-            <ReferenceEditor
-              :model-value="referenceData"
-              @update:model-value="updateReferenceData"
-            />
-          </div>
-        </template>
-        <Button type="link" size="small" class="ca-action-link">
-          <SettingOutlined />
-          <span>选择规则</span>
-        </Button>
-      </Popover>
-
-      <Popover
-        v-else
-        v-model:open="configOpen"
-        placement="bottomRight"
-        trigger="click"
-        overlay-class-name="tool-config-popover"
-      >
-        <template #content>
-          <div class="config-popover">
-            <div class="config-title">选择关注点</div>
-            <FocusPointPicker
-              :model-value="focusPoints"
-              :standard-id="focusStandardId"
-              @update:model-value="updateFocusPoints"
-              @update:standard-id="updateFocusStandardId"
-            />
-          </div>
-        </template>
-        <Button type="link" size="small" class="ca-action-link">
-          <AimOutlined />
-          <span>选择关注点</span>
-        </Button>
-      </Popover>
-
       <Button :loading="importing" type="link" size="small" class="ca-action-link" @click="$emit('import-project')">
         <ImportOutlined />
         <span>导入</span>
@@ -91,7 +43,7 @@
         class="ca-action-link"
         :disabled="startDisabled"
         :loading="submitting"
-        @click="$emit('start')"
+        @click="handleStart"
       >
         <PlayCircleOutlined />
         <span>{{ taskId ? restartText : startText }}</span>
@@ -142,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 import {
   AimOutlined,
@@ -153,17 +105,13 @@ import {
   PlayCircleOutlined,
   ProfileOutlined,
   ReloadOutlined,
-  SettingOutlined,
 } from '@ant-design/icons-vue';
-import { Button, Popover } from 'ant-design-vue';
+import { Button } from 'ant-design-vue';
 
 import type { ReviewToolResult } from '#/api/review/tool/model';
 
 // @ts-expect-error 查看器为忠实移植的纯 JS SFC（含 pdfjs/canvas 复杂逻辑），不暴露 TS 类型
 import ContentAuditViewer from '../components/ContentAuditViewer.vue';
-import FocusPointPicker from '../components/FocusPointPicker.vue';
-import ReferenceEditor from '../components/ReferenceEditor.vue';
-import StandardPicker from '../components/StandardPicker.vue';
 import ToolUploadEmpty from './ToolUploadEmpty.vue';
 
 interface ToolFile {
@@ -176,10 +124,9 @@ const props = defineProps<{
   checking?: boolean;
   docFile: null | ToolFile;
   exporting?: boolean;
-  focusPoints: string[];
-  focusStandardId?: any;
   importing?: boolean;
   mode: 'audit' | 'redact';
+  redactEnabled?: boolean;
   referenceData: string;
   result: null | ReviewToolResult;
   resultError?: string;
@@ -195,23 +142,20 @@ const emit = defineEmits([
   'close-result',
   'export-project',
   'import-project',
+  'open-rules',
   'redact-saved',
   'start',
   'update:docFile',
-  'update:focusPoints',
-  'update:focusStandardId',
   'update:referenceData',
   'update:standardIds',
 ]);
 
-const configOpen = ref(false);
-
 const isAudit = computed(() => props.mode === 'audit');
 const startText = computed(() => (isAudit.value ? '开始审核' : '开始脱敏'));
 const restartText = computed(() => (isAudit.value ? '重新审核' : '重新脱敏'));
-const runningText = computed(() => (isAudit.value ? 'AI 正在审核内容...' : 'AI 正在定位关注点...'));
+const runningText = computed(() => (isAudit.value ? 'AI 正在审核内容...' : 'AI 正在脱敏文件...'));
 const failSubTitle = computed(() =>
-  isAudit.value ? '内容审核失败，请稍后重新审核。' : '文件脱敏失败，请检查关注点后重新脱敏。',
+  isAudit.value ? '内容审核失败，请稍后重新审核。' : '文件脱敏失败，请检查规则后重新脱敏。',
 );
 const docLabel = computed(
   () => props.result?.signFileName || props.docFile?.name || (isAudit.value ? '被审核文档' : '待脱敏文档'),
@@ -223,43 +167,29 @@ const viewerStatus = computed(() => {
   return '';
 });
 const startDisabled = computed(() => {
-  if (props.submitting || props.resultStatus === 'running' || !props.docFile) return true;
-  return isAudit.value ? props.standardIds.length === 0 : props.focusPoints.length === 0;
+  return props.submitting || props.resultStatus === 'running' || !props.docFile;
 });
 const exportDisabled = computed(() => props.exporting || props.resultStatus !== 'success' || !props.taskId);
 const emptyListText = computed(() => {
   if (props.resultStatus === 'running') return runningText.value;
   if (props.resultStatus === 'fail') return props.resultError || failSubTitle.value;
-  if (isAudit.value && props.docFile && props.standardIds.length) return '文件和规则已就绪，点击开始审核';
-  if (!isAudit.value && props.docFile && props.focusPoints.length) return '文件和关注点已就绪，点击开始脱敏';
-  if (isAudit.value && props.standardIds.length) return `已选择 ${props.standardIds.length} 个规则，上传文件后可开始审核`;
-  if (!isAudit.value && props.focusPoints.length) return `已选择 ${props.focusPoints.length} 个关注点，上传文件后可开始脱敏`;
-  if (props.docFile) return isAudit.value ? '文件已预览，请选择规则后开始审核' : '文件已预览，请选择关注点后开始脱敏';
-  return isAudit.value ? '请先选择规则并上传文件' : '请先选择关注点并上传文件';
+  const actionName = isAudit.value ? '审核' : '脱敏';
+  if (props.docFile && props.standardIds.length) return `文件已预览，点击开始${actionName}确认规则`;
+  if (props.standardIds.length) return `已选择 ${props.standardIds.length} 个规则库，上传文件后可开始${actionName}`;
+  if (props.docFile) return `文件已预览，点击开始${actionName}后选择规则`;
+  return '请先上传文件';
 });
 
 function updateDocFile(file: null | ToolFile) {
   emit('update:docFile', file);
 }
 
-function updateStandardIds(value: any[]) {
-  emit('update:standardIds', value);
-}
-
-function updateReferenceData(value: string) {
-  emit('update:referenceData', value);
-}
-
-function updateFocusPoints(value: string[]) {
-  emit('update:focusPoints', value);
-}
-
-function updateFocusStandardId(value: any) {
-  emit('update:focusStandardId', value);
-}
-
 function handleRedactSaved(value: string) {
   emit('redact-saved', value);
+}
+
+function handleStart() {
+  emit('open-rules');
 }
 </script>
 
@@ -299,7 +229,7 @@ function handleRedactSaved(value: string) {
 
 .tool-viewer-mask {
   position: absolute;
-  inset: 0 360px 0 0;
+  inset: 0;
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -307,6 +237,10 @@ function handleRedactSaved(value: string) {
   justify-content: center;
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(3px);
+}
+
+:deep(.list-panel-visible) .tool-viewer-mask {
+  right: 360px;
 }
 
 .state-spin {
