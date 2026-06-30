@@ -12,16 +12,19 @@
         <Checkbox
           v-model:checked="blockHighlight"
           class="ocr-debug-toggle"
+          :disabled="!diffEnabled"
           title="点击差异时，左右两侧画高亮框并用虚线连接"
         >差异连线</Checkbox>
         <Checkbox
           v-model:checked="syncLocked"
           class="ocr-debug-toggle"
+          :disabled="!diffEnabled"
           title="开启时左右两侧同步滚动；关闭可各自独立滚动"
         >同步滚动</Checkbox>
         <Checkbox
           v-model:checked="ignoreFormatDiff"
           class="ocr-debug-toggle"
+          :disabled="!diffEnabled"
           title="忽略换行和排版，只按连续文字内容对比"
         >忽略格式</Checkbox>
       </span>
@@ -47,6 +50,7 @@
           type="link"
           size="small"
           class="diff-panel-toggle"
+          :disabled="!diffEnabled"
           @click="diffPanelOpen = !diffPanelOpen"
         >
           <ProfileOutlined />
@@ -66,6 +70,7 @@
           <span>打印</span>
         </Button>
         <LoadingOutlined v-if="msgLoading" spin />
+        <slot name="toolbar-actions"></slot>
         <Button
           type="link"
           class="close-btn"
@@ -126,41 +131,44 @@
       </aside>
 
       <!-- 左侧（A） -->
-      <div v-if="sourceAUrl" ref="oldBoxRef" class="old-box pane" @click="onPaneClick('A', $event)">
-        <template v-if="oldType === 'pdf'">
-          <div v-if="oldError" class="fetch-error">
-            <WarningFilled />
-            <span>{{ oldError }}</span>
-          </div>
-          <!-- 自渲染 PdfPane（pdfjs-dist），与连线浮层共享坐标系 -->
-          <PdfPane
-            v-else
-            ref="pdfPaneARef"
-            :data="oldPdfData"
-            side="A"
-            :loading-text="`加载 ${sourceALabel} 中...`"
-            @rendered="onPaneRenderedA"
-            @error="onPaneErrorA"
-          />
-        </template>
-        <div v-else-if="oldType === 'docx'" class="docx-box-wrap">
-          <div v-if="oldError" class="fetch-error">
-            <WarningFilled />
-            <span>{{ oldError }}</span>
-          </div>
-          <div class="docx-box" v-show="!oldError">
-            <vue-office-docx
-              :src="sourceAUrl"
-              class="old-docx"
-              @rendered="renderedOld"
-              @error="onOldDocxError"
+      <div v-if="sourceAUrl || $slots.emptyA" ref="oldBoxRef" class="old-box pane" @click="onPaneClick('A', $event)">
+        <slot v-if="!sourceAUrl && $slots.emptyA" name="emptyA"></slot>
+        <template v-else>
+          <template v-if="oldType === 'pdf'">
+            <div v-if="oldError" class="fetch-error">
+              <WarningFilled />
+              <span>{{ oldError }}</span>
+            </div>
+            <!-- 自渲染 PdfPane（pdfjs-dist），与连线浮层共享坐标系 -->
+            <PdfPane
+              v-else
+              ref="pdfPaneARef"
+              :data="oldPdfData"
+              side="A"
+              :loading-text="`加载 ${sourceALabel} 中...`"
+              @rendered="onPaneRenderedA"
+              @error="onPaneErrorA"
             />
+          </template>
+          <div v-else-if="oldType === 'docx'" class="docx-box-wrap">
+            <div v-if="oldError" class="fetch-error">
+              <WarningFilled />
+              <span>{{ oldError }}</span>
+            </div>
+            <div class="docx-box" v-show="!oldError">
+              <vue-office-docx
+                :src="sourceAUrl"
+                class="old-docx"
+                @rendered="renderedOld"
+                @error="onOldDocxError"
+              />
+            </div>
           </div>
-        </div>
-        <div v-else-if="oldType === 'image'" class="image-box-wrap">
-          <img :src="sourceAUrl" class="preview-image" @load="readyList[0] = true" />
-        </div>
-        <div v-else class="fetch-error">不支持的文件类型</div>
+          <div v-else-if="oldType === 'image'" class="image-box-wrap">
+            <img :src="sourceAUrl" class="preview-image" @load="readyList[0] = true" />
+          </div>
+          <div v-else class="fetch-error">不支持的文件类型</div>
+        </template>
       </div>
       <!-- 中间固定分割条：留白通道 + 承载差异图标。作为 flex item 始终居于左右 pane 之间，
            不随 AI 审核/差异清单抽屉开关而漂移。仅文字层双 PDF 模式显示。 -->
@@ -183,41 +191,44 @@
         </button>
       </div>
       <!-- 右侧（B） -->
-      <div v-if="sourceBUrl" ref="newBoxRef" class="new-box pane" @click="onPaneClick('B', $event)">
-        <template v-if="newType === 'pdf'">
-          <div v-if="newError" class="fetch-error">
-            <WarningFilled />
-            <span>{{ newError }}</span>
-          </div>
-          <!-- 自渲染 PdfPane（pdfjs-dist），与连线浮层共享坐标系 -->
-          <PdfPane
-            v-else
-            ref="pdfPaneBRef"
-            :data="newPdfData"
-            side="B"
-            :loading-text="`加载 ${sourceBLabel} 中...`"
-            @rendered="onPaneRenderedB"
-            @error="onPaneErrorB"
-          />
-        </template>
-        <div v-else-if="newType === 'docx'" class="docx-box-wrap">
-          <div v-if="newError" class="fetch-error">
-            <WarningFilled />
-            <span>{{ newError }}</span>
-          </div>
-          <div class="docx-box" v-show="!newError">
-            <vue-office-docx
-              :src="sourceBUrl"
-              class="new-docx"
-              @rendered="renderedNew"
-              @error="onNewDocxError"
+      <div v-if="sourceBUrl || $slots.emptyB" ref="newBoxRef" class="new-box pane" @click="onPaneClick('B', $event)">
+        <slot v-if="!sourceBUrl && $slots.emptyB" name="emptyB"></slot>
+        <template v-else>
+          <template v-if="newType === 'pdf'">
+            <div v-if="newError" class="fetch-error">
+              <WarningFilled />
+              <span>{{ newError }}</span>
+            </div>
+            <!-- 自渲染 PdfPane（pdfjs-dist），与连线浮层共享坐标系 -->
+            <PdfPane
+              v-else
+              ref="pdfPaneBRef"
+              :data="newPdfData"
+              side="B"
+              :loading-text="`加载 ${sourceBLabel} 中...`"
+              @rendered="onPaneRenderedB"
+              @error="onPaneErrorB"
             />
+          </template>
+          <div v-else-if="newType === 'docx'" class="docx-box-wrap">
+            <div v-if="newError" class="fetch-error">
+              <WarningFilled />
+              <span>{{ newError }}</span>
+            </div>
+            <div class="docx-box" v-show="!newError">
+              <vue-office-docx
+                :src="sourceBUrl"
+                class="new-docx"
+                @rendered="renderedNew"
+                @error="onNewDocxError"
+              />
+            </div>
           </div>
-        </div>
-        <div v-else-if="newType === 'image'" class="image-box-wrap">
-          <img :src="sourceBUrl" class="preview-image" @load="readyList[1] = true" />
-        </div>
-        <div v-else class="fetch-error">不支持的文件类型</div>
+          <div v-else-if="newType === 'image'" class="image-box-wrap">
+            <img :src="sourceBUrl" class="preview-image" @load="readyList[1] = true" />
+          </div>
+          <div v-else class="fetch-error">不支持的文件类型</div>
+        </template>
       </div>
 
       <!-- 差异清单侧栏：两种模式通用，置于最右。默认隐藏，点击逐处定位 -->
@@ -245,7 +256,8 @@
             <span class="diff-filter-count">{{ countByDiffType(opt.key) }}</span>
           </button>
         </div>
-        <div v-if="!ocrDiffList.length" class="diff-empty">
+        <slot v-if="$slots.emptyDiffPanel && !ocrDiffList.length" name="emptyDiffPanel"></slot>
+        <div v-else-if="!ocrDiffList.length" class="diff-empty">
           <Empty description="暂无差异" :image-style="{ height: '50px' }" />
         </div>
         <div v-else-if="!filteredDiffList.length" class="diff-empty">
@@ -335,6 +347,8 @@
         </ul>
       </aside>
 
+      <slot name="runningMask"></slot>
+
       <!-- 连线浮层：覆盖整个对比区。点击差异（清单条目 / 中间图标 / 左侧文档差异行）后，
            左右两侧各画高亮框并用虚线连接。坐标全部相对 .comparison-list（同文档，零跨边界换算）。
            pointer-events:none 不挡 PDF 操作。仅文字层双 PDF 模式且当前项有效时渲染。 -->
@@ -398,6 +412,8 @@ const props = defineProps({
   sourceBOcrStatus: { type: String, default: '' },
   sourceALabel: { type: String, default: '文件A' },
   sourceBLabel: { type: String, default: '文件B' },
+  diffEnabled: { type: Boolean, default: true },
+  initialDiffPanelOpen: { type: Boolean, default: false },
   aiReview: { type: Object, default: null }
 })
 
@@ -549,7 +565,7 @@ const ignoreFormatDiff = ref(false)
 // 点击某条 → 两侧滚到对应位置并连线
 const ocrDiffList = ref([])
 const currentDiffIdx = ref(-1)
-const diffPanelOpen = ref(false)
+const diffPanelOpen = ref(props.initialDiffPanelOpen)
 const expandedDiffIdxSet = ref(new Set())
 const editingNoteIdx = ref(-1)
 const noteInputRefs = new Map()
@@ -575,6 +591,19 @@ const filteredDiffList = computed(() => {
   if (diffTypeFilter.value === 'all') return paired
   return paired.filter((p) => p.item.type === diffTypeFilter.value)
 })
+const diffEnabled = computed(() => props.diffEnabled)
+
+function clearDiffState() {
+  ocrDiffList.value = []
+  currentDiffIdx.value = -1
+  expandedDiffIdxSet.value = new Set()
+  editingNoteIdx.value = -1
+  noteInputRefs.clear()
+  diffTypeFilter.value = 'all'
+  activeConn.value = null
+  connBadges.value = []
+  degenerateSide.value = null
+}
 // 自愈：避免对同一附件重复补发 OCR
 let ocrSelfHealTried = false
 
@@ -1302,6 +1331,7 @@ async function onExportAnnotated() {
 
 // 仅刷新 DOM 高亮（滚动 rediff 走这里）
 function runDiff() {
+  if (!props.diffEnabled) return null
   try {
     // 染色路径：与差异清单同一函数（diffDocumentDetailed），保证颜色与框/清单同源。
     // 这里只取染色副作用（标 fd-add/fd-del）与退化判定，blocks 由 buildTextDiffList 单独构建。
@@ -1339,6 +1369,11 @@ function applyDegenerate(res) {
 }
 
 function compareFun() {
+  if (!props.diffEnabled) {
+    clearDiffState()
+    msgLoading.value = false
+    return
+  }
   const supportDiff =
     (oldType.value === 'pdf' || oldType.value === 'docx') &&
     (newType.value === 'pdf' || newType.value === 'docx')
@@ -1555,6 +1590,7 @@ function spanRegion(nodes, paneRef) {
 // 位置直接取自已染色的 span → 框/连线/导出与颜色完全一致，根除两套 diff 互相偏移。
 // 归一化 y 比例缩放无关，缩放后清单无需重建（保留用户编辑的批注）。
 function buildTextDiffList() {
+  if (!props.diffEnabled) return
   if (oldType.value !== 'pdf' || newType.value !== 'pdf') return
   try {
     const localNotes = currentNoteMap()
@@ -1661,8 +1697,13 @@ watch(
   readyList,
   (val) => {
     if (val[0] && val[1]) {
-      compareFun()
       trySetupSyncScroll()
+      if (!props.diffEnabled) {
+        clearDiffState()
+        msgLoading.value = false
+        return
+      }
+      compareFun()
       if (oldType.value === 'pdf' && newType.value === 'pdf') {
         // 延后两帧：calibrateAlign 要读 canvas 像素、buildTextDiffList 要取 span 位置，
         // 两者都依赖「布局+绘制已完成」。刚 rendered 时同步立即跑可能读不到（位置全空 →
@@ -1688,6 +1729,7 @@ watch(blockHighlight, (on) => {
 })
 
 watch(ignoreFormatDiff, () => {
+  if (!props.diffEnabled) return
   if (oldType.value !== 'pdf' || newType.value !== 'pdf') return
   currentDiffIdx.value = -1
   activeConn.value = null
@@ -1710,6 +1752,20 @@ watch([aiPanelOpen, diffPanelOpen], () => {
   }, 120)
 })
 
+watch(() => props.diffEnabled, (enabled) => {
+  clearDiffState()
+  msgLoading.value = false
+  if (!enabled) diffPanelOpen.value = false
+  if (!enabled || !readyList.value?.[0] || !readyList.value?.[1]) return
+  compareFun()
+  if (oldType.value === 'pdf' && newType.value === 'pdf') {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      calibrateAlign()
+      buildTextDiffList()
+    }))
+  }
+})
+
 async function reload() {
   unbindSyncScroll()
   readyList.value = [false, false]
@@ -1717,15 +1773,16 @@ async function reload() {
   degenerateSide.value = null
   oldSelector = '.old-docx .docx-wrapper > .docx > article'
   newSelector = '.new-docx .docx-wrapper > .docx > article'
-  // 清空差异清单（重新加载后重建）
-  ocrDiffList.value = []
-  currentDiffIdx.value = -1
-  // 清空连线层
-  activeConn.value = null
-  connBadges.value = []
+  clearDiffState()
   console.log('[FileDiff] reload A=', props.sourceAUrl, 'B=', props.sourceBUrl)
   console.log('[FileDiff] type A=', oldType.value, 'B=', newType.value)
   await loadBothPdfs()
+  const supportDiff =
+    (oldType.value === 'pdf' || oldType.value === 'docx') &&
+    (newType.value === 'pdf' || newType.value === 'docx')
+  if (!effectiveAUrl.value || !effectiveBUrl.value || !props.diffEnabled || !supportDiff) {
+    msgLoading.value = false
+  }
 }
 
 watch(

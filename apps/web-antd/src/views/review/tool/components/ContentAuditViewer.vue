@@ -50,13 +50,14 @@
           type="link"
           size="small"
           class="ca-action-link"
-          :disabled="!docBytes"
+          :disabled="!docBytes || redactActionDisabled"
           title="脱敏导出：在文档上框选敏感区域，导出像素涂黑的不可逆脱敏件"
           @click="openRedact"
         >
           <EyeInvisibleOutlined />
           <span>脱敏</span>
         </Button>
+        <slot name="toolbar-actions"></slot>
         <Button
           type="link"
           class="close-btn"
@@ -96,6 +97,7 @@
           loading-text="加载文档…"
           @rendered="onRendered"
         />
+        <slot v-else-if="$slots.emptyDoc" name="emptyDoc"></slot>
         <div v-else class="ca-doc-empty">
           <LoadingOutlined spin />
           <span>{{ docError || '加载文档…' }}</span>
@@ -123,190 +125,194 @@
           </button>
         </div>
 
-        <!-- ============ Tab 1: 异常清单 ============ -->
-        <template v-if="!isRedactMode && activeListTab === 'issues'">
+        <slot v-if="$slots.emptyList && (emptyListVisible || !docBytes)" name="emptyList"></slot>
+        <template v-else>
+          <!-- ============ Tab 1: 异常清单 ============ -->
+          <template v-if="!isRedactMode && activeListTab === 'issues'">
 
-        <!-- 严重程度过滤（与附件对比 AI 面板一致：严重/警告/提示） -->
-        <div v-if="items.length && ready" class="ca-filter">
-          <button
-            v-for="opt in severityFilterOptions"
-            :key="opt.key"
-            class="ai-filter-btn"
-            :class="{ active: severityFilter === opt.key, [`sev-${opt.key}`]: true }"
-            @click="severityFilter = opt.key"
-          >
-            <span class="dot"></span>{{ opt.label }}
-            <span class="ai-filter-count">{{ countBySeverity(opt.key) }}</span>
-          </button>
-        </div>
-
-        <!-- 加载顺序：文档 → 差异色 → 清单。染色定位(ready)完成后才揭示清单 -->
-        <ul v-if="items.length && ready && filteredItems.length" class="diff-list">
-          <li
-            v-for="entry in filteredItems"
-            :key="entry.idx"
-            :ref="(el) => setIssueItemRef(entry.idx, el)"
-            class="diff-item"
-            :class="[`dt-${caMeta(entry.item).type}`, { active: entry.idx === currentIdx }]"
-            @click="gotoIssue(entry.idx)"
-          >
-            <div class="diff-item-head">
-              <span class="diff-badge" :class="`dt-${caMeta(entry.item).type}`">{{ caMeta(entry.item).label }}</span>
-              <span class="diff-seq">#{{ entry.idx + 1 }}</span>
-              <span class="diff-field">{{ entry.item.fieldLabel || entry.item.fieldName || '字段' }}</span>
-              <Tag v-if="locatedPos[entry.idx]" color="success" class="diff-loc">已定位</Tag>
-              <!-- 编辑 + 删除 统一放在右上角（仅图标） -->
-              <span class="diff-actions" @click.stop>
-                <span
-                  class="diff-save-btn"
-                  :class="{ active: editingNoteIdx === entry.idx, 'is-saving': savingIdx === entry.idx }"
-                  :title="savingIdx === entry.idx ? '保存中' : (editingNoteIdx === entry.idx ? '正在编辑，失去焦点保存' : '编辑批注')"
-                  @click="beginAuditNoteEdit(entry.idx)"
-                >
-                  <LoadingOutlined v-if="savingIdx === entry.idx" spin />
-                  <EditOutlined v-else />
-                </span>
-                <span class="diff-del-btn" title="删除此条（不导出）" @click="removeAudit(entry.idx)"><DeleteOutlined /></span>
-              </span>
-            </div>
-            <!-- 规则说明：告诉用户这条按什么规则审的（规则原文）。@click.stop 不触发定位 -->
-            <div
-              v-if="entry.item.ruleContent"
-              class="diff-rule"
-              @click.stop="toggleRuleExpand(entry.idx)"
-            >
-              <span class="dt-tag">规则</span>
-              <span class="diff-rule-text" :class="{ expanded: isRuleExpanded(entry.idx) }">{{ entry.item.ruleContent }}</span>
-            </div>
-            <div
-              class="diff-texts"
-              :class="{ expanded: isIssueTextExpanded(entry.idx) }"
-            >
-              <div class="diff-text left"><span class="dt-tag">标准</span><span class="diff-text-content">{{ entry.item.formValue || '—' }}</span></div>
-              <div class="diff-text right"><span class="dt-tag">文档</span><span class="diff-text-content">{{ entry.item.extractedValue || '（空缺）' }}</span></div>
-              <button
-                v-if="needsIssueTextExpand(entry.item)"
-                type="button"
-                class="diff-expand-btn"
-                :title="isIssueTextExpanded(entry.idx) ? '收起差异内容' : '展开差异内容'"
-                @click.stop="toggleIssueText(entry.idx)"
-              >
-                {{ isIssueTextExpanded(entry.idx) ? '收起' : '...' }}
-              </button>
-            </div>
-            <!-- 批注默认只读，点击编辑图标后进入编辑；失焦即保存。@click.stop 不触发定位 -->
-            <div class="diff-note" @click.stop>
-              <Input.TextArea
-                :ref="(el) => setAuditNoteInputRef(entry.idx, el)"
-                v-model:value="entry.item.note"
-                :auto-size="{ minRows: 1, maxRows: 5 }"
-                size="small"
-                :readonly="editingNoteIdx !== entry.idx"
-                :class="{ 'is-editing': editingNoteIdx === entry.idx }"
-                placeholder="批注内容（导出时写入 PDF）"
-                @blur="finishAuditNoteEdit(entry.idx)"
-              />
-            </div>
-          </li>
-        </ul>
-        <Empty
-          v-else-if="items.length && ready && !filteredItems.length"
-          :image-style="{ height: '60px' }"
-          description="无匹配问题"
-        />
-        <div v-else-if="items.length && !ready" class="ca-list-tip">
-          <LoadingOutlined spin /><span>定位差异中…</span>
-        </div>
-        <Empty
-          v-else
-          :image-style="{ height: '70px' }"
-          :description="issueEmptyText"
-        />
-        </template>
-
-        <!-- ============ Tab 2: 关注列表 ============ -->
-        <template v-if="canUseRedact && activeListTab === 'focus'">
-          <!-- 定位状态过滤（全部 / 已定位 / 缺漏），与异常清单过滤条样式一致 -->
-          <div v-if="focusEntries.length && ready" class="ca-filter">
+          <!-- 严重程度过滤（与附件对比 AI 面板一致：严重/警告/提示） -->
+          <div v-if="items.length && ready" class="ca-filter">
             <button
-              v-for="opt in focusFilterOptions"
+              v-for="opt in severityFilterOptions"
               :key="opt.key"
               class="ai-filter-btn"
-              :class="{ active: focusFilter === opt.key, [`focus-${opt.key}`]: true }"
-              @click="focusFilter = opt.key"
+              :class="{ active: severityFilter === opt.key, [`sev-${opt.key}`]: true }"
+              @click="severityFilter = opt.key"
             >
               <span class="dot"></span>{{ opt.label }}
-              <span class="ai-filter-count">{{ countByFocusStatus(opt.key) }}</span>
-            </button>
-          </div>
-          <div v-if="focusCategoryOptions.length > 1 && ready" class="focus-category-filter">
-            <button
-              v-for="opt in focusCategoryOptions"
-              :key="opt.key"
-              class="focus-category-btn"
-              :class="{ active: focusCategoryFilter === opt.key }"
-              @click="focusCategoryFilter = opt.key"
-            >
-              <span>{{ opt.label }}</span>
-              <span class="ai-filter-count">{{ opt.count }}</span>
+              <span class="ai-filter-count">{{ countBySeverity(opt.key) }}</span>
             </button>
           </div>
 
-          <!-- 关注列表内容（要点粒度） -->
-          <ul v-if="filteredFocusItems.length && ready" class="diff-list">
+          <!-- 加载顺序：文档 → 差异色 → 清单。染色定位(ready)完成后才揭示清单 -->
+          <ul v-if="items.length && ready && filteredItems.length" class="diff-list">
             <li
-              v-for="(entry, i) in filteredFocusItems"
-              :key="entry.placeholder ? 'ph-' + (entry.item.keyword || entry.item.category) + '-' + i : 'focus-' + entry.idx"
-              class="diff-item focus-item"
-              :class="{ active: !entry.placeholder && entry.idx === focusCurrentIdx }"
-              @click="!entry.placeholder && gotoFocus(entry.idx)"
+              v-for="entry in filteredItems"
+              :key="entry.idx"
+              :ref="(el) => setIssueItemRef(entry.idx, el)"
+              class="diff-item"
+              :class="[`dt-${caMeta(entry.item).type}`, { active: entry.idx === currentIdx }]"
+              @click="gotoIssue(entry.idx)"
             >
               <div class="diff-item-head">
-                <span class="diff-badge dt-focus">关注</span>
-                <span class="focus-category-chip" :title="focusCategoryLabel(entry.item)">
-                  {{ focusCategoryLabel(entry.item) }}
-                </span>
-                <span class="diff-field focus-keyword-title">
-                  {{ entry.item.keyword || entry.item.fieldLabel || '—' }}
+                <span class="diff-badge" :class="`dt-${caMeta(entry.item).type}`">{{ caMeta(entry.item).label }}</span>
+                <span class="diff-seq">#{{ entry.idx + 1 }}</span>
+                <span class="diff-field">{{ entry.item.fieldLabel || entry.item.fieldName || '字段' }}</span>
+                <Tag v-if="locatedPos[entry.idx]" color="success" class="diff-loc">已定位</Tag>
+                <!-- 编辑 + 删除 统一放在右上角（仅图标） -->
+                <span class="diff-actions" @click.stop>
                   <span
-                    v-if="entry.item.fieldLabel && entry.item.fieldLabel !== entry.item.keyword"
-                    class="focus-sublabel"
-                  >· {{ entry.item.fieldLabel }}</span>
+                    class="diff-save-btn"
+                    :class="{ active: editingNoteIdx === entry.idx, 'is-saving': savingIdx === entry.idx }"
+                    :title="savingIdx === entry.idx ? '保存中' : (editingNoteIdx === entry.idx ? '正在编辑，失去焦点保存' : '编辑批注')"
+                    @click="beginAuditNoteEdit(entry.idx)"
+                  >
+                    <LoadingOutlined v-if="savingIdx === entry.idx" spin />
+                    <EditOutlined v-else />
+                  </span>
+                  <span class="diff-del-btn" title="删除此条（不导出）" @click="removeAudit(entry.idx)"><DeleteOutlined /></span>
                 </span>
-                <Tag
-                  v-if="!entry.placeholder && (focusOccPos[entry.idx]?.length || 0) > 1"
-                  color="warning"
-                  class="focus-occ-tag"
-                  :title="`此片段在文中出现 ${focusOccPos[entry.idx].length} 处，点击可逐处跳转`"
-                >{{ focusOccPos[entry.idx].length }}处<template v-if="focusActiveOcc[entry.idx] != null"> · 第{{ focusActiveOcc[entry.idx] + 1 }}</template></Tag>
-                <Tag v-if="entry.placeholder || !entry.item.extractedValue" color="error" class="diff-loc">缺漏</Tag>
-                <Tag v-else-if="focusLocatedPos[entry.idx]" color="success" class="diff-loc">已定位</Tag>
               </div>
-              <div class="diff-texts">
-                <div class="diff-text focus-text">
-                  <span class="dt-tag">文档</span>{{ entry.placeholder || !entry.item.extractedValue ? '文中未提及' : entry.item.extractedValue }}
-                </div>
+              <!-- 规则说明：告诉用户这条按什么规则审的（规则原文）。@click.stop 不触发定位 -->
+              <div
+                v-if="entry.item.ruleContent"
+                class="diff-rule"
+                @click.stop="toggleRuleExpand(entry.idx)"
+              >
+                <span class="dt-tag">规则</span>
+                <span class="diff-rule-text" :class="{ expanded: isRuleExpanded(entry.idx) }">{{ entry.item.ruleContent }}</span>
               </div>
-              <div v-if="entry.item.location && !entry.placeholder" class="focus-location">
-                <AimOutlined />{{ entry.item.location }}
+              <div
+                class="diff-texts"
+                :class="{ expanded: isIssueTextExpanded(entry.idx) }"
+              >
+                <div class="diff-text left"><span class="dt-tag">标准</span><span class="diff-text-content">{{ entry.item.formValue || '—' }}</span></div>
+                <div class="diff-text right"><span class="dt-tag">文档</span><span class="diff-text-content">{{ entry.item.extractedValue || '（空缺）' }}</span></div>
+                <button
+                  v-if="needsIssueTextExpand(entry.item)"
+                  type="button"
+                  class="diff-expand-btn"
+                  :title="isIssueTextExpanded(entry.idx) ? '收起差异内容' : '展开差异内容'"
+                  @click.stop="toggleIssueText(entry.idx)"
+                >
+                  {{ isIssueTextExpanded(entry.idx) ? '收起' : '...' }}
+                </button>
+              </div>
+              <!-- 批注默认只读，点击编辑图标后进入编辑；失焦即保存。@click.stop 不触发定位 -->
+              <div class="diff-note" @click.stop>
+                <Input.TextArea
+                  :ref="(el) => setAuditNoteInputRef(entry.idx, el)"
+                  v-model:value="entry.item.note"
+                  :auto-size="{ minRows: 1, maxRows: 5 }"
+                  size="small"
+                  :readonly="editingNoteIdx !== entry.idx"
+                  :class="{ 'is-editing': editingNoteIdx === entry.idx }"
+                  placeholder="批注内容（导出时写入 PDF）"
+                  @blur="finishAuditNoteEdit(entry.idx)"
+                />
               </div>
             </li>
           </ul>
           <Empty
-            v-else-if="focusEntries.length && ready && !filteredFocusItems.length"
+            v-else-if="items.length && ready && !filteredItems.length"
             :image-style="{ height: '60px' }"
-            description="当前筛选无关注项"
+            description="无匹配问题"
           />
-          <div v-else-if="focusEntries.length && !ready" class="ca-list-tip">
-            <LoadingOutlined spin /><span>定位中…</span>
+          <div v-else-if="items.length && !ready" class="ca-list-tip">
+            <LoadingOutlined spin /><span>定位差异中…</span>
           </div>
           <Empty
             v-else
             :image-style="{ height: '70px' }"
-            description="暂无关注要点（请在规则中开启关注并填写关注要点）"
+            :description="issueEmptyText"
           />
+          </template>
+
+          <!-- ============ Tab 2: 关注列表 ============ -->
+          <template v-if="canUseRedact && activeListTab === 'focus'">
+            <!-- 定位状态过滤（全部 / 已定位 / 缺漏），与异常清单过滤条样式一致 -->
+            <div v-if="focusEntries.length && ready" class="ca-filter">
+              <button
+                v-for="opt in focusFilterOptions"
+                :key="opt.key"
+                class="ai-filter-btn"
+                :class="{ active: focusFilter === opt.key, [`focus-${opt.key}`]: true }"
+                @click="focusFilter = opt.key"
+              >
+                <span class="dot"></span>{{ opt.label }}
+                <span class="ai-filter-count">{{ countByFocusStatus(opt.key) }}</span>
+              </button>
+            </div>
+            <div v-if="focusCategoryOptions.length > 1 && ready" class="focus-category-filter">
+              <button
+                v-for="opt in focusCategoryOptions"
+                :key="opt.key"
+                class="focus-category-btn"
+                :class="{ active: focusCategoryFilter === opt.key }"
+                @click="focusCategoryFilter = opt.key"
+              >
+                <span>{{ opt.label }}</span>
+                <span class="ai-filter-count">{{ opt.count }}</span>
+              </button>
+            </div>
+
+            <!-- 关注列表内容（要点粒度） -->
+            <ul v-if="filteredFocusItems.length && ready" class="diff-list">
+              <li
+                v-for="(entry, i) in filteredFocusItems"
+                :key="entry.placeholder ? 'ph-' + (entry.item.keyword || entry.item.category) + '-' + i : 'focus-' + entry.idx"
+                class="diff-item focus-item"
+                :class="{ active: !entry.placeholder && entry.idx === focusCurrentIdx }"
+                @click="!entry.placeholder && gotoFocus(entry.idx)"
+              >
+                <div class="diff-item-head">
+                  <span class="diff-badge dt-focus">关注</span>
+                  <span class="focus-category-chip" :title="focusCategoryLabel(entry.item)">
+                    {{ focusCategoryLabel(entry.item) }}
+                  </span>
+                  <span class="diff-field focus-keyword-title">
+                    {{ entry.item.keyword || entry.item.fieldLabel || '—' }}
+                    <span
+                      v-if="entry.item.fieldLabel && entry.item.fieldLabel !== entry.item.keyword"
+                      class="focus-sublabel"
+                    >· {{ entry.item.fieldLabel }}</span>
+                  </span>
+                  <Tag
+                    v-if="!entry.placeholder && (focusOccPos[entry.idx]?.length || 0) > 1"
+                    color="warning"
+                    class="focus-occ-tag"
+                    :title="`此片段在文中出现 ${focusOccPos[entry.idx].length} 处，点击可逐处跳转`"
+                  >{{ focusOccPos[entry.idx].length }}处<template v-if="focusActiveOcc[entry.idx] != null"> · 第{{ focusActiveOcc[entry.idx] + 1 }}</template></Tag>
+                  <Tag v-if="entry.placeholder || !entry.item.extractedValue" color="error" class="diff-loc">缺漏</Tag>
+                  <Tag v-else-if="focusLocatedPos[entry.idx]" color="success" class="diff-loc">已定位</Tag>
+                </div>
+                <div class="diff-texts">
+                  <div class="diff-text focus-text">
+                    <span class="dt-tag">文档</span>{{ entry.placeholder || !entry.item.extractedValue ? '文中未提及' : entry.item.extractedValue }}
+                  </div>
+                </div>
+                <div v-if="entry.item.location && !entry.placeholder" class="focus-location">
+                  <AimOutlined />{{ entry.item.location }}
+                </div>
+              </li>
+            </ul>
+            <Empty
+              v-else-if="focusEntries.length && ready && !filteredFocusItems.length"
+              :image-style="{ height: '60px' }"
+              description="当前筛选无关注项"
+            />
+            <div v-else-if="focusEntries.length && !ready" class="ca-list-tip">
+              <LoadingOutlined spin /><span>定位中…</span>
+            </div>
+            <Empty
+              v-else
+              :image-style="{ height: '70px' }"
+              description="暂无关注要点（请在规则中开启关注并填写关注要点）"
+            />
+          </template>
         </template>
       </div>
+      <slot name="runningMask"></slot>
     </div>
 
     <!-- 查看规则：展示该审核任务实际使用的规则库（按 taskId 透传引擎规则） -->
@@ -401,12 +407,16 @@ const props = defineProps({
   redactEnabled: { type: Boolean, default: true },
   // 已保存的手动脱敏框 JSON（仅保存用户手动框）
   redactData: { type: String, default: '' },
+  emptyListVisible: { type: Boolean, default: false },
+  redactActionDisabled: { type: Boolean, default: false },
   status: { type: String, default: '' }
 })
 const emit = defineEmits(['close', 'reanalyze', 'redact-saved'])
 
 const isRedactMode = computed(() => props.viewerMode === 'redact')
 const canUseRedact = computed(() => isRedactMode.value || props.redactEnabled !== false)
+const emptyListVisible = computed(() => props.emptyListVisible)
+const redactActionDisabled = computed(() => props.redactActionDisabled)
 
 function normalizeDocLabel(value) {
   const s = String(value || '').trim()

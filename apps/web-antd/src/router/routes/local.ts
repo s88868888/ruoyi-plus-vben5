@@ -2,11 +2,6 @@ import type { RouteRecordStringComponent } from '@vben/types';
 
 import { $t } from '@vben/locales';
 
-const {
-  version,
-  // vite inject-metadata 插件注入的全局变量
-} = __VBEN_ADMIN_METADATA__ || {};
-
 /**
  * 该文件放非后台返回的路由 比如个人中心 等需要跳转显示的页面
  * 也可以直接在菜单管理配置
@@ -22,6 +17,17 @@ const localRoutes: RouteRecordStringComponent[] = [
     },
     name: 'Profile',
     path: '/profile',
+  },
+  {
+    component: '/review/tool/workspace/index',
+    meta: {
+      activePath: '/review/tool/workspace',
+      hideInMenu: true,
+      keepAlive: false,
+      title: '审核工具工作台',
+    },
+    name: 'ReviewToolWorkspace',
+    path: '/review/tool/workspace',
   },
 ];
 
