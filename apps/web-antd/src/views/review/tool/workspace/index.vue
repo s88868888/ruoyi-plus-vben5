@@ -462,21 +462,38 @@ onMounted(async () => {
 }
 
 .tool-entry {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 0;
-  padding: 28px;
+  padding: clamp(28px, 5vw, 64px);
+  overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(23, 92, 211, 0.08), transparent 34%),
-    linear-gradient(225deg, rgba(4, 120, 87, 0.08), transparent 36%),
-    #f6f8fb;
+    linear-gradient(115deg, rgba(14, 116, 144, 0.08), transparent 32%),
+    linear-gradient(295deg, rgba(18, 183, 106, 0.07), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(246, 248, 251, 0.88)),
+    repeating-linear-gradient(90deg, rgba(16, 24, 40, 0.035) 0 1px, transparent 1px 72px),
+    repeating-linear-gradient(0deg, rgba(16, 24, 40, 0.028) 0 1px, transparent 1px 72px),
+    #eef3f8;
+}
+
+.tool-entry::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: '';
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.68), transparent 28%, transparent 72%, rgba(255, 255, 255, 0.5)),
+    linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.34) 54%, rgba(255, 255, 255, 0.7) 100%);
 }
 
 .entry-heading {
-  margin-bottom: 28px;
+  margin-bottom: 22px;
   text-align: center;
 }
 
@@ -488,50 +505,88 @@ onMounted(async () => {
 
 .entry-heading h1 {
   margin: 8px 0 0;
-  color: #1f2937;
-  font-size: 28px;
+  color: #182230;
+  font-size: 17px;
   font-weight: 700;
+  line-height: 1.4;
 }
 
 .tool-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(220px, 280px));
-  gap: 18px;
-  width: min(900px, 100%);
+  grid-template-columns: repeat(3, minmax(240px, 296px));
+  gap: 16px;
+  width: min(960px, 100%);
 }
 
 .tool-card {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-height: 190px;
-  padding: 22px;
+  gap: 13px;
+  min-height: 176px;
+  padding: 22px 22px 20px;
+  overflow: hidden;
   color: #fff;
   text-align: left;
   cursor: pointer;
-  border: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
-  box-shadow: 0 18px 42px rgba(31, 41, 55, 0.16);
+  box-shadow:
+    0 18px 42px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
   transition:
     transform 0.2s ease,
-    box-shadow 0.2s ease;
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+.tool-card::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: '';
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent 42%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.08), transparent 68%);
+}
+
+.tool-card::after {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  width: 58px;
+  height: 2px;
+  pointer-events: none;
+  content: '';
+  background: rgba(255, 255, 255, 0.46);
+  border-radius: 999px;
 }
 
 .tool-card:hover {
-  box-shadow: 0 22px 52px rgba(31, 41, 55, 0.22);
-  transform: translateY(-3px);
+  box-shadow:
+    0 24px 56px rgba(15, 23, 42, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  filter: saturate(1.04);
+  transform: translateY(-4px);
+}
+
+.tool-card:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.34);
+  outline-offset: 3px;
 }
 
 .tool-card--compare {
-  background: linear-gradient(145deg, #175cd3, #2e90fa);
+  background: linear-gradient(145deg, #175cd3 0%, #2676d9 58%, #088ab2 100%);
 }
 
 .tool-card--audit {
-  background: linear-gradient(145deg, #047857, #12b76a);
+  background: linear-gradient(145deg, #05603a 0%, #099268 55%, #12b76a 100%);
 }
 
 .tool-card--redact {
-  background: linear-gradient(145deg, #912018, #d92d20);
+  background: linear-gradient(145deg, #912018 0%, #c43224 58%, #e04f2f 100%);
 }
 
 .tool-icon {
@@ -542,17 +597,22 @@ onMounted(async () => {
   height: 42px;
   color: rgba(255, 255, 255, 0.95);
   font-size: 24px;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .tool-name {
+  margin-top: 3px;
   font-size: 20px;
   font-weight: 700;
+  line-height: 1.25;
 }
 
 .tool-desc {
-  color: rgba(255, 255, 255, 0.86);
+  max-width: 210px;
+  color: rgba(255, 255, 255, 0.88);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -564,6 +624,11 @@ onMounted(async () => {
 @media (max-width: 1100px) {
   .tool-grid {
     grid-template-columns: 1fr;
+    max-width: 420px;
+  }
+
+  .tool-card {
+    min-height: 154px;
   }
 }
 </style>
